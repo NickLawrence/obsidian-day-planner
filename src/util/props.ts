@@ -25,7 +25,23 @@ const logEntrySchema = z.object({
 
 export type LogEntry = z.infer<typeof logEntrySchema>;
 
+const readingActivityDetailsSchema = z.object({
+  start_page: z.number(),
+  end_page: z.number(),
+});
+
+const activitySchema = z.object({
+  activity: z.string(),
+  log: z.array(logEntrySchema).optional(),
+  notes: z.string().optional(),
+  reading: readingActivityDetailsSchema.optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
+});
+
+const activitiesSchema = z.array(activitySchema);
+
 const plannerSchema = z.object({
+  activities: activitiesSchema.optional(),
   log: z.array(logEntrySchema).optional(),
 });
 
