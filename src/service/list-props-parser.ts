@@ -1,6 +1,5 @@
 import {
   type CachedMetadata,
-  type ListItemCache,
   type MetadataCache,
   parseYaml,
   type Vault,
@@ -8,10 +7,10 @@ import {
 
 import { codeFence } from "../constants";
 import type { LineToListProps } from "../redux/dataview/dataview-slice";
-import { type Props, propsSchema } from "../util/props";
+import { type LogEntry, type Props, propsSchema } from "../util/props";
 
 export class ListPropsParser {
-  private static readonly listItemWithPropertiesMinSpan = 3;
+  private static readonly activitiesHeading = "activities";
 
   constructor(
     private readonly vault: Vault,
@@ -27,112 +26,157 @@ export class ListPropsParser {
 
     const metadata = this.metadataCache.getFileCache(file);
 
-    if (!metadata?.listItems) {
+    if (!metadata) {
       return;
     }
 
     const contents = await this.vault.cachedRead(file);
 
-    return this.getListPropsFromFile(contents, metadata);
+    return this.getActivitiesProps(contents, metadata);
   }
 
-  private getListPropsFromFile(fileText: string, metadata: CachedMetadata) {
-    return metadata.listItems?.reduce<LineToListProps>((result, listItem) => {
-      if (!listItem.task) {
-        return result;
-      }
+  private getActivitiesProps(
+    fileText: string,
+    metadata: CachedMetadata,
+  ): LineToListProps {
+    const headings = metadata.headings;
 
-      const listLineSpan =
-        listItem.position.end.line - listItem.position.start.line;
-
-      if (listLineSpan < ListPropsParser.listItemWithPropertiesMinSpan) {
-        return result;
-      }
-
-      const listContent = fileText.slice(
-        listItem.position.start.offset,
-        listItem.position.end.offset,
-      );
-
-      const props = this.getListPropsFromListItem(listItem, listContent);
-
-      if (props) {
-        result[listItem.position.start.line] = props;
-      }
-
-      return result;
-    }, {});
-  }
-
-  private getListPropsFromListItem(
-    listItem: ListItemCache,
-    listItemText: string,
-  ) {
-    const listLines = listItemText.split("\n");
-    const firstLine = listLines[0];
-    const openingLine = listLines.at(1);
-
-    if (!openingLine?.trimStart().startsWith(codeFence + "yaml")) {
-      return;
+    if (!headings?.length) {
+      return {};
     }
 
-    const indentation = openingLine.match(/^\s*/)?.[0];
-    const linesAfterSecond = listLines.slice(2);
-
-    const closingLineIndex = linesAfterSecond.findIndex((line) =>
-      line.trimStart().startsWith(codeFence),
+    const targetHeadings = headings.filter(
+      (heading) =>
+        heading.heading.trim().toLowerCase() ===
+        ListPropsParser.activitiesHeading.toLowerCase(),
     );
 
-    if (closingLineIndex === -1) {
-      return;
+    if (targetHeadings.length === 0) {
+      return {};
     }
 
-    const closingLine = linesAfterSecond[closingLineIndex];
-    const linesInsideCodeBlock = linesAfterSecond.slice(0, closingLineIndex);
-    const textInsideCodeBlock = linesInsideCodeBlock.join("\n");
+    const allLines = fileText.split("\n");
+    const lineOffsets = this.getLineOffsets(allLines);
 
-    const trimmedTextInsideCodeBlock = linesInsideCodeBlock
-      .map((line) => (indentation ? line.slice(indentation.length) : line))
-      .join("\n");
+    const result: LineToListProps = {};
 
-    let validated: Props;
+    targetHeadings.forEach((heading) => {
+      const headingIndex = headings.indexOf(heading);
+      const sectionStartLine = heading.position.start.line + 1;
+      const sectionEndLine =
+        headings[headingIndex + 1]?.position.start.line ?? allLines.length;
 
-    try {
-      const parsedYaml = parseYaml(trimmedTextInsideCodeBlock);
-      validated = propsSchema.parse(parsedYaml);
-    } catch (error) {
-      console.error(error);
+      let currentLine = sectionStartLine;
 
-      return;
+      while (currentLine < sectionEndLine) {
+        const currentLineText = allLines[currentLine];
+
+        if (!currentLineText?.trimStart().startsWith(codeFence + "activities")) {
+          currentLine += 1;
+          continue;
+        }
+
+        const indentation = currentLineText.match(/^\s*/)?.[0] ?? "";
+        const contentStartLine = currentLine + 1;
+        let probeLine = contentStartLine;
+
+        while (
+          probeLine < sectionEndLine &&
+          !allLines[probeLine].trimStart().startsWith(codeFence)
+        ) {
+          probeLine += 1;
+        }
+
+        if (probeLine >= sectionEndLine) {
+          break;
+        }
+
+        const closingLine = probeLine;
+        const linesInsideCodeBlock = allLines.slice(
+          contentStartLine,
+          closingLine,
+        );
+
+        const trimmedTextInsideCodeBlock = linesInsideCodeBlock
+          .map((line) =>
+            indentation && line.startsWith(indentation)
+              ? line.slice(indentation.length)
+              : line,
+          )
+          .join("\n");
+
+        let validated: Props;
+
+        try {
+          const parsedYaml = parseYaml(trimmedTextInsideCodeBlock);
+          const normalized = this.normalizeActivities(parsedYaml);
+          validated = propsSchema.parse(normalized);
+        } catch (error) {
+          console.error(error);
+          currentLine = closingLine + 1;
+          continue;
+        }
+
+        result[currentLine] = {
+          parsed: validated,
+          position: {
+            start: {
+              line: currentLine,
+              col: 0,
+              offset: lineOffsets[currentLine],
+            },
+            end: {
+              line: closingLine,
+              col: allLines[closingLine]?.length ?? 0,
+              offset:
+                lineOffsets[closingLine] +
+                (allLines[closingLine]?.length ?? 0),
+            },
+          },
+        };
+
+        currentLine = closingLine + 1;
+      }
+    });
+
+    return result;
+  }
+
+  private getLineOffsets(lines: string[]) {
+    const offsets: number[] = [0];
+
+    for (let i = 0; i < lines.length; i += 1) {
+      offsets.push(offsets[i] + lines[i].length + 1);
     }
 
-    const startLine = listItem.position.start.line + 1;
-    const startOffset = listItem.position.start.offset + firstLine.length + 1;
+    return offsets;
+  }
 
-    const endLine = startLine + linesInsideCodeBlock.length + 1;
-    const codeBlockLength = [
-      openingLine,
-      textInsideCodeBlock,
-      closingLine,
-    ].join("\n").length;
-    const endOffset = startOffset + codeBlockLength;
+  private normalizeActivities(parsedYaml: unknown): Props {
+    const normalized: Props = Array.isArray(parsedYaml)
+      ? {
+          planner: {
+            activities: parsedYaml as NonNullable<Props["planner"]>["activities"],
+          },
+        }
+      : ((parsedYaml ?? {}) as Props);
 
-    const position = {
-      start: {
-        line: listItem.position.start.line + 1,
-        col: 0,
-        offset: startOffset,
-      },
-      end: {
-        line: endLine,
-        col: closingLine.length,
-        offset: endOffset,
-      },
-    };
+    const activities = normalized.planner?.activities;
 
-    return {
-      parsed: validated,
-      position,
-    };
+    if (Array.isArray(activities)) {
+      const aggregatedLogs =
+        activities
+          .flatMap((item) => item?.log || [])
+          .filter(Boolean) as LogEntry[];
+
+      if (aggregatedLogs.length > 0) {
+        normalized.planner = {
+          ...normalized.planner,
+          log: aggregatedLogs,
+        };
+      }
+    }
+
+    return normalized;
   }
 }
