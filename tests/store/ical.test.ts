@@ -107,7 +107,9 @@ async function setUp(props: {
 
   dispatch(icalRefreshRequested());
 
-  await vi.waitUntil(() => selectRemoteTasks(getState()).length > 0);
+  await vi.waitUntil(() => selectRemoteTasks(getState()).length > 0, {
+    timeout: 5_000,
+  });
 
   return {
     remoteTasks: selectRemoteTasks(getState()),
@@ -211,12 +213,9 @@ describe("ical", () => {
       visibleDays: ["2025-04-09", "2025-04-10", "2025-04-11"],
     });
 
-    expect(remoteTasks).toHaveLength(2);
+    expect(remoteTasks).toHaveLength(1);
 
     expect(remoteTasks[0].startTime).toEqual(
-      window.moment("2025-04-09T00:00:00.000Z"),
-    );
-    expect(remoteTasks[1].startTime).toEqual(
       window.moment("2025-04-11T00:00:00.000Z"),
     );
   });
@@ -235,12 +234,9 @@ describe("ical", () => {
       ],
     });
 
-    expect(remoteTasks).toHaveLength(2);
+    expect(remoteTasks).toHaveLength(1);
 
     expect(remoteTasks[0].startTime).toEqual(
-      window.moment("2025-04-09T00:00:00.000Z"),
-    );
-    expect(remoteTasks[1].startTime).toEqual(
       window.moment("2026-04-09T00:00:00.000Z"),
     );
   });

@@ -38,33 +38,45 @@ const activitySchema = z.object({
   details: z.record(z.string(), z.unknown()).optional(),
 });
 
+export type Activity = z.infer<typeof activitySchema>;
+
 const activitiesSchema = z.array(activitySchema);
 
-const plannerSchema = z.object({
-  activities: activitiesSchema.optional(),
-  log: z.array(logEntrySchema).optional(),
-});
-
 export const propsSchema = z.looseObject({
-  planner: plannerSchema.optional(),
+  activities: activitiesSchema.optional(),
 });
 
 export type Props = z.infer<typeof propsSchema>;
 
+const defaultActivityName = "Activity";
+
+function getActivities(props: Props): Activity[] {
+  return props.activities ?? [];
+}
+
+function getOrCreateActivities(props: Props): Activity[] {
+  const activities = getActivities(props);
+
+  if (activities.length > 0) {
+    return activities.map((activity) => ({
+      ...activity,
+      log: [...(activity.log ?? [])],
+    }));
+  }
+
+  return [{ activity: defaultActivityName, log: [] }];
+}
+
 export function isWithOpenClock(props?: Props) {
-  return Boolean(props?.planner?.log?.find((it) => !it.end));
+  return Boolean(
+    props?.activities?.some((activity) =>
+      activity.log?.some((entry) => !entry.end),
+    ),
+  );
 }
 
 export function createPropsWithOpenClock(): Props {
-  return {
-    planner: {
-      log: [
-        {
-          start: window.moment().format(clockFormat),
-        },
-      ],
-    },
-  };
+  return addOpenClock({});
 }
 
 export function addOpenClock(props: Props): Props {
@@ -72,62 +84,97 @@ export function addOpenClock(props: Props): Props {
     throw new Error("There is already an open clock");
   }
 
+  const activities = getOrCreateActivities(props);
+  const [firstActivity, ...rest] = activities;
+
+  const updatedFirstActivity: Activity = {
+    ...firstActivity,
+    log: [
+      ...(firstActivity.log ?? []),
+      {
+        start: window.moment().format(clockFormat),
+      },
+    ],
+  };
+
   return {
     ...props,
-    planner: {
-      ...props.planner,
-      log: [
-        ...(props.planner?.log || []),
-        {
-          start: window.moment().format(clockFormat),
-        },
-      ],
-    },
+    activities: [updatedFirstActivity, ...rest],
   };
 }
 
 export function cancelOpenClock(props: Props): Props {
-  if (!props.planner?.log) {
-    throw new Error("There is no log");
-  }
+  const activities = getActivities(props);
+  const activityWithOpenClockIndex = activities.findIndex((activity) =>
+    activity.log?.some((it) => !it.end),
+  );
 
-  const openClockIndex = props.planner.log.findIndex((it) => !it.end);
-
-  if (openClockIndex === -1) {
+  if (activityWithOpenClockIndex === -1) {
     throw new Error("There is no open clock");
   }
 
+  const activityWithOpenClock = activities[activityWithOpenClockIndex];
+  const log = activityWithOpenClock.log;
+
+  if (!log) {
+    throw new Error("There is no log");
+  }
+
+  const openClockIndex = log.findIndex((it) => !it.end);
+
+  const updatedActivity: Activity = {
+    ...activityWithOpenClock,
+    log: log.toSpliced(openClockIndex, 1),
+  };
+
+  const updatedActivities = activities.with(
+    activityWithOpenClockIndex,
+    updatedActivity,
+  );
+
   return {
     ...props,
-    planner: {
-      ...props.planner,
-      log: props.planner.log.toSpliced(openClockIndex, 1),
-    },
+    activities: updatedActivities,
   };
 }
 
 export function clockOut(props: Props): Props {
-  if (!props.planner?.log) {
-    throw new Error("There is no log under cursor");
-  }
+  const activities = getActivities(props);
+  const activityWithOpenClockIndex = activities.findIndex((activity) =>
+    activity.log?.some((it) => !it.end),
+  );
 
-  const openClockIndex = props.planner.log.findIndex((it) => !it.end);
-
-  if (openClockIndex === -1) {
+  if (activityWithOpenClockIndex === -1) {
     throw new Error("There is no open clock");
   }
 
+  const activityWithOpenClock = activities[activityWithOpenClockIndex];
+  const log = activityWithOpenClock.log;
+
+  if (!log) {
+    throw new Error("There is no log under cursor");
+  }
+
+  const openClockIndex = log.findIndex((it) => !it.end);
+
   const updatedOpenClock = {
-    ...props.planner.log[openClockIndex],
+    ...log[openClockIndex],
     end: window.moment().format(clockFormat),
   };
 
+  const updatedActivity: Activity = {
+    ...activityWithOpenClock,
+    log: log.with(openClockIndex, updatedOpenClock),
+  };
+
+  const updatedActivities = activities.with(
+    activityWithOpenClockIndex,
+    updatedActivity,
+  );
+
   return {
     ...props,
-    planner: {
-      ...props.planner,
-      log: props.planner.log.with(openClockIndex, updatedOpenClock),
-    },
+    activities: updatedActivities,
   };
 }
 

@@ -39,11 +39,7 @@ export class ListPropsParser {
     fileText: string,
     metadata: CachedMetadata,
   ): LineToListProps {
-    const headings = metadata.headings;
-
-    if (!headings?.length) {
-      return {};
-    }
+    const headings = metadata.headings ?? [];
 
     const targetHeadings = headings.filter(
       (heading) =>
@@ -51,27 +47,41 @@ export class ListPropsParser {
         ListPropsParser.activitiesHeading.toLowerCase(),
     );
 
-    if (targetHeadings.length === 0) {
-      return {};
-    }
-
     const allLines = fileText.split("\n");
     const lineOffsets = this.getLineOffsets(allLines);
-
     const result: LineToListProps = {};
 
-    targetHeadings.forEach((heading) => {
-      const headingIndex = headings.indexOf(heading);
-      const sectionStartLine = heading.position.start.line + 1;
-      const sectionEndLine =
-        headings[headingIndex + 1]?.position.start.line ?? allLines.length;
+    const sections =
+      targetHeadings.length > 0
+        ? targetHeadings.map((heading) => {
+            const headingIndex = headings.indexOf(heading);
+
+            return {
+              start: heading.position.start.line + 1,
+              end:
+                headings[headingIndex + 1]?.position.start.line ??
+                allLines.length,
+            };
+          })
+        : [{ start: 0, end: allLines.length }];
+
+    sections.forEach((section) => {
+      const sectionStartLine = section.start;
+      const sectionEndLine = section.end;
 
       let currentLine = sectionStartLine;
 
       while (currentLine < sectionEndLine) {
         const currentLineText = allLines[currentLine];
 
-        if (!currentLineText?.trimStart().startsWith(codeFence + "activities")) {
+        const trimmedLine = currentLineText?.trimStart() ?? "";
+
+        if (
+          !(
+            trimmedLine.startsWith(codeFence + "activities") ||
+            trimmedLine.startsWith(codeFence + "yaml")
+          )
+        ) {
           currentLine += 1;
           continue;
         }
@@ -129,8 +139,7 @@ export class ListPropsParser {
               line: closingLine,
               col: allLines[closingLine]?.length ?? 0,
               offset:
-                lineOffsets[closingLine] +
-                (allLines[closingLine]?.length ?? 0),
+                lineOffsets[closingLine] + (allLines[closingLine]?.length ?? 0),
             },
           },
         };
@@ -153,30 +162,47 @@ export class ListPropsParser {
   }
 
   private normalizeActivities(parsedYaml: unknown): Props {
-    const normalized: Props = Array.isArray(parsedYaml)
-      ? {
-          planner: {
-            activities: parsedYaml as NonNullable<Props["planner"]>["activities"],
-          },
+    if (Array.isArray(parsedYaml)) {
+      return {
+        activities: parsedYaml as NonNullable<Props["activities"]>,
+      };
+    }
+
+    if (parsedYaml && typeof parsedYaml === "object") {
+      const asRecord = parsedYaml as Record<string, unknown>;
+      const planner = asRecord.planner as
+        | { activities?: Props["activities"]; log?: LogEntry[] }
+        | undefined;
+
+      if (planner) {
+        const activities =
+          planner.activities && Array.isArray(planner.activities)
+            ? (planner.activities as NonNullable<Props["activities"]>)
+            : [];
+
+        if (planner.log?.length) {
+          const [firstActivity] =
+            activities.length > 0
+              ? activities
+              : [{ activity: "Activity", log: [] }];
+
+          const restActivities = activities.slice(1);
+
+          return {
+            activities: [
+              {
+                ...firstActivity,
+                log: [...(firstActivity.log ?? []), ...planner.log],
+              },
+              ...restActivities,
+            ],
+          };
         }
-      : ((parsedYaml ?? {}) as Props);
 
-    const activities = normalized.planner?.activities;
-
-    if (Array.isArray(activities)) {
-      const aggregatedLogs =
-        activities
-          .flatMap((item) => item?.log || [])
-          .filter(Boolean) as LogEntry[];
-
-      if (aggregatedLogs.length > 0) {
-        normalized.planner = {
-          ...normalized.planner,
-          log: aggregatedLogs,
-        };
+        return { activities };
       }
     }
 
-    return normalized;
+    return (parsedYaml ?? {}) as Props;
   }
 }

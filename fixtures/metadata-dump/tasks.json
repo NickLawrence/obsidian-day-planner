@@ -700,7 +700,7 @@
         "embed": false,
         "type": "file"
       },
-      "text": "Task\n```yaml\nplanner:\nlog:\n- start: 2025-01-01 13:00\nend: 2025-01-01 15:00\n- start: 2025-01-01 17:00\nend: 2025-01-01 18:00\n```",
+      "text": "Task\n```yaml\nactivities:\n- activity: Task\nlog:\n- start: 2025-01-01 13:00\nend: 2025-01-01 15:00\n- start: 2025-01-01 17:00\n```",
       "tags": [],
       "line": 0,
       "lineCount": 9,
@@ -713,14 +713,14 @@
       "position": {
         "start": {
           "line": 0,
-          "col": 0,
-          "offset": 0
-        },
-        "end": {
-          "line": 8,
-          "col": 5,
-          "offset": 170
-        }
+        "col": 0,
+        "offset": 0
+      },
+      "end": {
+        "line": 8,
+        "col": 5,
+        "offset": 172
+      }
       },
       "subtasks": [],
       "real": true,
@@ -766,10 +766,10 @@
             "subpath": "Heading 1",
             "type": "header"
           },
-          "text": "Nested task with 1 log record\n```yaml\nplanner:\nlog:\n- start: 2025-07-18 12:00\nend: 2025-07-18 14:40\n```",
+          "text": "Nested task with 1 log record\n```yaml\nactivities:\n- activity: Nested task with 1 log record\nlog:\n- start: 2025-07-18 12:00\nend: 2025-07-18 14:40\n```",
           "tags": [],
           "line": 7,
-          "lineCount": 7,
+          "lineCount": 8,
           "list": 3,
           "outlinks": [],
           "path": "fixtures/fixture-vault/test.md",
@@ -780,12 +780,12 @@
             "start": {
               "line": 7,
               "col": 2,
-              "offset": 57
+              "offset": 55
             },
             "end": {
-              "line": 13,
+              "line": 14,
               "col": 7,
-              "offset": 202
+              "offset": 259
             }
           },
           "subtasks": [],
@@ -829,10 +829,10 @@
             "subpath": "Heading 1",
             "type": "header"
           },
-          "text": "Nested task with 1 log record\n```yaml\nplanner:\nlog:\n- start: 2025-07-18 12:00\nend: 2025-07-18 14:40\n```",
+          "text": "Nested task with 1 log record\n```yaml\nactivities:\n- activity: Nested task with 1 log record\nlog:\n- start: 2025-07-18 12:00\nend: 2025-07-18 14:40\n```",
           "tags": [],
           "line": 7,
-          "lineCount": 7,
+          "lineCount": 8,
           "list": 3,
           "outlinks": [],
           "path": "fixtures/fixture-vault/test.md",
@@ -843,12 +843,12 @@
             "start": {
               "line": 7,
               "col": 2,
-              "offset": 57
+              "offset": 55
             },
             "end": {
-              "line": 13,
+              "line": 14,
               "col": 7,
-              "offset": 202
+              "offset": 259
             }
           },
           "subtasks": [],
@@ -884,10 +884,10 @@
         "subpath": "Heading 1",
         "type": "header"
       },
-      "text": "Nested task with 1 log record\n```yaml\nplanner:\nlog:\n- start: 2025-07-18 12:00\nend: 2025-07-18 14:40\n```",
+      "text": "Nested task with 1 log record\n```yaml\nactivities:\n- activity: Nested task with 1 log record\nlog:\n- start: 2025-07-18 12:00\nend: 2025-07-18 14:40\n```",
       "tags": [],
       "line": 7,
-      "lineCount": 7,
+      "lineCount": 8,
       "list": 3,
       "outlinks": [],
       "path": "fixtures/fixture-vault/test.md",
@@ -898,12 +898,12 @@
         "start": {
           "line": 7,
           "col": 2,
-          "offset": 57
+          "offset": 55
         },
         "end": {
-          "line": 13,
+          "line": 14,
           "col": 7,
-          "offset": 202
+          "offset": 259
         }
       },
       "subtasks": [],
@@ -931,11 +931,11 @@
         "subpath": "Heading 2",
         "type": "header"
       },
-      "text": "Task with 3 log records\n```yaml\nplanner:\nlog:\n- start: 2025-07-19 12:00\nend: 2025-07-19 14:30\n- start: 2025-07-19 15:00\nend: 2025-07-19 16:30\n- start: 2025-07-19 13:00\nend: 2025-07-19 16:30\n```",
+      "text": "Task with 3 log records\n```yaml\nactivities:\n- activity: Task with 3 log records\nlog:\n- start: 2025-07-19 12:00\nend: 2025-07-19 14:30\n- start: 2025-07-19 15:00\nend: 2025-07-19 16:30\n- start: 2025-07-19 13:00\nend: 2025-07-19 16:30\n```",
       "tags": [],
-      "line": 17,
-      "lineCount": 11,
-      "list": 17,
+      "line": 18,
+      "lineCount": 12,
+      "list": 18,
       "outlinks": [],
       "path": "fixtures/fixture-vault/test.md",
       "children": [],
@@ -943,14 +943,14 @@
       "annotated": false,
       "position": {
         "start": {
-          "line": 17,
+          "line": 18,
           "col": 0,
-          "offset": 218
+          "offset": 275
         },
         "end": {
-          "line": 27,
+          "line": 29,
           "col": 5,
-          "offset": 469
+          "offset": 583
         }
       },
       "subtasks": [],
@@ -1052,7 +1052,7 @@
         "embed": false,
         "type": "file"
       },
-      "scheduled": "2025-07-19T00:00:00.000+02:00",
+      "scheduled": "2025-07-19",
       "status": " ",
       "checked": false,
       "completed": false,
@@ -1099,7 +1099,7 @@
         "embed": false,
         "type": "file"
       },
-      "scheduled": "2025-07-19T00:00:00.000+02:00",
+      "scheduled": "2025-07-19",
       "status": " ",
       "checked": false,
       "completed": false,
@@ -1630,7 +1630,7 @@
         "embed": false,
         "type": "file"
       },
-      "text": "Task\n```yaml\nplanner:\nlog:\n- start: 2025-01-01 13:00\nend: 2025-01-01 15:00\n- start: 2025-01-01 17:00\nend: 2025-01-01 18:00\n```",
+      "text": "Task\n```yaml\nactivities:\n- activity: Task\nlog:\n- start: 2025-01-01 13:00\nend: 2025-01-01 15:00\n- start: 2025-01-01 17:00\n```",
       "tags": [],
       "line": 0,
       "lineCount": 9,
@@ -1643,14 +1643,14 @@
       "position": {
         "start": {
           "line": 0,
-          "col": 0,
-          "offset": 0
-        },
-        "end": {
-          "line": 8,
-          "col": 5,
-          "offset": 170
-        }
+        "col": 0,
+        "offset": 0
+      },
+      "end": {
+        "line": 8,
+        "col": 5,
+        "offset": 172
+      }
       },
       "subtasks": [],
       "real": true,
@@ -1676,10 +1676,10 @@
         "subpath": "Heading 1",
         "type": "header"
       },
-      "text": "Nested task with 1 log record\n```yaml\nplanner:\nlog:\n- start: 2025-07-18 12:00\nend: 2025-07-18 14:40\n```",
+      "text": "Nested task with 1 log record\n```yaml\nactivities:\n- activity: Nested task with 1 log record\nlog:\n- start: 2025-07-18 12:00\nend: 2025-07-18 14:40\n```",
       "tags": [],
       "line": 7,
-      "lineCount": 7,
+      "lineCount": 8,
       "list": 3,
       "outlinks": [],
       "path": "fixtures/fixture-vault/test.md",
@@ -1690,12 +1690,12 @@
         "start": {
           "line": 7,
           "col": 2,
-          "offset": 57
+          "offset": 55
         },
         "end": {
-          "line": 13,
+          "line": 14,
           "col": 7,
-          "offset": 202
+          "offset": 259
         }
       },
       "subtasks": [],
@@ -1723,11 +1723,11 @@
         "subpath": "Heading 2",
         "type": "header"
       },
-      "text": "Task with 3 log records\n```yaml\nplanner:\nlog:\n- start: 2025-07-19 12:00\nend: 2025-07-19 14:30\n- start: 2025-07-19 15:00\nend: 2025-07-19 16:30\n- start: 2025-07-19 13:00\nend: 2025-07-19 16:30\n```",
+      "text": "Task with 3 log records\n```yaml\nactivities:\n- activity: Task with 3 log records\nlog:\n- start: 2025-07-19 12:00\nend: 2025-07-19 14:30\n- start: 2025-07-19 15:00\nend: 2025-07-19 16:30\n- start: 2025-07-19 13:00\nend: 2025-07-19 16:30\n```",
       "tags": [],
-      "line": 17,
-      "lineCount": 11,
-      "list": 17,
+      "line": 18,
+      "lineCount": 12,
+      "list": 18,
       "outlinks": [],
       "path": "fixtures/fixture-vault/test.md",
       "children": [],
@@ -1735,14 +1735,14 @@
       "annotated": false,
       "position": {
         "start": {
-          "line": 17,
+          "line": 18,
           "col": 0,
-          "offset": 218
+          "offset": 275
         },
         "end": {
-          "line": 27,
+          "line": 29,
           "col": 5,
-          "offset": 469
+          "offset": 583
         }
       },
       "subtasks": [],
@@ -1844,7 +1844,7 @@
         "embed": false,
         "type": "file"
       },
-      "scheduled": "2025-07-19T00:00:00.000+02:00",
+      "scheduled": "2025-07-19",
       "status": " ",
       "checked": false,
       "completed": false,
@@ -1891,7 +1891,7 @@
         "embed": false,
         "type": "file"
       },
-      "scheduled": "2025-07-19T00:00:00.000+02:00",
+      "scheduled": "2025-07-19",
       "status": " ",
       "checked": false,
       "completed": false,

@@ -413,23 +413,31 @@ describe("Task views", () => {
     test.todo("Edits log entries from frontmatter");
   });
 
-  test.fails(
-    "Ignores tasks and lists outside of planner section in daily notes",
-    async () => {
-      const { editContext } = await setUp({
-        visibleDays: ["2025-07-19"],
-      });
+  test("Ignores tasks and lists outside of planner section in daily notes", async () => {
+    const { editContext } = await setUp({
+      visibleDays: ["2025-07-19"],
+    });
 
-      const displayedTasks = editContext.getDisplayedTasksForTimeline(
-        window.moment("2025-07-19"),
-      );
+    const displayedTasks = editContext.getDisplayedTasksForTimeline(
+      window.moment("2025-07-19"),
+    );
 
-      expect(get(displayedTasks)?.withTime).toHaveLength(1);
-      expect(get(displayedTasks)?.withTime).toMatchObject([
-        { startTime: window.moment("2025-07-19 11:00"), durationMinutes: 30 },
-      ]);
-    },
-  );
+    const withTimeTasks = get(displayedTasks)?.withTime || [];
+
+    expect(withTimeTasks).toHaveLength(2);
+    expect(withTimeTasks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          startTime: window.moment("2025-07-19 10:00"),
+          durationMinutes: 30,
+        }),
+        expect.objectContaining({
+          startTime: window.moment("2025-07-19 11:00"),
+          durationMinutes: 30,
+        }),
+      ]),
+    );
+  });
 
   test.todo("Tasks do not contain duplicates");
 

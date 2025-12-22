@@ -1,9 +1,9 @@
 import { flow, groupBy, uniqBy } from "lodash/fp";
 import type { Moment } from "moment";
-import type { MetadataCache } from "obsidian";
-import type { STask } from "obsidian-dataview";
+import type { MetadataCache, Pos } from "obsidian";
 import { derived, type Readable, type Writable } from "svelte/store";
 
+import { defaultDurationMinutes } from "../../constants";
 import { addHorizontalPlacing } from "../../overlap/overlap";
 import { type PathToListProps } from "../../redux/dataview/dataview-slice";
 import { DataviewFacade } from "../../service/dataview-facade";
@@ -12,9 +12,9 @@ import { WorkspaceFacade } from "../../service/workspace-facade";
 import type { DayPlannerSettings } from "../../settings";
 import type { LocalTask, RemoteTask, Task, WithTime } from "../../task-types";
 import type { OnEditAbortedFn, OnUpdateFn, PointerDateTime } from "../../types";
-import * as dv from "../../util/dataview";
+import { getId } from "../../util/id";
 import { splitMultiday } from "../../util/moment";
-import { type Props, type LogEntry } from "../../util/props";
+import { type LogEntry } from "../../util/props";
 import { getUpdateTrigger } from "../../util/store";
 import { getDayKey, getRenderKey } from "../../util/task-utils";
 
@@ -75,34 +75,28 @@ export function useTasks(props: {
     refreshSignal: debouncedTaskUpdateTrigger,
   });
 
-  const dataviewTasksWithProps: Readable<Array<STask & { props: Props }>> =
-    derived([dataviewTasks, listProps], ([$dataviewTasks, $listProps]) =>
-      $dataviewTasks.reduce<Array<STask & { props: Props }>>(
-        (result, current) => {
-          const props = $listProps[current.path]?.[current.line];
-
-          if (props?.parsed) {
-            result.push({ ...current, props: props.parsed });
-          }
-
-          return result;
-        },
-        [],
+  const activitiesWithLogs = derived([listProps], ([$listProps]) => {
+    return Object.entries($listProps).flatMap(([path, lineToProps]) =>
+      Object.values(lineToProps).flatMap(({ parsed, position }) =>
+        (parsed.activities ?? [])
+          .filter((activity) => activity?.log?.length)
+          .map((activity) => ({
+            title: activity.activity,
+            log: activity.log as LogEntry[],
+            location: {
+              path,
+              position,
+            },
+          })),
       ),
     );
+  });
 
-  const sTasksWithLogs: Readable<Array<{ sTask: STask; log: LogEntry[] }>> =
-    derived([dataviewTasksWithProps], ([$dataviewTasksWithProps]) =>
-      $dataviewTasksWithProps
-        .filter((sTask) => sTask.props.planner?.log)
-        .map((sTask) => ({ sTask, log: sTask.props.planner.log })),
-    );
-
-  const logSummary = derived([sTasksWithLogs], ([$sTasksWithLogs]) =>
-    $sTasksWithLogs.map(({ sTask, log }) => ({
-      title: sTask.text.split("\n").at(0),
+  const logSummary = derived([activitiesWithLogs], ([$activitiesWithLogs]) =>
+    $activitiesWithLogs.map(({ title, log }) => ({
+      title,
       log: log.map(({ start, end }) => ({
-        start: start,
+        start,
         end: end || "-",
       })),
       timeSpent: log.reduce((result, current) => {
@@ -114,13 +108,43 @@ export function useTasks(props: {
     })),
   );
 
+  const createLocalTaskFromClock = (
+    props: {
+      title: string;
+      location: { path: string; position: Pos };
+    },
+    clockMoments: [Moment, Moment],
+  ): LocalTask => {
+    const [startTime, endTime] = clockMoments;
+    let durationMinutes = endTime.diff(startTime, "minutes");
+
+    if (durationMinutes < 0) {
+      durationMinutes = defaultDurationMinutes;
+    }
+
+    return {
+      id: getId(),
+      startTime,
+      durationMinutes,
+      isAllDayEvent: false,
+      symbol: "-",
+      status: " ",
+      text: props.title,
+      lines: [],
+      location: {
+        path: props.location.path,
+        position: props.location.position,
+      },
+    };
+  };
+
   // todo: remove duplication
   const tasksWithActiveClockProps = derived(
-    [sTasksWithLogs, currentTime],
-    ([$sTasksWithLogs, $currentTime]) =>
-      $sTasksWithLogs
-        .flatMap(({ sTask, log }) => {
-          return log
+    [activitiesWithLogs, currentTime],
+    ([$activitiesWithLogs, $currentTime]) =>
+      $activitiesWithLogs
+        .flatMap((activity) => {
+          return activity.log
             .filter(({ end }) => typeof end === "undefined")
             .flatMap(({ start }) => {
               const parsedStart = window.moment(
@@ -132,11 +156,13 @@ export function useTasks(props: {
               return splitMultiday(parsedStart, $currentTime);
             })
             .map((clockMoments) => ({
-              sTask,
+              activity,
               clockMoments,
             }));
         })
-        .map(dv.toTaskWithClock),
+        .map(({ activity, clockMoments }) =>
+          createLocalTaskFromClock(activity, clockMoments),
+        ),
   );
 
   const truncatedTasksWithActiveClockProps = derived(
@@ -148,10 +174,10 @@ export function useTasks(props: {
       })),
   );
 
-  const logRecords = derived([sTasksWithLogs], ([$sTasksWithLogs]) =>
-    $sTasksWithLogs
-      .flatMap(({ sTask, log }) => {
-        return log
+  const logRecords = derived([activitiesWithLogs], ([$activitiesWithLogs]) =>
+    $activitiesWithLogs
+      .flatMap((activity) => {
+        return activity.log
           .filter(({ end }) => typeof end !== "undefined")
           .flatMap(({ start, end }) => {
             const parsedStart = window.moment(
@@ -164,11 +190,13 @@ export function useTasks(props: {
             return splitMultiday(parsedStart, parsedEnd);
           })
           .map((clockMoments) => ({
-            sTask,
+            activity,
             clockMoments,
           }));
       })
-      .map(dv.toTaskWithClock),
+      .map(({ activity, clockMoments }) =>
+        createLocalTaskFromClock(activity, clockMoments),
+      ),
   );
 
   const combinedClocks = derived(

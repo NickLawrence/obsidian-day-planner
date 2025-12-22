@@ -1,11 +1,11 @@
 {
-  "id": "obsidian-day-planner",
-  "name": "Day Planner",
+  "id": "obsidian-day-planner-nick",
+  "name": "Day Planner - Nick",
   "version": "0.28.0",
   "minAppVersion": "0.16.0",
   "description": "A day planner with clean UI and readable syntax",
-  "author": "James Lynch, continued by Ivan Lednev",
-  "authorUrl": "https://github.com/ivan-lednev",
+  "author": "James Lynch, continued by Ivan Lednev, continued by Nick",
+  "authorUrl": "https://github.com/NickLawrence",
   "fundingUrl": "https://www.buymeacoffee.com/machineelf",
   "isDesktopOnly": false
 }
