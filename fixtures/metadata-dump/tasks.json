@@ -700,7 +700,7 @@
         "embed": false,
         "type": "file"
       },
-      "text": "Task\n```yaml\nactivities:\n- activity: Task\nlog:\n- start: 2025-01-01 13:00\nend: 2025-01-01 15:00\n- start: 2025-01-01 17:00\n```",
+      "text": "Task\n```activities\nactivities:\n- activity: Task\nlog:\n- start: 2025-01-01 13:00\nend: 2025-01-01 15:00\n- start: 2025-01-01 17:00\n```",
       "tags": [],
       "line": 0,
       "lineCount": 9,
@@ -746,7 +746,7 @@
         "subpath": "Heading 1",
         "type": "header"
       },
-      "text": "List item\n```yaml\nkey: value\n```",
+      "text": "List item\n```activities\nkey: value\n```",
       "tags": [],
       "line": 3,
       "lineCount": 4,
@@ -766,7 +766,7 @@
             "subpath": "Heading 1",
             "type": "header"
           },
-          "text": "Nested task with 1 log record\n```yaml\nactivities:\n- activity: Nested task with 1 log record\nlog:\n- start: 2025-07-18 12:00\nend: 2025-07-18 14:40\n```",
+          "text": "Nested task with 1 log record\n```activities\nactivities:\n- activity: Nested task with 1 log record\nlog:\n- start: 2025-07-18 12:00\nend: 2025-07-18 14:40\n```",
           "tags": [],
           "line": 7,
           "lineCount": 8,
@@ -829,7 +829,7 @@
             "subpath": "Heading 1",
             "type": "header"
           },
-          "text": "Nested task with 1 log record\n```yaml\nactivities:\n- activity: Nested task with 1 log record\nlog:\n- start: 2025-07-18 12:00\nend: 2025-07-18 14:40\n```",
+          "text": "Nested task with 1 log record\n```activities\nactivities:\n- activity: Nested task with 1 log record\nlog:\n- start: 2025-07-18 12:00\nend: 2025-07-18 14:40\n```",
           "tags": [],
           "line": 7,
           "lineCount": 8,
@@ -884,7 +884,7 @@
         "subpath": "Heading 1",
         "type": "header"
       },
-      "text": "Nested task with 1 log record\n```yaml\nactivities:\n- activity: Nested task with 1 log record\nlog:\n- start: 2025-07-18 12:00\nend: 2025-07-18 14:40\n```",
+      "text": "Nested task with 1 log record\n```activities\nactivities:\n- activity: Nested task with 1 log record\nlog:\n- start: 2025-07-18 12:00\nend: 2025-07-18 14:40\n```",
       "tags": [],
       "line": 7,
       "lineCount": 8,
@@ -931,7 +931,7 @@
         "subpath": "Heading 2",
         "type": "header"
       },
-      "text": "Task with 3 log records\n```yaml\nactivities:\n- activity: Task with 3 log records\nlog:\n- start: 2025-07-19 12:00\nend: 2025-07-19 14:30\n- start: 2025-07-19 15:00\nend: 2025-07-19 16:30\n- start: 2025-07-19 13:00\nend: 2025-07-19 16:30\n```",
+      "text": "Task with 3 log records\n```activities\nactivities:\n- activity: Task with 3 log records\nlog:\n- start: 2025-07-19 12:00\nend: 2025-07-19 14:30\n- start: 2025-07-19 15:00\nend: 2025-07-19 16:30\n- start: 2025-07-19 13:00\nend: 2025-07-19 16:30\n```",
       "tags": [],
       "line": 18,
       "lineCount": 12,
@@ -1630,7 +1630,7 @@
         "embed": false,
         "type": "file"
       },
-      "text": "Task\n```yaml\nactivities:\n- activity: Task\nlog:\n- start: 2025-01-01 13:00\nend: 2025-01-01 15:00\n- start: 2025-01-01 17:00\n```",
+      "text": "Task\n```activities\nactivities:\n- activity: Task\nlog:\n- start: 2025-01-01 13:00\nend: 2025-01-01 15:00\n- start: 2025-01-01 17:00\n```",
       "tags": [],
       "line": 0,
       "lineCount": 9,
@@ -1676,7 +1676,7 @@
         "subpath": "Heading 1",
         "type": "header"
       },
-      "text": "Nested task with 1 log record\n```yaml\nactivities:\n- activity: Nested task with 1 log record\nlog:\n- start: 2025-07-18 12:00\nend: 2025-07-18 14:40\n```",
+      "text": "Nested task with 1 log record\n```activities\nactivities:\n- activity: Nested task with 1 log record\nlog:\n- start: 2025-07-18 12:00\nend: 2025-07-18 14:40\n```",
       "tags": [],
       "line": 7,
       "lineCount": 8,
@@ -1723,7 +1723,7 @@
         "subpath": "Heading 2",
         "type": "header"
       },
-      "text": "Task with 3 log records\n```yaml\nactivities:\n- activity: Task with 3 log records\nlog:\n- start: 2025-07-19 12:00\nend: 2025-07-19 14:30\n- start: 2025-07-19 15:00\nend: 2025-07-19 16:30\n- start: 2025-07-19 13:00\nend: 2025-07-19 16:30\n```",
+      "text": "Task with 3 log records\n```activities\nactivities:\n- activity: Task with 3 log records\nlog:\n- start: 2025-07-19 12:00\nend: 2025-07-19 14:30\n- start: 2025-07-19 15:00\nend: 2025-07-19 16:30\n- start: 2025-07-19 13:00\nend: 2025-07-19 16:30\n```",
       "tags": [],
       "line": 18,
       "lineCount": 12,

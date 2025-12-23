@@ -12,8 +12,6 @@ export const icalDayKeyFormat = "YYYY-MM-DD";
 export const defaultRangeDayFormat = "MMM, D";
 export const defaultDayFormatForLuxon = "yyyy-MM-dd";
 
-export const clockSeparator = "--";
-export const clockKey = "clock";
 export const clockFormat = "YYYY-MM-DD HH:mm:ss";
 export const codeFence = "```";
 

@@ -74,12 +74,7 @@ export class ListPropsParser {
 
         const trimmedLine = currentLineText?.trimStart() ?? "";
 
-        if (
-          !(
-            trimmedLine.startsWith(codeFence + "activities") ||
-            trimmedLine.startsWith(codeFence + "yaml")
-          )
-        ) {
+        if (!trimmedLine.startsWith(codeFence + "activities")) {
           currentLine += 1;
           continue;
         }

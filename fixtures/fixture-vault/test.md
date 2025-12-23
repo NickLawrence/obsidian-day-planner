@@ -2,11 +2,11 @@
 # Heading 1
 
 - List item
-  ```yaml
+  ```activities
   key: value
   ```
   - [ ] Nested task with 1 log record
-    ```yaml
+    ```activities
     activities:
       - activity: Nested task with 1 log record
         log:
@@ -17,7 +17,7 @@
 ## Heading 2
 
 - [ ] Task with 3 log records
-  ```yaml
+  ```activities
   activities:
     - activity: Task with 3 log records
       log:
