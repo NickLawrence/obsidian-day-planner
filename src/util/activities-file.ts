@@ -82,12 +82,7 @@ function findExistingBlock(
 
     const trimmedLine = line.trimStart();
 
-    if (
-      !(
-        trimmedLine.startsWith(codeFence + "activities") ||
-        trimmedLine.startsWith(codeFence + "yaml")
-      )
-    ) {
+    if (!trimmedLine.startsWith(codeFence + "activities")) {
       continue;
     }
 

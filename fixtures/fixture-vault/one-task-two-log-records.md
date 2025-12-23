@@ -1,5 +1,5 @@
 - [ ] Task
-  ```yaml
+  ```activities
   activities:
     - activity: Task
       log:
