@@ -22,6 +22,7 @@ import {
   viewTypeReleaseNotes,
   viewTypeTimeline,
   viewTypeMultiDay,
+  viewTypeMonthlyCalendar,
   reQueryAfterMillis,
   icalRefreshIntervalMillis,
   viewTypeLogSummary,
@@ -76,6 +77,7 @@ import { useTasks } from "./ui/hooks/use-tasks";
 import { useVisibleDays } from "./ui/hooks/use-visible-days";
 import { LogSummaryView } from "./ui/log-summary";
 import MultiDayView from "./ui/multi-day-view";
+import MonthlyView from "./ui/monthly-view";
 import { DayPlannerReleaseNotesView } from "./ui/release-notes";
 import { DayPlannerSettingsTab } from "./ui/settings-tab";
 import TimelineView from "./ui/timeline-view";
@@ -189,6 +191,7 @@ export default class DayPlanner extends Plugin {
     return Promise.all([
       this.detachLeavesOfType(viewTypeTimeline),
       this.detachLeavesOfType(viewTypeMultiDay),
+      this.detachLeavesOfType(viewTypeMonthlyCalendar),
     ]);
   }
 
@@ -199,11 +202,23 @@ export default class DayPlanner extends Plugin {
       this.initTimelineLeaf,
     );
     this.addRibbonIcon("table-2", "Open Multi-Day View", this.initWeeklyLeaf);
+    this.addRibbonIcon(
+      "calendar-clock",
+      "Open Monthly Calendar",
+      this.initMonthlyLeaf,
+    );
   }
 
   initWeeklyLeaf = async () => {
     await this.app.workspace.getLeaf("tab").setViewState({
       type: viewTypeMultiDay,
+      active: true,
+    });
+  };
+
+  initMonthlyLeaf = async () => {
+    await this.app.workspace.getLeaf("tab").setViewState({
+      type: viewTypeMonthlyCalendar,
       active: true,
     });
   };
@@ -275,6 +290,12 @@ export default class DayPlanner extends Plugin {
       id: "show-multi-day-view",
       name: "Show multi-day planner",
       callback: this.initWeeklyLeaf,
+    });
+
+    this.addCommand({
+      id: "show-monthly-calendar",
+      name: "Show monthly calendar",
+      callback: this.initMonthlyLeaf,
     });
 
     this.addCommand({
@@ -641,6 +662,11 @@ export default class DayPlanner extends Plugin {
           componentContext,
           dateRanges,
         ),
+    );
+
+    this.registerView(
+      viewTypeMonthlyCalendar,
+      (leaf: WorkspaceLeaf) => new MonthlyView(leaf, componentContext),
     );
 
     this.registerView(

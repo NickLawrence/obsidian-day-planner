@@ -1,5 +1,6 @@
 export const viewTypeTimeline = "planner-timeline";
 export const viewTypeMultiDay = "planner-weekly";
+export const viewTypeMonthlyCalendar = "planner-monthly";
 export const viewTypeReleaseNotes = "planner-release-notes";
 export const viewTypeLogSummary = "planner-log-summary";
 
