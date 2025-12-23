@@ -60,6 +60,7 @@ type Side = "top" | "bottom" | "left" | "right";
 export interface LocalTask extends TaskTokens, BaseTask {
   text: string;
   lines?: Array<FileLine>;
+  taskId?: string;
 
   // todo: move out to InMemoryTask
   location?: TaskLocation;

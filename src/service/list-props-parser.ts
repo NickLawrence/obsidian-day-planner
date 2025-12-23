@@ -10,8 +10,6 @@ import type { LineToListProps } from "../redux/dataview/dataview-slice";
 import { type LogEntry, type Props, propsSchema } from "../util/props";
 
 export class ListPropsParser {
-  private static readonly activitiesHeading = "activities";
-
   constructor(
     private readonly vault: Vault,
     private readonly metadataCache: MetadataCache,
@@ -44,7 +42,7 @@ export class ListPropsParser {
     const targetHeadings = headings.filter(
       (heading) =>
         heading.heading.trim().toLowerCase() ===
-        ListPropsParser.activitiesHeading.toLowerCase(),
+        activitiesHeading.toLowerCase(),
     );
 
     const allLines = fileText.split("\n");
@@ -119,7 +117,7 @@ export class ListPropsParser {
 
         try {
           const parsedYaml = parseYaml(trimmedTextInsideCodeBlock);
-          const normalized = this.normalizeActivities(parsedYaml);
+          const normalized = normalizeActivities(parsedYaml);
           validated = propsSchema.parse(normalized);
         } catch (error) {
           console.error(error);
@@ -160,49 +158,51 @@ export class ListPropsParser {
 
     return offsets;
   }
-
-  private normalizeActivities(parsedYaml: unknown): Props {
-    if (Array.isArray(parsedYaml)) {
-      return {
-        activities: parsedYaml as NonNullable<Props["activities"]>,
-      };
-    }
-
-    if (parsedYaml && typeof parsedYaml === "object") {
-      const asRecord = parsedYaml as Record<string, unknown>;
-      const planner = asRecord.planner as
-        | { activities?: Props["activities"]; log?: LogEntry[] }
-        | undefined;
-
-      if (planner) {
-        const activities =
-          planner.activities && Array.isArray(planner.activities)
-            ? (planner.activities as NonNullable<Props["activities"]>)
-            : [];
-
-        if (planner.log?.length) {
-          const [firstActivity] =
-            activities.length > 0
-              ? activities
-              : [{ activity: "Activity", log: [] }];
-
-          const restActivities = activities.slice(1);
-
-          return {
-            activities: [
-              {
-                ...firstActivity,
-                log: [...(firstActivity.log ?? []), ...planner.log],
-              },
-              ...restActivities,
-            ],
-          };
-        }
-
-        return { activities };
-      }
-    }
-
-    return (parsedYaml ?? {}) as Props;
-  }
 }
+
+export function normalizeActivities(parsedYaml: unknown): Props {
+  if (Array.isArray(parsedYaml)) {
+    return {
+      activities: parsedYaml as NonNullable<Props["activities"]>,
+    };
+  }
+
+  if (parsedYaml && typeof parsedYaml === "object") {
+    const asRecord = parsedYaml as Record<string, unknown>;
+    const planner = asRecord.planner as
+      | { activities?: Props["activities"]; log?: LogEntry[] }
+      | undefined;
+
+    if (planner) {
+      const activities =
+        planner.activities && Array.isArray(planner.activities)
+          ? (planner.activities as NonNullable<Props["activities"]>)
+          : [];
+
+      if (planner.log?.length) {
+        const [firstActivity] =
+          activities.length > 0
+            ? activities
+            : [{ activity: "Activity", log: [], taskId: undefined }];
+
+        const restActivities = activities.slice(1);
+
+        return {
+          activities: [
+            {
+              ...firstActivity,
+              log: [...(firstActivity.log ?? []), ...planner.log],
+            },
+            ...restActivities,
+          ],
+        };
+      }
+
+      return { activities };
+    }
+  }
+
+  return (parsedYaml ?? {}) as Props;
+}
+
+export const activitiesHeading = "activities";

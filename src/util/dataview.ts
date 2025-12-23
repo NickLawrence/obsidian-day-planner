@@ -28,6 +28,7 @@ import {
   indent,
   indentLines,
 } from "./markdown";
+import { extractPlannerTaskId } from "./task-id";
 
 interface Node {
   text: string;
@@ -112,6 +113,7 @@ export function toUnscheduledTask(sTask: STask, startTime: Moment) {
       line: sTask.line,
       position: sTask.position,
     },
+    taskId: extractPlannerTaskId(sTask.text),
     id: getId(),
   };
 }
@@ -140,6 +142,7 @@ export function toTask(sTask: STask, day: Moment): TaskWithoutComputedDuration {
       path: sTask.path,
       position: sTask.position,
     },
+    taskId: extractPlannerTaskId(sTask.text),
     id: getId(),
   };
 }

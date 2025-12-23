@@ -1,16 +1,27 @@
 import { isNotVoid } from "typed-assert";
+import type { STask } from "obsidian-dataview";
 
-import { selectListPropsForLocation } from "../redux/dataview/dataview-slice";
+import { selectListPropsForPath } from "../redux/dataview/dataview-slice";
 import type { AppStore } from "../redux/store";
-import { locToEditorPosition } from "../util/editor";
+import type { LocalTask } from "../task-types";
+import { upsertActivitiesBlock } from "../util/activities-file";
+import { replaceSTaskText } from "../util/dataview";
+import { getId } from "../util/id";
+import {
+  getFirstLine,
+  getLinesAfterFirst,
+  removeListTokens,
+} from "../util/markdown";
 import {
   addOpenClock,
   cancelOpenClock,
   clockOut,
-  createPropsWithOpenClock,
+  createProp,
   type Props,
-  toIndentedMarkdown,
 } from "../util/props";
+import { propRegexp } from "../regexp";
+import { extractPlannerTaskId, plannerTaskIdKey } from "../util/task-id";
+import { appendText, removeTimestampFromStart } from "../util/task-utils";
 import { withNotice } from "../util/with-notice";
 
 import { DataviewFacade } from "./dataview-facade";
@@ -18,59 +29,40 @@ import type { VaultFacade } from "./vault-facade";
 import { WorkspaceFacade } from "./workspace-facade";
 
 export class STaskEditor {
-  editProps = withNotice(
-    async (props: {
-      path: string;
-      line: number;
-      editFn: (props: Props) => Props;
-    }) => {
-      const { path, line, editFn } = props;
-      const sTask = this.dataviewFacade.getTaskAtLine({ path, line });
-      const listPropsForLine = this.getListProps({ path, line });
+  clockInUnderCursor = withNotice(async () => {
+    const { sTask } = this.getSTaskUnderCursorFromLastView();
 
-      isNotVoid(sTask, `No task found: ${path}:${line}`);
-      isNotVoid(listPropsForLine, `No list props found: ${path}:${line}`);
-
-      const updatedProps = editFn(listPropsForLine.listPropsForLine);
-      const indented = toIndentedMarkdown(
-        updatedProps,
-        sTask.position.start.col,
-      );
-
-      await this.vaultFacade.editFile(
-        sTask.path,
-        (contents) =>
-          contents.slice(0, listPropsForLine.position.start.offset) +
-          indented +
-          contents.slice(listPropsForLine.position.end.offset),
-      );
-    },
-  );
-
-  clockInUnderCursor = withNotice(() => {
-    this.updateListPropsUnderCursor((props) =>
-      props ? addOpenClock(props) : createPropsWithOpenClock(),
+    await this.updateClockPropsForTask(sTask, (props, context) =>
+      addOpenClock(props, context),
     );
   });
 
-  clockOutUnderCursor = withNotice(() => {
-    this.updateListPropsUnderCursor((props) => {
-      if (!props) {
-        throw new Error("There are no props under cursor");
-      }
+  clockOutUnderCursor = withNotice(async () => {
+    const { sTask } = this.getSTaskUnderCursorFromLastView();
 
-      return clockOut(props);
-    });
+    await this.updateClockPropsForTask(sTask, (props, context) =>
+      clockOut(props, context.taskId),
+    );
   });
 
-  cancelClockUnderCursor = withNotice(() => {
-    this.updateListPropsUnderCursor((props) => {
-      if (!props) {
-        throw new Error("There are no props under cursor");
-      }
+  cancelClockUnderCursor = withNotice(async () => {
+    const { sTask } = this.getSTaskUnderCursorFromLastView();
 
-      return cancelOpenClock(props);
-    });
+    await this.updateClockPropsForTask(sTask, (props, context) =>
+      cancelOpenClock(props, context.taskId),
+    );
+  });
+
+  clockOutTask = withNotice(async (task: LocalTask) => {
+    await this.updateClockPropsForLocalTask(task, (props, context) =>
+      clockOut(props, context.taskId),
+    );
+  });
+
+  cancelClockForTask = withNotice(async (task: LocalTask) => {
+    await this.updateClockPropsForLocalTask(task, (props, context) =>
+      cancelOpenClock(props, context.taskId),
+    );
   });
 
   constructor(
@@ -90,70 +82,96 @@ export class STaskEditor {
     return { sTask, location };
   };
 
-  private getListProps(location: { path: string; line: number }) {
-    const props = selectListPropsForLocation(
-      this.getState(),
-      location.path,
-      location.line,
+  hasOpenClockForTask(sTask: STask) {
+    const taskId = extractPlannerTaskId(getFirstLine(sTask.text));
+
+    if (!taskId) {
+      return false;
+    }
+
+    const listProps = selectListPropsForPath(this.getState(), sTask.path) || {};
+
+    return Object.values(listProps).some(({ parsed }) =>
+      parsed.activities?.some(
+        (activity) =>
+          activity.taskId === taskId &&
+          activity.log?.some((entry) => !entry.end),
+      ),
+    );
+  }
+
+  private async updateClockPropsForTask(
+    sTask: STask,
+    updateFn: (
+      props: Props,
+      context: { taskId: string; activityName: string },
+    ) => Props,
+  ) {
+    const taskId = await this.ensureTaskId(sTask);
+    const activityName = this.getActivityName(sTask.text);
+
+    await this.vaultFacade.editFile(sTask.path, (contents) =>
+      upsertActivitiesBlock({
+        fileText: contents,
+        updateFn: (props) => updateFn(props, { taskId, activityName }),
+      }),
     );
 
-    if (!props) {
-      return undefined;
-    }
-
-    return {
-      listPropsForLine: props.parsed,
-      position: props.position,
-    };
+    return taskId;
   }
 
-  getSTaskWithListPropsUnderCursor() {
-    const { sTask, location } = this.getSTaskUnderCursorFromLastView();
-    const listProps = this.getListProps(location);
+  private async updateClockPropsForLocalTask(
+    task: LocalTask,
+    updateFn: (
+      props: Props,
+      context: { taskId: string; activityName: string },
+    ) => Props,
+  ) {
+    const { location, taskId } = task;
 
-    if (!listProps) {
-      return sTask;
-    }
+    isNotVoid(location, "Cannot update clock for a task without location");
+    isNotVoid(taskId, "Cannot update clock for a task without an ID");
 
-    return {
-      ...sTask,
-      props: {
-        validated: { ...listProps.listPropsForLine },
-        position: listProps.position,
-      },
-    };
+    const activityName = this.getActivityName(task.text);
+
+    await this.vaultFacade.editFile(location.path, (contents) =>
+      upsertActivitiesBlock({
+        fileText: contents,
+        updateFn: (props) => updateFn(props, { taskId, activityName }),
+      }),
+    );
   }
 
-  private updateListPropsUnderCursor(updateFn: (props?: Props) => Props) {
-    const sTask = this.getSTaskWithListPropsUnderCursor();
+  private getActivityName(text: string) {
+    return removeTimestampFromStart(
+      removeListTokens(getFirstLine(text)).replace(propRegexp, ""),
+    )
+      .replace(/\s+/g, " ")
+      .trim();
+  }
 
-    const updatedProps = updateFn(sTask.props?.validated);
-    const indented = toIndentedMarkdown(updatedProps, sTask.position.start.col);
+  private async ensureTaskId(sTask: STask) {
+    const existingTaskId = extractPlannerTaskId(getFirstLine(sTask.text));
 
-    let result = indented + "\n";
-
-    const view = this.workspaceFacade.getActiveMarkdownView();
-
-    if (sTask.props?.validated) {
-      view.editor.replaceRange(
-        indented,
-        locToEditorPosition(sTask.props.position.start),
-        locToEditorPosition(sTask.props.position.end),
-      );
-    } else {
-      const afterFirstLine = {
-        line: sTask.position.start.line + 1,
-        ch: 0,
-      };
-
-      const needsNewlineBeforeProps =
-        sTask.position.start.line === view.editor.lastLine();
-
-      if (needsNewlineBeforeProps) {
-        result = "\n" + result;
-      }
-
-      view.editor.replaceRange(result, afterFirstLine, afterFirstLine);
+    if (existingTaskId) {
+      return existingTaskId;
     }
+
+    const taskId = getId();
+    const updatedFirstLine = appendText(
+      getFirstLine(sTask.text),
+      ` ${createProp(plannerTaskIdKey, taskId)}`,
+    );
+    const otherLines = getLinesAfterFirst(sTask.text);
+    const updatedText =
+      otherLines.length > 0
+        ? `${updatedFirstLine}\n${otherLines}`
+        : updatedFirstLine;
+
+    await this.vaultFacade.editFile(sTask.path, (contents) =>
+      replaceSTaskText(contents, sTask, updatedText),
+    );
+
+    return taskId;
   }
 }

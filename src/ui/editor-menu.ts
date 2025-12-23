@@ -2,7 +2,6 @@ import type { Editor, Menu } from "obsidian";
 
 import type DayPlanner from "../main";
 import type { STaskEditor } from "../service/stask-editor";
-import { isWithOpenClock } from "../util/props";
 
 export const createEditorMenuCallback =
   (props: { sTaskEditor: STaskEditor; plugin: DayPlanner }) =>
@@ -12,14 +11,16 @@ export const createEditorMenuCallback =
     let sTask;
 
     try {
-      sTask = sTaskEditor.getSTaskWithListPropsUnderCursor();
+      ({ sTask } = sTaskEditor.getSTaskUnderCursorFromLastView());
     } catch {
       return;
     }
 
     menu.addSeparator();
 
-    if (isWithOpenClock(sTask.props?.validated)) {
+    const hasOpenClock = sTaskEditor.hasOpenClockForTask(sTask);
+
+    if (hasOpenClock) {
       menu.addItem((item) => {
         item
           .setTitle("Clock out")

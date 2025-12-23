@@ -30,15 +30,22 @@ const readingActivityDetailsSchema = z.object({
   end_page: z.number(),
 });
 
-const activitySchema = z.object({
-  activity: z.string(),
-  log: z.array(logEntrySchema).optional(),
-  notes: z.string().optional(),
-  reading: readingActivityDetailsSchema.optional(),
-  details: z.record(z.string(), z.unknown()).optional(),
-});
+const activitySchema = z
+  .object({
+    activity: z.string(),
+    taskId: z.string().optional(),
+    task_id: z.string().optional(),
+    log: z.array(logEntrySchema).optional(),
+    notes: z.string().optional(),
+    reading: readingActivityDetailsSchema.optional(),
+    details: z.record(z.string(), z.unknown()).optional(),
+  })
+  .transform(({ taskId, task_id, ...rest }) => ({
+    ...rest,
+    taskId: taskId || task_id,
+  }));
 
-export type Activity = z.infer<typeof activitySchema>;
+export type Activity = Omit<z.infer<typeof activitySchema>, "task_id">;
 
 const activitiesSchema = z.array(activitySchema);
 
@@ -48,25 +55,6 @@ export const propsSchema = z.looseObject({
 
 export type Props = z.infer<typeof propsSchema>;
 
-const defaultActivityName = "Activity";
-
-function getActivities(props: Props): Activity[] {
-  return props.activities ?? [];
-}
-
-function getOrCreateActivities(props: Props): Activity[] {
-  const activities = getActivities(props);
-
-  if (activities.length > 0) {
-    return activities.map((activity) => ({
-      ...activity,
-      log: [...(activity.log ?? [])],
-    }));
-  }
-
-  return [{ activity: defaultActivityName, log: [] }];
-}
-
 export function isWithOpenClock(props?: Props) {
   return Boolean(
     props?.activities?.some((activity) =>
@@ -75,39 +63,98 @@ export function isWithOpenClock(props?: Props) {
   );
 }
 
-export function createPropsWithOpenClock(): Props {
-  return addOpenClock({});
+export function getTaskIdFromActivity(activity: Activity) {
+  return activity.taskId;
 }
 
-export function addOpenClock(props: Props): Props {
-  if (isWithOpenClock(props)) {
+function getActivities(props: Props): Activity[] {
+  return props.activities ?? [];
+}
+
+function getActivitiesCopy(props: Props): Activity[] {
+  return getActivities(props).map((activity) => ({
+    ...activity,
+    log: [...(activity.log ?? [])],
+  }));
+}
+
+function findActivityByTaskId(
+  activities: Activity[],
+  taskId: string,
+  activityName: string,
+) {
+  const existingIndex = activities.findIndex(
+    (activity) => activity.taskId === taskId,
+  );
+
+  const existing = activities[existingIndex];
+
+  if (existing) {
+    return {
+      index: existingIndex,
+      activity: existing,
+    };
+  }
+
+  return {
+    index: activities.length,
+    activity: {
+      activity: activityName,
+      taskId,
+      log: [],
+    },
+  };
+}
+
+export function createPropsWithOpenClock(props: {
+  taskId: string;
+  activityName: string;
+}): Props {
+  return addOpenClock({}, props);
+}
+
+export function addOpenClock(
+  props: Props,
+  task: { taskId: string; activityName: string },
+): Props {
+  const activities = getActivitiesCopy(props);
+  const { activity, index } = findActivityByTaskId(
+    activities,
+    task.taskId,
+    task.activityName,
+  );
+
+  if (activity.log?.some((entry) => !entry.end)) {
     throw new Error("There is already an open clock");
   }
 
-  const activities = getOrCreateActivities(props);
-  const [firstActivity, ...rest] = activities;
-
-  const updatedFirstActivity: Activity = {
-    ...firstActivity,
+  const updatedActivity: Activity = {
+    ...activity,
+    taskId: task.taskId,
     log: [
-      ...(firstActivity.log ?? []),
+      ...(activity.log ?? []),
       {
         start: window.moment().format(clockFormat),
       },
     ],
   };
 
+  const updatedActivities =
+    index < activities.length
+      ? activities.with(index, updatedActivity)
+      : activities.concat(updatedActivity);
+
   return {
     ...props,
-    activities: [updatedFirstActivity, ...rest],
+    activities: updatedActivities,
   };
 }
 
-export function cancelOpenClock(props: Props): Props {
-  const activities = getActivities(props);
-  const activityWithOpenClockIndex = activities.findIndex((activity) =>
-    activity.log?.some((it) => !it.end),
-  );
+export function cancelOpenClock(props: Props, taskId: string): Props {
+  const activities = getActivitiesCopy(props);
+  const activityWithOpenClockIndex = activities.findIndex((activity) => {
+    return activity.taskId === taskId && activity.log?.some((it) => !it.end);
+  });
 
   if (activityWithOpenClockIndex === -1) {
     throw new Error("There is no open clock");
@@ -138,10 +185,10 @@ export function cancelOpenClock(props: Props): Props {
   };
 }
 
-export function clockOut(props: Props): Props {
-  const activities = getActivities(props);
-  const activityWithOpenClockIndex = activities.findIndex((activity) =>
-    activity.log?.some((it) => !it.end),
+export function clockOut(props: Props, taskId: string): Props {
+  const activities = getActivitiesCopy(props);
+  const activityWithOpenClockIndex = activities.findIndex(
+    (activity) => activity.taskId === taskId,
   );
 
   if (activityWithOpenClockIndex === -1) {
@@ -149,22 +196,17 @@ export function clockOut(props: Props): Props {
   }
 
   const activityWithOpenClock = activities[activityWithOpenClockIndex];
-  const log = activityWithOpenClock.log;
+  const log = activityWithOpenClock?.log;
 
   if (!log) {
-    throw new Error("There is no log under cursor");
+    throw new Error("There is no log");
   }
 
   const openClockIndex = log.findIndex((it) => !it.end);
 
-  const updatedOpenClock = {
-    ...log[openClockIndex],
-    end: window.moment().format(clockFormat),
-  };
-
   const updatedActivity: Activity = {
     ...activityWithOpenClock,
-    log: log.with(openClockIndex, updatedOpenClock),
+    log: log.toSpliced(openClockIndex, 1),
   };
 
   const updatedActivities = activities.with(
@@ -179,7 +221,18 @@ export function clockOut(props: Props): Props {
 }
 
 export function toMarkdown(props: Props) {
-  return createCodeBlock({ language: "yaml", text: stringifyYaml(props) });
+  const yamlReadyProps = {
+    ...props,
+    activities: props.activities?.map(({ taskId, ...activity }) => ({
+      ...activity,
+      ...(taskId ? { task_id: taskId } : {}),
+    })),
+  };
+
+  return createCodeBlock({
+    language: "yaml",
+    text: stringifyYaml(yamlReadyProps),
+  });
 }
 
 export function createProp(

@@ -10,6 +10,7 @@ import { replaceOrPrependTimestamp } from "../parser/parser";
 import {
   looseTimestampAtStartOfLineRegExp,
   obsidianBlockIdRegExp,
+  propRegexp,
   scheduledPropRegExps,
   shortScheduledPropRegExp,
   strictTimestampAnywhereInLineRegExp,
@@ -258,6 +259,7 @@ export function getOneLineSummary(task: Task) {
     getFirstLine,
     removeListTokens,
     removeTimestampFromStart,
+    (line: string) => line.replace(propRegexp, ""),
   )(task.text);
 }
 

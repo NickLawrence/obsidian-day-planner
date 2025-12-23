@@ -1,6 +1,6 @@
 import { flow, groupBy, uniqBy } from "lodash/fp";
 import type { Moment } from "moment";
-import type { MetadataCache, Pos } from "obsidian";
+import type { MetadataCache } from "obsidian";
 import { derived, type Readable, type Writable } from "svelte/store";
 
 import { defaultDurationMinutes } from "../../constants";
@@ -12,7 +12,7 @@ import { WorkspaceFacade } from "../../service/workspace-facade";
 import type { DayPlannerSettings } from "../../settings";
 import type { LocalTask, RemoteTask, Task, WithTime } from "../../task-types";
 import type { OnEditAbortedFn, OnUpdateFn, PointerDateTime } from "../../types";
-import { getId } from "../../util/id";
+import { createClockTaskFromActivity } from "../../util/clock";
 import { splitMultiday } from "../../util/moment";
 import { type LogEntry } from "../../util/props";
 import { getUpdateTrigger } from "../../util/store";
@@ -83,6 +83,7 @@ export function useTasks(props: {
           .map((activity) => ({
             title: activity.activity,
             log: activity.log as LogEntry[],
+            taskId: activity.taskId,
             location: {
               path,
               position,
@@ -108,40 +109,25 @@ export function useTasks(props: {
     })),
   );
 
-  const createLocalTaskFromClock = (
-    props: {
-      title: string;
-      location: { path: string; position: Pos };
-    },
-    clockMoments: [Moment, Moment],
-  ): LocalTask => {
-    const [startTime, endTime] = clockMoments;
-    let durationMinutes = endTime.diff(startTime, "minutes");
+  const localTasks = useVisibleDataviewTasks(
+    dataviewTasks,
+    visibleDays,
+    periodicNotes,
+  );
 
-    if (durationMinutes < 0) {
-      durationMinutes = defaultDurationMinutes;
-    }
+  const tasksById = derived(localTasks, ($localTasks) => {
+    return new Map(
+      $localTasks
+        .filter((task): task is LocalTask & { taskId: string } =>
+          Boolean(task.taskId),
+        )
+        .map((task) => [task.taskId, task]),
+    );
+  });
 
-    return {
-      id: getId(),
-      startTime,
-      durationMinutes,
-      isAllDayEvent: false,
-      symbol: "-",
-      status: " ",
-      text: props.title,
-      lines: [],
-      location: {
-        path: props.location.path,
-        position: props.location.position,
-      },
-    };
-  };
-
-  // todo: remove duplication
   const tasksWithActiveClockProps = derived(
-    [activitiesWithLogs, currentTime],
-    ([$activitiesWithLogs, $currentTime]) =>
+    [activitiesWithLogs, currentTime, tasksById],
+    ([$activitiesWithLogs, $currentTime, $tasksById]) =>
       $activitiesWithLogs
         .flatMap((activity) => {
           return activity.log
@@ -161,7 +147,12 @@ export function useTasks(props: {
             }));
         })
         .map(({ activity, clockMoments }) =>
-          createLocalTaskFromClock(activity, clockMoments),
+          createClockTaskFromActivity({
+            activity,
+            clockMoments,
+            tasksById: $tasksById,
+            defaultDurationMinutes,
+          }),
         ),
   );
 
@@ -174,29 +165,40 @@ export function useTasks(props: {
       })),
   );
 
-  const logRecords = derived([activitiesWithLogs], ([$activitiesWithLogs]) =>
-    $activitiesWithLogs
-      .flatMap((activity) => {
-        return activity.log
-          .filter(({ end }) => typeof end !== "undefined")
-          .flatMap(({ start, end }) => {
-            const parsedStart = window.moment(
-              start,
-              window.moment.ISO_8601,
-              true,
-            );
-            const parsedEnd = window.moment(end, window.moment.ISO_8601, true);
+  const logRecords = derived(
+    [activitiesWithLogs, tasksById],
+    ([$activitiesWithLogs, $tasksById]) =>
+      $activitiesWithLogs
+        .flatMap((activity) => {
+          return activity.log
+            .filter(({ end }) => typeof end !== "undefined")
+            .flatMap(({ start, end }) => {
+              const parsedStart = window.moment(
+                start,
+                window.moment.ISO_8601,
+                true,
+              );
+              const parsedEnd = window.moment(
+                end,
+                window.moment.ISO_8601,
+                true,
+              );
 
-            return splitMultiday(parsedStart, parsedEnd);
-          })
-          .map((clockMoments) => ({
+              return splitMultiday(parsedStart, parsedEnd);
+            })
+            .map((clockMoments) => ({
+              activity,
+              clockMoments,
+            }));
+        })
+        .map(({ activity, clockMoments }) =>
+          createClockTaskFromActivity({
             activity,
             clockMoments,
-          }));
-      })
-      .map(({ activity, clockMoments }) =>
-        createLocalTaskFromClock(activity, clockMoments),
-      ),
+            defaultDurationMinutes,
+            tasksById: $tasksById,
+          }),
+        ),
   );
 
   const combinedClocks = derived(
@@ -218,12 +220,6 @@ export function useTasks(props: {
       return flow(uniqBy(getRenderKey), addHorizontalPlacing)(tasksForDay);
     });
   }
-
-  const localTasks = useVisibleDataviewTasks(
-    dataviewTasks,
-    visibleDays,
-    periodicNotes,
-  );
 
   const tasksWithTimeForToday = derived(
     [localTasks, remoteTasks, currentTime],
