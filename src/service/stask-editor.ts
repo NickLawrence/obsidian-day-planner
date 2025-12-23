@@ -5,11 +5,13 @@ import { selectListPropsForPath } from "../redux/dataview/dataview-slice";
 import type { AppStore } from "../redux/store";
 import type { LocalTask } from "../task-types";
 import { upsertActivitiesBlock } from "../util/activities-file";
-import { replaceSTaskText } from "../util/dataview";
+import {
+  replaceSTaskText,
+  textToMarkdownWithIndentation,
+} from "../util/dataview";
 import { getId } from "../util/id";
 import {
   getFirstLine,
-  getLinesAfterFirst,
   removeListTokens,
 } from "../util/markdown";
 import {
@@ -158,15 +160,16 @@ export class STaskEditor {
     }
 
     const taskId = getId();
+    const textWithIndentation = textToMarkdownWithIndentation(sTask);
+    const [firstLine, ...otherLines] = textWithIndentation.split("\n");
+
     const updatedFirstLine = appendText(
-      getFirstLine(sTask.text),
+      firstLine,
       ` ${createProp(plannerTaskIdKey, taskId)}`,
     );
-    const otherLines = getLinesAfterFirst(sTask.text);
-    const updatedText =
-      otherLines.length > 0
-        ? `${updatedFirstLine}\n${otherLines}`
-        : updatedFirstLine;
+    const updatedText = otherLines.length
+      ? [updatedFirstLine, ...otherLines].join("\n")
+      : updatedFirstLine;
 
     await this.vaultFacade.editFile(sTask.path, (contents) =>
       replaceSTaskText(contents, sTask, updatedText),

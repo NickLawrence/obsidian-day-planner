@@ -181,7 +181,7 @@ function findHeading(text: string, headingText: string) {
 }
 
 export function createCodeBlock(props: {
-  language: "yaml" | "yml";
+  language: "yaml" | "yml" | "activities";
   text: string;
 }) {
   return codeFence + props.language + "\n" + props.text + codeFence;

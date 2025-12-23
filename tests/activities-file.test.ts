@@ -32,7 +32,9 @@ describe("upsertActivitiesBlock", () => {
 
     expect(result).toContain("# Activities");
     expect(result).toContain("task_id: task-123");
-    expect(result).toContain("activity: Task");
+    expect(result).toContain("activity: task");
+    expect(result).toContain("- [ ] Task");
+    expect(result).not.toContain("text:");
     expect(result).toMatch(/start:\s*'?\d{4}-\d{2}-\d{2}/);
   });
 });

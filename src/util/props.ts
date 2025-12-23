@@ -14,6 +14,8 @@ import { getIndentationForListParagraph } from "./dataview";
 import { createCodeBlock, createIndentation, indent } from "./markdown";
 import { appendText } from "./task-utils";
 
+export const taskActivityType = "task";
+
 const dateTimeSchema = z
   .string()
   .refine((it) => window.moment(it, window.moment.ISO_8601, true).isValid());
@@ -99,7 +101,7 @@ function findActivityByTaskId(
   return {
     index: activities.length,
     activity: {
-      activity: activityName,
+      activity: taskActivityType,
       taskId,
       log: [],
     },
@@ -130,6 +132,7 @@ export function addOpenClock(
 
   const updatedActivity: Activity = {
     ...activity,
+    activity: taskActivityType,
     taskId: task.taskId,
     log: [
       ...(activity.log ?? []),
@@ -188,7 +191,8 @@ export function cancelOpenClock(props: Props, taskId: string): Props {
 export function clockOut(props: Props, taskId: string): Props {
   const activities = getActivitiesCopy(props);
   const activityWithOpenClockIndex = activities.findIndex(
-    (activity) => activity.taskId === taskId,
+    (activity) =>
+      activity.taskId === taskId && activity.log?.some((entry) => !entry.end),
   );
 
   if (activityWithOpenClockIndex === -1) {
@@ -204,9 +208,16 @@ export function clockOut(props: Props, taskId: string): Props {
 
   const openClockIndex = log.findIndex((it) => !it.end);
 
+  if (openClockIndex === -1) {
+    throw new Error("There is no open clock");
+  }
+
   const updatedActivity: Activity = {
     ...activityWithOpenClock,
-    log: log.toSpliced(openClockIndex, 1),
+    log: log.toSpliced(openClockIndex, 1, {
+      ...log[openClockIndex],
+      end: window.moment().format(clockFormat),
+    }),
   };
 
   const updatedActivities = activities.with(
@@ -230,7 +241,7 @@ export function toMarkdown(props: Props) {
   };
 
   return createCodeBlock({
-    language: "yaml",
+    language: "activities",
     text: stringifyYaml(yamlReadyProps),
   });
 }
