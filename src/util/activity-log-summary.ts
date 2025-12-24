@@ -43,8 +43,9 @@ function calculateActivityDurationsForRange(
   rangeStart: Moment,
   rangeEnd: Moment,
 ): ActivityDuration[] {
-  const activityToDuration = new Map<string, Duration>();
+  const durationByNormalized = new Map<string, Duration>();
   const normalizedToLabel = new Map<string, string>();
+  const seenInRange = new Set<string>();
 
   activities.forEach(({ activity, log }) => {
     const normalizedName = normalizeActivityName(activity);
@@ -55,18 +56,30 @@ function calculateActivityDurationsForRange(
     }
 
     log?.forEach(({ start, end }) => {
-      if (!end) {
-        return;
-      }
-
       const startMoment = window.moment(
         start,
         window.moment.ISO_8601,
         true,
       );
+
+      if (!startMoment.isValid()) {
+        return;
+      }
+
+      if (!end) {
+        if (
+          startMoment.isSameOrAfter(rangeStart) &&
+          startMoment.isBefore(rangeEnd)
+        ) {
+          seenInRange.add(normalizedName);
+        }
+
+        return;
+      }
+
       const endMoment = window.moment(end, window.moment.ISO_8601, true);
 
-      if (!startMoment.isValid() || !endMoment.isValid()) {
+      if (!endMoment.isValid()) {
         return;
       }
 
@@ -77,22 +90,25 @@ function calculateActivityDurationsForRange(
         return;
       }
 
-      const key = normalizedToLabel.get(normalizedName) ?? label;
+      seenInRange.add(normalizedName);
+
       const previousDuration =
-        activityToDuration.get(key) ?? window.moment.duration();
+        durationByNormalized.get(normalizedName) ?? window.moment.duration();
       const timeSpent = window.moment.duration(
         clampedEnd.diff(clampedStart),
         "milliseconds",
       );
 
-      activityToDuration.set(key, previousDuration.add(timeSpent));
+      durationByNormalized.set(normalizedName, previousDuration.add(timeSpent));
     });
   });
 
-  return [...activityToDuration.entries()]
-    .map(([label, duration]) => ({
+  return [...normalizedToLabel.entries()]
+    .filter(([normalized]) => seenInRange.has(normalized))
+    .map(([normalized, label]) => ({
       activity: label,
-      duration,
+      duration:
+        durationByNormalized.get(normalized) ?? window.moment.duration(),
     }))
     .sort((a, b) =>
       a.activity.localeCompare(b.activity, undefined, {

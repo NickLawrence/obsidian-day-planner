@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Moment } from "moment";
+  import { onMount, onDestroy } from "svelte";
   import { derived, writable } from "svelte/store";
 
   import { getObsidianContext } from "../../../context/obsidian-context";
@@ -12,13 +13,43 @@
     type ActivityDuration,
   } from "../../../util/activity-log-summary";
   import type { Activity } from "../../../util/props";
+  import {
+    extractActivityGoals,
+    mergeActivityDurationsWithGoals,
+    type ActivityGoal,
+  } from "../../../util/weekly-activity-goals";
 
-  const { useSelector } = getObsidianContext();
+
+  
+  let offIndexReady: any;
+  let offMetadataChange: any;
+
+  onMount(() => {
+    const app = (window as any).app;
+
+    offIndexReady = app?.metadataCache?.on("dataview:index-ready", () => {
+      // rerun once the index is ready
+      void loadGoalsForWeeks($weeks);
+    });
+
+    offMetadataChange = app?.metadataCache?.on("dataview:metadata-change", () => {
+      // rerun when DV updates metadata for any file
+      void loadGoalsForWeeks($weeks);
+    });
+  });
+
+  onDestroy(() => {
+    const app = (window as any).app;
+    if (offIndexReady) app?.metadataCache?.offref(offIndexReady);
+    if (offMetadataChange) app?.metadataCache?.offref(offMetadataChange);
+  });
+
+  const { useSelector, workspaceFacade, periodicNotes } = getObsidianContext();
 
   const listProps = useSelector(selectListProps);
   const currentMonth = writable(window.moment().startOf("month"));
 
-  const weekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const weekdayLabels = window.moment.weekdaysShort(true);
 
   const activities = derived(listProps, ($listProps) =>
     Object.values($listProps).flatMap((lineToProps) =>
@@ -33,16 +64,19 @@
   );
 
   const weeks = derived(currentMonth, ($month) => buildWeeks($month));
+  const weeklyGoals = writable(new Map<number, ActivityGoal[]>());
 
   const calendar = derived(
-    [weeks, activities, currentMonth],
-    ([$weeks, $activities, $month]) =>
+    [weeks, activities, currentMonth, weeklyGoals],
+    ([$weeks, $activities, $month, $weeklyGoals]) =>
       $weeks.map((weekStart) => {
         const { end: weekEnd } = getWeekRangeFor(weekStart);
         const weekTotals = calculateWeeklyActivityDurations(
           $activities,
           weekStart,
         );
+        const goalsForWeek =
+          $weeklyGoals.get(weekStart.valueOf()) ?? ([] as ActivityGoal[]);
         const days = Array.from({ length: 7 }).map((_, index) => {
           const date = weekStart.clone().add(index, "day");
 
@@ -54,15 +88,23 @@
           };
         });
 
-        return { weekStart, weekEnd, weekTotals, days };
+        return {
+          weekStart,
+          weekEnd,
+          weekTotals: mergeActivityDurationsWithGoals(weekTotals, goalsForWeek),
+          days,
+        };
       }),
   );
 
-  type SummaryRow = ActivityDuration & { isPlaceholder: boolean };
-
+  type SummaryRow = ActivityDuration & {
+    isPlaceholder: boolean;
+    goal?: import("moment").Duration;
+  };
+  
   function buildWeeks(month: Moment) {
-    const start = month.clone().startOf("month").startOf("isoWeek");
-    const end = month.clone().endOf("month").endOf("isoWeek");
+    const start = month.clone().startOf("month").startOf("week");
+    const end = month.clone().endOf("month").endOf("week");
     const weeks: Moment[] = [];
     let cursor = start.clone();
 
@@ -86,7 +128,7 @@
     currentMonth.set(window.moment().startOf("month"));
   }
 
-  function renderSummary(entries: ActivityDuration[]): SummaryRow[] {
+  function renderSummary(entries: Array<ActivityDuration & { goal?: import("moment").Duration }>): SummaryRow[] {
     if (entries.length === 0) {
       return [
         {
@@ -98,6 +140,91 @@
     }
 
     return entries.map((entry) => ({ ...entry, isPlaceholder: false }));
+  }
+
+  let weeklyGoalsRunId = 0;
+
+  $: if (Array.isArray($weeks) && $weeks.length) {
+    void loadGoalsForWeeks($weeks).catch((err) =>
+      console.error("loadGoalsForWeeks failed", err),
+    );
+  }
+
+  async function loadGoalsForWeeks(weeksToLoad: ReturnType<typeof buildWeeks>) {
+    console.log("Loading Goals For Weeks");
+    const thisRunId = ++weeklyGoalsRunId;
+
+    if (!periodicNotes.hasWeeklyNotesSupport()) {
+      weeklyGoals.set(new Map());
+      console.log("Weekly notes not supported/enabled");
+      return;
+    }
+
+    const app = (window as any).app; // ✅ avoid TS Window typing issues
+    if (!app) {
+      weeklyGoals.set(new Map());
+      console.log("No app");
+      return;
+    }
+
+    const goals = await Promise.all(
+      weeksToLoad.map(async (weekStart) => {
+        console.log("- Checking weekly note for " + weekStart.format());
+        const weeklyNote = periodicNotes.getWeeklyNote(weekStart);
+
+        if (!weeklyNote) {
+          console.log("XX No weekly note for " + weekStart.format());
+          return null;
+        }
+
+        try {
+          return {
+            key: weekStart.valueOf(),
+            goals: await extractActivityGoals(app, weeklyNote), // ✅ await
+          };
+        } catch (error) {
+          console.error("Failed to read weekly note", error);
+          return null;
+        }
+      }),
+    );
+
+    if (thisRunId !== weeklyGoalsRunId) return;
+
+    weeklyGoals.set(
+      new Map(
+        goals
+          .filter((it): it is { key: number; goals: ActivityGoal[] } => Boolean(it))
+          .map((it) => [it.key, it.goals]),
+      ),
+    );
+  }
+
+
+  async function openDailyNote(day: Moment) {
+    await workspaceFacade.openFileForDay(day);
+  }
+
+  async function openWeeklyNote(weekStart: Moment) {
+    try {
+      console.log("Creating Weekly Note: " + weekStart);
+      const weeklyNote = await periodicNotes.createWeeklyNoteIfNeeded(weekStart); 
+      if (weeklyNote) {
+        await workspaceFacade.openFileInEditor(weeklyNote);
+      }
+    } catch(error) {
+      console.error("Failed to create weekly note", error);
+    }
+  }
+
+  function handleKeyboardOpen(
+    event: KeyboardEvent,
+    openFn: () => Promise<void> | void,
+  ) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      void openFn();
+    }
   }
 </script>
 
@@ -128,15 +255,26 @@
     {/each}
 
     {#each $calendar as week (week.weekStart.valueOf())}
-      <div class="week-summary">
+      <div
+        class="week-summary"
+        role="button"
+        tabindex="0"
+        on:click={() => openWeeklyNote(week.weekStart)}
+        on:keydown={(event) => handleKeyboardOpen(event, () => openWeeklyNote(week.weekStart))}
+      >
         <div class="week-label">
           {week.weekStart.format("MMM D")} – {week.weekEnd.clone().subtract(1, "day").format("MMM D")}
         </div>
         <div class="summary-list">
           {#each renderSummary(week.weekTotals) as entry (entry.activity)}
             <div class="summary-row" class:placeholder={entry.isPlaceholder}>
-              <span>{entry.activity}</span>
-              <span>{entry.isPlaceholder ? "" : formatDuration(entry.duration)}</span>
+              <div class="summary-activity">
+                <span class="summary-name">{entry.activity}</span>
+                {#if entry.goal}
+                  <span class="summary-goal">Goal {formatDuration(entry.goal)}</span>
+                {/if}
+              </div>
+              <span class="summary-duration">{entry.isPlaceholder ? "" : formatDuration(entry.duration)}</span>
             </div>
           {/each}
         </div>
@@ -146,6 +284,10 @@
           class="day-cell"
           class:outside-month={!day.inCurrentMonth}
           class:is-today={day.isToday}
+          role="button"
+          tabindex="0"
+          on:click={() => openDailyNote(day.date)}
+          on:keydown={(event) => handleKeyboardOpen(event, () => openDailyNote(day.date))}
         >
           <div class="day-heading">
             <span class="day-number">{day.date.date()}</span>
@@ -153,8 +295,10 @@
           <div class="summary-list">
             {#each renderSummary(day.totals) as entry (entry.activity)}
               <div class="summary-row" class:placeholder={entry.isPlaceholder}>
-                <span>{entry.activity}</span>
-                <span>{entry.isPlaceholder ? "" : formatDuration(entry.duration)}</span>
+                <div class="summary-activity">
+                  <span class="summary-name">{entry.activity}</span>
+                </div>
+                <span class="summary-duration">{entry.isPlaceholder ? "" : formatDuration(entry.duration)}</span>
               </div>
             {/each}
           </div>
@@ -221,6 +365,7 @@
     flex-direction: column;
     gap: var(--size-2-3);
     min-height: 120px;
+    cursor: pointer;
   }
 
   .week-label {
@@ -243,6 +388,8 @@
     display: flex;
     flex-direction: column;
     gap: var(--size-2-2);
+    overflow-y: auto;
+    max-height: 240px;
   }
 
   .summary-row {
@@ -250,10 +397,25 @@
     justify-content: space-between;
     gap: var(--size-2-3);
     font-size: var(--font-ui-smaller);
+    align-items: flex-start;
   }
 
   .summary-row.placeholder {
     color: var(--text-faint);
+  }
+
+  .summary-activity {
+    display: flex;
+    flex-direction: column;
+    gap: var(--size-2-1);
+  }
+
+  .summary-duration {
+    white-space: nowrap;
+  }
+
+  .summary-goal {
+    color: var(--text-muted);
   }
 
   .outside-month {
@@ -268,5 +430,11 @@
 
   .week-column {
     text-align: left;
+  }
+
+  .day-cell:focus-visible,
+  .week-summary:focus-visible {
+    outline: 2px solid var(--interactive-accent);
+    outline-offset: 2px;
   }
 </style>

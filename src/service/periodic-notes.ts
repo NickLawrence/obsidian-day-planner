@@ -8,13 +8,23 @@ import {
   getDateFromFile,
   DEFAULT_DAILY_NOTE_FORMAT,
   getDailyNoteSettings,
+
+  // ✅ weekly
+  appHasWeeklyNotesPluginLoaded,
+  getAllWeeklyNotes,
+  getWeeklyNote,
+  createWeeklyNote,
 } from "obsidian-daily-notes-interface";
 
 export class PeriodicNotes {
   readonly DEFAULT_DAILY_NOTE_FORMAT = DEFAULT_DAILY_NOTE_FORMAT;
 
+  hasWeeklyNotesSupport() {
+    return appHasWeeklyNotesPluginLoaded();
+  }
+
   getDailyNote(day: Moment, dailyNotes: Record<string, TFile>): TFile | null {
-    return getDailyNote(day, dailyNotes);
+    return getDailyNote(day, dailyNotes) ?? null;
   }
 
   getAllDailyNotes() {
@@ -23,6 +33,30 @@ export class PeriodicNotes {
 
   createDailyNote(day: Moment) {
     return createDailyNote(day);
+  }
+
+  getWeeklyNote(dayInWeek: Moment): TFile | null {
+    if (!appHasWeeklyNotesPluginLoaded()) return null;
+
+    try {
+      const weeklyNotes = getAllWeeklyNotes();
+      return getWeeklyNote(dayInWeek, weeklyNotes) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  createWeeklyNote(dayInWeek: Moment) {
+    if (!appHasWeeklyNotesPluginLoaded()) return null;
+
+    // Calendar plugin passes a start-of-week-ish date; using startOf("week")
+    // keeps behavior consistent with the user’s locale/settings.
+    const startOfWeek = dayInWeek.clone().startOf("week");
+    return createWeeklyNote(startOfWeek);
+  }
+
+  async createWeeklyNoteIfNeeded(week: Moment) {
+    return this.getWeeklyNote(week) ?? (await this.createWeeklyNote(week));
   }
 
   getDateFromPath(path: string, type: "day" | "month" | "year") {
@@ -49,10 +83,7 @@ export class PeriodicNotes {
       this.getDailyNoteSettings();
 
     let filename = date.format(format);
-
-    if (!filename.endsWith(".md")) {
-      filename += ".md";
-    }
+    if (!filename.endsWith(".md")) filename += ".md";
 
     return normalizePath(join(folder, filename));
   }
@@ -60,23 +91,16 @@ export class PeriodicNotes {
 
 // Copied from obsidian-daily-notes-interface
 function join(...partSegments: string[]) {
-  // Split the inputs into a list of path commands.
   let parts: string[] = [];
   for (let i = 0, l = partSegments.length; i < l; i++) {
     parts = parts.concat(partSegments[i].split("/"));
   }
-  // Interpret the path commands to get the new resolved path.
   const newParts: string[] = [];
   for (let i = 0, l = parts.length; i < l; i++) {
     const part = parts[i];
-    // Remove leading and trailing slashes
-    // Also remove "." segments
     if (!part || part === ".") continue;
-    // Push new path segments.
     else newParts.push(part);
   }
-  // Preserve the initial slash if there was one.
   if (parts[0] === "") newParts.unshift("");
-  // Turn back into a single string path.
   return newParts.join("/");
 }

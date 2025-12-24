@@ -95,6 +95,11 @@ export class FakePeriodicNotes {
       file: InMemoryFile;
       date: Moment;
     }>,
+    private readonly weeklyNotes: Array<{
+      path: string;
+      file: InMemoryFile;
+      week: Moment;
+    }> = [],
   ) {}
 
   getDailyNote(date: Moment) {
@@ -126,6 +131,26 @@ export class FakePeriodicNotes {
     isNotVoid(found);
 
     return found.path;
+  }
+
+  hasWeeklyNotesSupport() {
+    return true;
+  }
+
+  getWeeklyNote(week: Moment) {
+    return this.weeklyNotes.find((it) => it.week.isSame(week, "week"))?.file;
+  }
+
+  createWeeklyNote(week: Moment) {
+    const found = this.getWeeklyNote(week);
+
+    isNotVoid(found, "There is no weekly note fixture for this date");
+
+    return Promise.resolve(found);
+  }
+
+  async createWeeklyNoteIfNeeded(week: Moment) {
+    return this.getWeeklyNote(week) ?? (await this.createWeeklyNote(week));
   }
 }
 
