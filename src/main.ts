@@ -82,10 +82,12 @@ import { DayPlannerReleaseNotesView } from "./ui/release-notes";
 import { DayPlannerSettingsTab } from "./ui/settings-tab";
 import TimelineView from "./ui/timeline-view";
 import { createUndoNotice } from "./ui/undo-notice";
+import { upsertActivitiesBlock } from "./util/activities-file";
 import { createEnvironmentHooks } from "./util/create-environment-hooks";
 import { createRenderMarkdown } from "./util/create-render-markdown";
 import { createShowPreview } from "./util/create-show-preview";
 import { notifyAboutStartedTasks } from "./util/notify-about-started-tasks";
+import { startActivityLog } from "./util/props";
 
 export default class DayPlanner extends Plugin {
   settings!: () => DayPlannerSettings;
@@ -208,6 +210,35 @@ export default class DayPlanner extends Plugin {
       this.initMonthlyLeaf,
     );
   }
+
+  private startActivity = async () => {
+    const activityName = await getTextFromUser(this.app);
+
+    if (!activityName) {
+      return;
+    }
+
+    const trimmedName = activityName.trim();
+
+    if (trimmedName.length === 0) {
+      new Notice("Activity name cannot be empty");
+
+      return;
+    }
+
+    const dailyNote = await this.periodicNotes.createDailyNoteIfNeeded(
+      window.moment(),
+    );
+
+    await this.vaultFacade.editFile(dailyNote.path, (contents) =>
+      upsertActivitiesBlock({
+        fileText: contents,
+        updateFn: (props) => startActivityLog(props, trimmedName),
+      }),
+    );
+
+    new Notice(`Started activity "${trimmedName}"`);
+  };
 
   initWeeklyLeaf = async () => {
     await this.app.workspace.getLeaf("tab").setViewState({
@@ -358,6 +389,12 @@ export default class DayPlanner extends Plugin {
       icon: "play",
       name: "Clock in",
       editorCallback: () => this.sTaskEditor.clockInUnderCursor(),
+    });
+
+    this.addCommand({
+      id: "start-activity",
+      name: "Start Activity",
+      callback: this.startActivity,
     });
 
     this.addCommand({

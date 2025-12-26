@@ -153,6 +153,24 @@ export function addOpenClock(
   };
 }
 
+export function startActivityLog(props: Props, activityName: string): Props {
+  const activities = getActivitiesCopy(props);
+
+  const updatedActivity: Activity = {
+    activity: activityName,
+    log: [
+      {
+        start: window.moment().format(clockFormat),
+      },
+    ],
+  };
+
+  return {
+    ...props,
+    activities: activities.concat(updatedActivity),
+  };
+}
+
 export function cancelOpenClock(props: Props, taskId: string): Props {
   const activities = getActivitiesCopy(props);
   const activityWithOpenClockIndex = activities.findIndex((activity) => {
