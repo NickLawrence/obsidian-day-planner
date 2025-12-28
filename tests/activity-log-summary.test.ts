@@ -10,11 +10,12 @@ import type { Activity } from "../src/util/props";
 
 describe("calculateWeeklyActivityDurations", () => {
   test("aggregates durations per activity within the iso week", () => {
-    const activities: Activity[] = [
-      {
-        activity: "activity: piano",
-        log: [
-          {
+      const activities: Activity[] = [
+        {
+          taskId: undefined,
+          activity: "activity: piano",
+          log: [
+            {
             start: "2024-09-09T10:00:00Z",
             end: "2024-09-09T11:30:00Z",
           },
@@ -23,11 +24,12 @@ describe("calculateWeeklyActivityDurations", () => {
             end: "2024-09-16T01:00:00Z",
           },
         ],
-      },
-      {
-        activity: "activity: reading",
-        log: [
-          {
+        },
+        {
+          taskId: undefined,
+          activity: "activity: reading",
+          log: [
+            {
             start: "2024-09-10T09:00:00Z",
             end: "2024-09-10T09:45:00Z",
           },
@@ -53,11 +55,12 @@ describe("calculateWeeklyActivityDurations", () => {
   });
 
   test("ignores entries outside the week or without an end time", () => {
-    const activities: Activity[] = [
-      {
-        activity: "activity: piano",
-        log: [
-          {
+      const activities: Activity[] = [
+        {
+          taskId: undefined,
+          activity: "activity: piano",
+          log: [
+            {
             start: "2024-09-02T10:00:00Z",
             end: "2024-09-02T10:30:00Z",
           },
@@ -66,11 +69,12 @@ describe("calculateWeeklyActivityDurations", () => {
             end: "2024-09-09T00:30:00Z",
           },
         ],
-      },
-      {
-        activity: "activity: Reading",
-        log: [
-          {
+        },
+        {
+          taskId: undefined,
+          activity: "activity: Reading",
+          log: [
+            {
             start: "2024-09-10T10:00:00Z",
             end: undefined,
           },
@@ -107,11 +111,12 @@ describe("getWeekRangeFor", () => {
 
 describe("calculateDailyActivityDurations", () => {
   test("aggregates per-day durations and normalizes activity names", () => {
-    const activities: Activity[] = [
-      {
-        activity: "Piano ",
-        log: [
-          {
+      const activities: Activity[] = [
+        {
+          taskId: undefined,
+          activity: "Piano ",
+          log: [
+            {
             start: "2024-09-10T08:00:00Z",
             end: "2024-09-10T08:45:00Z",
           },
@@ -120,20 +125,22 @@ describe("calculateDailyActivityDurations", () => {
             end: "2024-09-10T09:15:00Z",
           },
         ],
-      },
-      {
-        activity: "piano",
-        log: [
-          {
+        },
+        {
+          taskId: undefined,
+          activity: "piano",
+          log: [
+            {
             start: "2024-09-10T10:00:00Z",
             end: "2024-09-10T10:10:00Z",
           },
         ],
-      },
-      {
-        activity: "Reading",
-        log: [
-          {
+        },
+        {
+          taskId: undefined,
+          activity: "Reading",
+          log: [
+            {
             start: "2024-09-10T11:00:00Z",
             end: "2024-09-10T11:30:00Z",
           },

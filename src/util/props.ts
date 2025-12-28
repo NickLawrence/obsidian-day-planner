@@ -157,6 +157,7 @@ export function startActivityLog(props: Props, activityName: string): Props {
   const activities = getActivitiesCopy(props);
 
   const updatedActivity: Activity = {
+    taskId: undefined,
     activity: activityName,
     log: [
       {
@@ -206,18 +207,14 @@ export function cancelOpenClock(props: Props, taskId: string): Props {
   };
 }
 
-export function clockOut(props: Props, taskId: string): Props {
+export function clockOut(props: Props, activityIndex: number): Props {
   const activities = getActivitiesCopy(props);
-  const activityWithOpenClockIndex = activities.findIndex(
-    (activity) =>
-      activity.taskId === taskId && activity.log?.some((entry) => !entry.end),
-  );
 
-  if (activityWithOpenClockIndex === -1) {
+  if (activityIndex < 0 || activityIndex >= activities.length) {
     throw new Error("There is no open clock");
   }
 
-  const activityWithOpenClock = activities[activityWithOpenClockIndex];
+  const activityWithOpenClock = activities[activityIndex];
   const log = activityWithOpenClock?.log;
 
   if (!log) {
@@ -239,7 +236,7 @@ export function clockOut(props: Props, taskId: string): Props {
   };
 
   const updatedActivities = activities.with(
-    activityWithOpenClockIndex,
+    activityIndex,
     updatedActivity,
   );
 

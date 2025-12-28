@@ -14,6 +14,7 @@ describe("extractActivityGoals", () => {
   it("extracts inline dataview goals under the heading regardless of level", () => {
     const markdown = `## Activity Goals\n[reading:: 3 hrs]\n[stretching::30 minutes]\n### Other heading\n[ignored:: 1h]`;
 
+    // @ts-expect-error requires Obsidian app context
     const goals = extractActivityGoals(markdown);
 
     expect(goals).toHaveLength(2);
@@ -25,6 +26,7 @@ describe("extractActivityGoals", () => {
   it("stops at the next heading of the same or higher level", () => {
     const markdown = `# Activity Goals\n[reading:: 3 hrs]\n## Next section\n[reading:: 5 hrs]`;
 
+    // @ts-expect-error requires Obsidian app context
     const goals = extractActivityGoals(markdown);
 
     expect(goals).toHaveLength(1);
@@ -34,6 +36,7 @@ describe("extractActivityGoals", () => {
   it("ignores invalid durations", () => {
     const markdown = `# Activity Goals\n[reading:: sometimes]\n[piano:: 1.5 hrs]`;
 
+    // @ts-expect-error requires Obsidian app context
     const goals = extractActivityGoals(markdown);
 
     expect(goals).toHaveLength(1);

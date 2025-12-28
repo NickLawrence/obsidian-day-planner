@@ -20,6 +20,7 @@ import {
   clockOut,
   createProp,
   type Props,
+  taskActivityType,
 } from "../util/props";
 import { propRegexp } from "../regexp";
 import { extractPlannerTaskId, plannerTaskIdKey } from "../util/task-id";
@@ -42,9 +43,11 @@ export class STaskEditor {
   clockOutUnderCursor = withNotice(async () => {
     const { sTask } = this.getSTaskUnderCursorFromLastView();
 
-    await this.updateClockPropsForTask(sTask, (props, context) =>
-      clockOut(props, context.taskId),
-    );
+    await this.updateClockPropsForTask(sTask, (props, context) => {
+      const activityIndex = this.findOpenTaskActivity(props, context.taskId);
+
+      return clockOut(props, activityIndex);
+    });
   });
 
   cancelClockUnderCursor = withNotice(async () => {
@@ -55,15 +58,33 @@ export class STaskEditor {
     );
   });
 
-  clockOutTask = withNotice(async (task: LocalTask) => {
-    await this.updateClockPropsForLocalTask(task, (props, context) =>
-      clockOut(props, context.taskId),
-    );
+  clockOutTask = withNotice(async (
+    task: LocalTask & { clockActivity?: Props["activities"][number] },
+  ) => {
+    await this.updateClockPropsForLocalTask(task, (props, context) => {
+      const activityIndexByClock = this.findActivityIndexForClockActivity(
+        props,
+        context.clockActivity,
+      );
+      const activityIndexByTaskId =
+        activityIndexByClock === -1
+          ? this.findOpenTaskActivity(props, context.taskId)
+          : activityIndexByClock;
+
+      const activityIndex =
+        activityIndexByTaskId === -1
+          ? this.findOpenActivityByName(props, context.activityName)
+          : activityIndexByTaskId;
+
+      return clockOut(props, activityIndex);
+    });
   });
 
   cancelClockForTask = withNotice(async (task: LocalTask) => {
+    isNotVoid(task.taskId, "Cannot update clock for a task without an ID");
+
     await this.updateClockPropsForLocalTask(task, (props, context) =>
-      cancelOpenClock(props, context.taskId),
+      cancelOpenClock(props, context.taskId as string),
     );
   });
 
@@ -102,6 +123,52 @@ export class STaskEditor {
     );
   }
 
+  private findActivityIndexForClockActivity(
+    props: Props,
+    clockActivity?: Props["activities"][number],
+  ) {
+    const openStart = clockActivity?.log?.find((entry) => !entry.end)?.start;
+
+    if (!openStart) {
+      return -1;
+    }
+
+    return (props.activities ?? []).findIndex((activity) => {
+      if (clockActivity?.taskId && activity.taskId !== clockActivity.taskId) {
+        return false;
+      }
+
+      if (activity.activity !== clockActivity?.activity) {
+        return false;
+      }
+
+      return activity.log?.some(
+        (entry) => !entry.end && entry.start === openStart,
+      );
+    });
+  }
+
+  private findOpenTaskActivity(props: Props, taskId?: string) {
+    if (!taskId) {
+      return -1;
+    }
+
+    return (props.activities ?? []).findIndex(
+      (activity) =>
+        activity.taskId === taskId &&
+        activity.activity === taskActivityType &&
+        activity.log?.some((entry) => !entry.end),
+    );
+  }
+
+  private findOpenActivityByName(props: Props, activityName: string) {
+    return (props.activities ?? []).findIndex(
+      (activity) =>
+        activity.activity === activityName &&
+        activity.log?.some((entry) => !entry.end),
+    );
+  }
+
   private async updateClockPropsForTask(
     sTask: STask,
     updateFn: (
@@ -123,23 +190,27 @@ export class STaskEditor {
   }
 
   private async updateClockPropsForLocalTask(
-    task: LocalTask,
+    task: LocalTask & { clockActivity?: Props["activities"][number] },
     updateFn: (
       props: Props,
-      context: { taskId: string; activityName: string },
+      context: {
+        taskId?: string;
+        activityName: string;
+        clockActivity?: Props["activities"][number];
+      },
     ) => Props,
   ) {
-    const { location, taskId } = task;
+    const { clockActivity, location, taskId } = task;
 
     isNotVoid(location, "Cannot update clock for a task without location");
-    isNotVoid(taskId, "Cannot update clock for a task without an ID");
 
     const activityName = this.getActivityName(task.text);
 
     await this.vaultFacade.editFile(location.path, (contents) =>
       upsertActivitiesBlock({
         fileText: contents,
-        updateFn: (props) => updateFn(props, { taskId, activityName }),
+        updateFn: (props) =>
+          updateFn(props, { taskId, activityName, clockActivity }),
       }),
     );
   }

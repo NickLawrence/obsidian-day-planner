@@ -81,6 +81,7 @@ export function useTasks(props: {
         (parsed.activities ?? [])
           .filter((activity) => activity?.log?.length)
           .map((activity) => ({
+            activity: activity.activity,
             title: activity.activity,
             log: activity.log as LogEntry[],
             taskId: activity.taskId,
@@ -146,14 +147,15 @@ export function useTasks(props: {
               clockMoments,
             }));
         })
-        .map(({ activity, clockMoments }) =>
-          createClockTaskFromActivity({
+        .map(({ activity, clockMoments }) => ({
+          ...createClockTaskFromActivity({
             activity,
             clockMoments,
             tasksById: $tasksById,
             defaultDurationMinutes,
           }),
-        ),
+          clockActivity: activity,
+        })),
   );
 
   const truncatedTasksWithActiveClockProps = derived(
