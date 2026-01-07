@@ -42,6 +42,7 @@ const activitySchema = z
     reading: readingActivityDetailsSchema.optional(),
     details: z.record(z.string(), z.unknown()).optional(),
   })
+  .passthrough()
   .transform(({ taskId, task_id, ...rest }) => ({
     ...rest,
     taskId: taskId || task_id,
