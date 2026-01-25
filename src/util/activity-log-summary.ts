@@ -1,19 +1,13 @@
 import type { Duration, Moment } from "moment";
 
+import { getActivityLabel, normalizeActivityName } from "./activity-definitions";
 import type { Activity } from "./props";
 
 export type ActivityDuration = {
   activity: string;
+  activityKey: string;
   duration: Duration;
 };
-
-export function normalizeActivityName(name: string) {
-  return name.trim().replace(/\s+/g, " ").toLowerCase();
-}
-
-function sanitizeLabel(name: string) {
-  return name.trim().replace(/\s+/g, " ");
-}
 
 export function formatDuration(duration: Duration) {
   const totalMinutes = Math.round(duration.asMinutes());
@@ -49,7 +43,8 @@ function calculateActivityDurationsForRange(
 
   activities.forEach(({ activity, log }) => {
     const normalizedName = normalizeActivityName(activity);
-    const label = normalizedToLabel.get(normalizedName) ?? sanitizeLabel(activity);
+    const label =
+      normalizedToLabel.get(normalizedName) ?? getActivityLabel(activity);
 
     if (!normalizedToLabel.has(normalizedName)) {
       normalizedToLabel.set(normalizedName, label);
@@ -107,6 +102,7 @@ function calculateActivityDurationsForRange(
     .filter(([normalized]) => seenInRange.has(normalized))
     .map(([normalized, label]) => ({
       activity: label,
+      activityKey: normalized,
       duration:
         durationByNormalized.get(normalized) ?? window.moment.duration(),
     }))

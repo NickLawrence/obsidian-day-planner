@@ -128,11 +128,14 @@
     currentMonth.set(window.moment().startOf("month"));
   }
 
-  function renderSummary(entries: Array<ActivityDuration & { goal?: import("moment").Duration }>): SummaryRow[] {
+  function renderSummary(
+    entries: Array<ActivityDuration & { goal?: import("moment").Duration }>,
+  ): SummaryRow[] {
     if (entries.length === 0) {
       return [
         {
           activity: "No activity",
+          activityKey: "no-activity",
           duration: window.moment.duration(0),
           isPlaceholder: true,
         },
@@ -270,11 +273,14 @@
             <div class="summary-row" class:placeholder={entry.isPlaceholder}>
               <div class="summary-activity">
                 <span class="summary-name">{entry.activity}</span>
-                {#if entry.goal}
-                  <span class="summary-goal">Goal {formatDuration(entry.goal)}</span>
-                {/if}
               </div>
-              <span class="summary-duration">{entry.isPlaceholder ? "" : formatDuration(entry.duration)}</span>
+              <span class="summary-duration">
+                {entry.isPlaceholder
+                  ? ""
+                  : entry.goal
+                    ? `${formatDuration(entry.duration)} / ${formatDuration(entry.goal)}`
+                    : formatDuration(entry.duration)}
+              </span>
             </div>
           {/each}
         </div>

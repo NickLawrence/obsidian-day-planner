@@ -88,6 +88,12 @@ import { createRenderMarkdown } from "./util/create-render-markdown";
 import { createShowPreview } from "./util/create-show-preview";
 import { notifyAboutStartedTasks } from "./util/notify-about-started-tasks";
 import { startActivityLog } from "./util/props";
+import {
+  buildActivityAttributeUpdate,
+  getActivityAttributeFields,
+  getActivityLabel,
+} from "./util/activity-definitions";
+import { askForActivityAttributes } from "./ui/activity-attributes-modal";
 
 export default class DayPlanner extends Plugin {
   settings!: () => DayPlannerSettings;
@@ -153,6 +159,7 @@ export default class DayPlanner extends Plugin {
 
     this.sTaskEditor = new STaskEditor(
       getState,
+      this.app,
       this.workspaceFacade,
       this.vaultFacade,
       this.dataviewFacade,
@@ -226,6 +233,22 @@ export default class DayPlanner extends Plugin {
       return;
     }
 
+    const startFields = getActivityAttributeFields(trimmedName, "start");
+    let attributeUpdates: Record<string, unknown> | undefined;
+
+    if (startFields.length > 0) {
+      const values = await askForActivityAttributes(this.app, {
+        title: `Start ${getActivityLabel(trimmedName)}`,
+        fields: startFields,
+      });
+
+      if (!values) {
+        return;
+      }
+
+      attributeUpdates = buildActivityAttributeUpdate(trimmedName, values);
+    }
+
     const dailyNote = await this.periodicNotes.createDailyNoteIfNeeded(
       window.moment(),
     );
@@ -233,7 +256,8 @@ export default class DayPlanner extends Plugin {
     await this.vaultFacade.editFile(dailyNote.path, (contents) =>
       upsertActivitiesBlock({
         fileText: contents,
-        updateFn: (props) => startActivityLog(props, trimmedName),
+        updateFn: (props) =>
+          startActivityLog(props, trimmedName, attributeUpdates),
       }),
     );
 
