@@ -49,7 +49,9 @@
   const listProps = useSelector(selectListProps);
   const currentMonth = writable(window.moment().startOf("month"));
 
-  const weekdayLabels = window.moment.weekdaysShort(true);
+  const weekdayLabels = Array.from({ length: 7 }, (_, index) =>
+    window.moment().isoWeekday(index + 1).format("ddd"),
+  );
 
   const activities = derived(listProps, ($listProps) =>
     Object.values($listProps).flatMap((lineToProps) =>
@@ -103,8 +105,8 @@
   };
   
   function buildWeeks(month: Moment) {
-    const start = month.clone().startOf("month").startOf("week");
-    const end = month.clone().endOf("month").endOf("week");
+    const start = month.clone().startOf("month").startOf("isoWeek");
+    const end = month.clone().endOf("month").endOf("isoWeek");
     const weeks: Moment[] = [];
     let cursor = start.clone();
 
