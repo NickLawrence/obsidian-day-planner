@@ -1,3 +1,4 @@
+import { type App } from "obsidian";
 import { isNotVoid } from "typed-assert";
 import type { STask } from "obsidian-dataview";
 
@@ -22,6 +23,13 @@ import {
   type Props,
   taskActivityType,
 } from "../util/props";
+import {
+  buildActivityAttributeUpdate,
+  getActivityAttributeFields,
+  getActivityLabel,
+  qualityRatingField,
+} from "../util/activity-definitions";
+import { askForActivityAttributes } from "../ui/activity-attributes-modal";
 import { propRegexp } from "../regexp";
 import { extractPlannerTaskId, plannerTaskIdKey } from "../util/task-id";
 import { appendText, removeTimestampFromStart } from "../util/task-utils";
@@ -61,6 +69,17 @@ export class STaskEditor {
   clockOutTask = withNotice(async (
     task: LocalTask & { clockActivity?: Props["activities"][number] },
   ) => {
+    const activityName =
+      task.clockActivity?.activity ?? this.getActivityName(task.text);
+    const attributeUpdates = await this.getClockOutAttributeUpdates({
+      activityName,
+      taskId: task.taskId,
+    });
+
+    if (attributeUpdates === null) {
+      return;
+    }
+
     await this.updateClockPropsForLocalTask(task, (props, context) => {
       const activityIndexByClock = this.findActivityIndexForClockActivity(
         props,
@@ -76,7 +95,7 @@ export class STaskEditor {
           ? this.findOpenActivityByName(props, context.activityName)
           : activityIndexByTaskId;
 
-      return clockOut(props, activityIndex);
+      return clockOut(props, activityIndex, attributeUpdates);
     });
   });
 
@@ -90,6 +109,7 @@ export class STaskEditor {
 
   constructor(
     private readonly getState: AppStore["getState"],
+    private readonly app: App,
     private readonly workspaceFacade: WorkspaceFacade,
     private readonly vaultFacade: VaultFacade,
     private readonly dataviewFacade: DataviewFacade,
@@ -221,6 +241,41 @@ export class STaskEditor {
     )
       .replace(/\s+/g, " ")
       .trim();
+  }
+
+  private async getClockOutAttributeUpdates(props: {
+    activityName: string;
+    taskId?: string;
+  }) {
+    const { activityName, taskId } = props;
+
+    if (taskId || activityName === taskActivityType) {
+      return {};
+    }
+
+    const endFields = getActivityAttributeFields(activityName, "end");
+    const fields = [...endFields, qualityRatingField];
+
+    if (fields.length === 0) {
+      return {};
+    }
+
+    const values = await askForActivityAttributes(this.app, {
+      title: `Finish ${getActivityLabel(activityName)}`,
+      fields,
+    });
+
+    if (!values) {
+      return null;
+    }
+
+    const attributeUpdates = buildActivityAttributeUpdate(activityName, values);
+    const qualityValue = values.quality;
+
+    return {
+      ...attributeUpdates,
+      ...(typeof qualityValue === "number" ? { quality: qualityValue } : {}),
+    };
   }
 
   private async ensureTaskId(sTask: STask) {

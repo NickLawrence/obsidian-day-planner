@@ -32,6 +32,20 @@ const readingActivityDetailsSchema = z.object({
   end_page: z.number(),
 });
 
+const readActivityDetailsSchema = z.object({
+  book: z.string().optional(),
+  "start-page": z.number().optional(),
+  "end-page": z.number().optional(),
+});
+
+const gameActivityDetailsSchema = z.object({
+  name: z.string().optional(),
+});
+
+const deepWorkActivityDetailsSchema = z.object({
+  project: z.string().optional(),
+});
+
 const activitySchema = z
   .object({
     activity: z.string(),
@@ -40,6 +54,10 @@ const activitySchema = z
     log: z.array(logEntrySchema).optional(),
     notes: z.string().optional(),
     reading: readingActivityDetailsSchema.optional(),
+    read: readActivityDetailsSchema.optional(),
+    game: gameActivityDetailsSchema.optional(),
+    "deep work": deepWorkActivityDetailsSchema.optional(),
+    quality: z.number().optional(),
     details: z.record(z.string(), z.unknown()).optional(),
   })
   .passthrough()
@@ -79,6 +97,35 @@ function getActivitiesCopy(props: Props): Activity[] {
     ...activity,
     log: [...(activity.log ?? [])],
   }));
+}
+
+function mergeActivityDetails(
+  activity: Activity,
+  updates?: Record<string, unknown>,
+): Activity {
+  if (!updates) {
+    return activity;
+  }
+
+  return Object.entries(updates).reduce<Activity>((result, [key, value]) => {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const existing = result[key];
+      if (existing && typeof existing === "object" && !Array.isArray(existing)) {
+        return {
+          ...result,
+          [key]: {
+            ...(existing as Record<string, unknown>),
+            ...(value as Record<string, unknown>),
+          },
+        };
+      }
+    }
+
+    return {
+      ...result,
+      [key]: value,
+    };
+  }, activity);
 }
 
 function findActivityByTaskId(
@@ -154,18 +201,25 @@ export function addOpenClock(
   };
 }
 
-export function startActivityLog(props: Props, activityName: string): Props {
+export function startActivityLog(
+  props: Props,
+  activityName: string,
+  attributes?: Record<string, unknown>,
+): Props {
   const activities = getActivitiesCopy(props);
 
-  const updatedActivity: Activity = {
-    taskId: undefined,
-    activity: activityName,
-    log: [
-      {
-        start: window.moment().format(clockFormat),
-      },
-    ],
-  };
+  const updatedActivity: Activity = mergeActivityDetails(
+    {
+      taskId: undefined,
+      activity: activityName,
+      log: [
+        {
+          start: window.moment().format(clockFormat),
+        },
+      ],
+    },
+    attributes,
+  );
 
   return {
     ...props,
@@ -208,7 +262,11 @@ export function cancelOpenClock(props: Props, taskId: string): Props {
   };
 }
 
-export function clockOut(props: Props, activityIndex: number): Props {
+export function clockOut(
+  props: Props,
+  activityIndex: number,
+  attributes?: Record<string, unknown>,
+): Props {
   const activities = getActivitiesCopy(props);
 
   if (activityIndex < 0 || activityIndex >= activities.length) {
@@ -228,13 +286,16 @@ export function clockOut(props: Props, activityIndex: number): Props {
     throw new Error("There is no open clock");
   }
 
-  const updatedActivity: Activity = {
-    ...activityWithOpenClock,
-    log: log.toSpliced(openClockIndex, 1, {
-      ...log[openClockIndex],
-      end: window.moment().format(clockFormat),
-    }),
-  };
+  const updatedActivity: Activity = mergeActivityDetails(
+    {
+      ...activityWithOpenClock,
+      log: log.toSpliced(openClockIndex, 1, {
+        ...log[openClockIndex],
+        end: window.moment().format(clockFormat),
+      }),
+    },
+    attributes,
+  );
 
   const updatedActivities = activities.with(
     activityIndex,

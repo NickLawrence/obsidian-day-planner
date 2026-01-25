@@ -1,7 +1,7 @@
 import type { App, TFile } from "obsidian";
 import type { Duration as MomentDuration } from "moment";
 
-import { normalizeActivityName } from "./activity-log-summary";
+import { getActivityLabel, normalizeActivityName } from "./activity-definitions";
 
 export type ActivityGoal = {
   activity: string;
@@ -97,7 +97,9 @@ export function extractActivityGoals(
   return [...goals.values()];
 }
 
-export function mergeActivityDurationsWithGoals<T extends { activity: string }>(
+export function mergeActivityDurationsWithGoals<
+  T extends { activity: string; activityKey?: string },
+>(
   activityDurations: Array<T & { duration: MomentDuration }>,
   goals: ActivityGoal[],
 ) {
@@ -106,7 +108,9 @@ export function mergeActivityDurationsWithGoals<T extends { activity: string }>(
   );
 
   const combined = activityDurations.map((entry) => {
-    const normalized = normalizeActivityName(entry.activity);
+    const normalized = entry.activityKey
+      ? normalizeActivityName(entry.activityKey)
+      : normalizeActivityName(entry.activity);
     const goal = normalizedGoals.get(normalized);
 
     if (goal) normalizedGoals.delete(normalized);
@@ -115,7 +119,8 @@ export function mergeActivityDurationsWithGoals<T extends { activity: string }>(
   });
 
   const remainingGoals = [...normalizedGoals.values()].map((goal) => ({
-    activity: goal.activity,
+    activity: getActivityLabel(goal.activity),
+    activityKey: normalizeActivityName(goal.activity),
     duration: window.moment.duration(0),
     goal: goal.goal,
   }));
