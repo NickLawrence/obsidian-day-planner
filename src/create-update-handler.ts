@@ -16,6 +16,10 @@ import { type ConfirmationModalProps } from "./ui/confirmation-modal";
 import { EditMode } from "./ui/hooks/use-edit/types";
 import { SingleSuggestModal } from "./ui/SingleSuggestModal";
 import { applyScopedUpdates } from "./util/markdown";
+import {
+  getActivitySuggestions,
+  normalizeActivityName,
+} from "./util/activity-definitions";
 
 export async function getTextFromUser(app: App): Promise<string | undefined> {
   return new Promise((resolve) => {
@@ -25,6 +29,55 @@ export async function getTextFromUser(app: App): Promise<string | undefined> {
         value.trim().length === 0
           ? "Start typing to create a task"
           : `Create item "${value}"`,
+      onChooseSuggestion: async ({ text }) => {
+        resolve(text);
+      },
+      onClose: () => {
+        resolve(undefined);
+      },
+    }).open();
+  });
+}
+
+export async function getActivityNameFromUser(
+  app: App,
+): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    const suggestions = getActivitySuggestions().map((definition) => ({
+      text: definition.name,
+      displayText: definition.emoji
+        ? `${definition.emoji} ${definition.label}`
+        : definition.label,
+    }));
+
+    new SingleSuggestModal({
+      app,
+      getDescriptionText: (value) =>
+        value.trim().length === 0
+          ? "Start typing to create an activity"
+          : `Start activity "${value}"`,
+      getSuggestions: (query) => {
+        const trimmedQuery = query.trim();
+        const normalizedQuery = normalizeActivityName(query);
+        const matches =
+          normalizedQuery.length === 0
+            ? suggestions
+            : suggestions.filter((suggestion) => {
+                const normalizedName = normalizeActivityName(suggestion.text);
+                const normalizedLabel = normalizeActivityName(
+                  suggestion.displayText ?? suggestion.text,
+                );
+
+                return (
+                  normalizedName.includes(normalizedQuery) ||
+                  normalizedLabel.includes(normalizedQuery)
+                );
+              });
+
+        return trimmedQuery.length > 0
+          ? [{ text: query }, ...matches]
+          : matches;
+      },
       onChooseSuggestion: async ({ text }) => {
         resolve(text);
       },

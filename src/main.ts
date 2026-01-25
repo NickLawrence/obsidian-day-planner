@@ -27,7 +27,11 @@ import {
   icalRefreshIntervalMillis,
   viewTypeLogSummary,
 } from "./constants";
-import { createUpdateHandler, getTextFromUser } from "./create-update-handler";
+import {
+  createUpdateHandler,
+  getActivityNameFromUser,
+  getTextFromUser,
+} from "./create-update-handler";
 import { createDumpMetadataCommand } from "./dump-metadata";
 import { currentTime } from "./global-store/current-time";
 import { settings } from "./global-store/settings";
@@ -219,7 +223,7 @@ export default class DayPlanner extends Plugin {
   }
 
   private startActivity = async () => {
-    const activityName = await getTextFromUser(this.app);
+    const activityName = await getActivityNameFromUser(this.app);
 
     if (!activityName) {
       return;

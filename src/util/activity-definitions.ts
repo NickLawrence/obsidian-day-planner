@@ -20,6 +20,8 @@ export type ActivityDefinition = {
   attributes?: ActivityAttributesDefinition;
 };
 
+export type ActivitySuggestion = Pick<ActivityDefinition, "name" | "label" | "emoji">;
+
 const activityDefinitions: ActivityDefinition[] = [
   {
     name: "read",
@@ -102,6 +104,14 @@ function sanitizeLabel(name: string) {
 
 export function getActivityDefinition(activityName: string) {
   return activityDefinitionMap.get(normalizeActivityName(activityName));
+}
+
+export function getActivitySuggestions(): ActivitySuggestion[] {
+  return activityDefinitions.map(({ name, label, emoji }) => ({
+    name,
+    label,
+    emoji,
+  }));
 }
 
 export function getActivityLabel(activityName: string) {

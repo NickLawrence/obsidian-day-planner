@@ -1,12 +1,13 @@
 import { App, SuggestModal } from "obsidian";
 
-type Suggestion = { text: string };
+type Suggestion = { text: string; displayText?: string };
 
 export class SingleSuggestModal extends SuggestModal<Suggestion> {
   constructor(
     private readonly props: {
       app: App;
       getDescriptionText: (input: string) => string;
+      getSuggestions?: (input: string) => Suggestion[];
       onChooseSuggestion: (suggestion: Suggestion) => void;
       onClose: () => void;
     },
@@ -20,15 +21,18 @@ export class SingleSuggestModal extends SuggestModal<Suggestion> {
   }
 
   getSuggestions(query: string) {
-    return [
-      {
-        text: query,
-      },
-    ];
+    if (this.props.getSuggestions) {
+      return this.props.getSuggestions(query);
+    }
+
+    return [{ text: query }];
   }
 
   renderSuggestion(item: Suggestion, el: HTMLElement) {
-    el.createDiv({ text: this.props.getDescriptionText(item.text) });
+    const displayText =
+      item.displayText ?? this.props.getDescriptionText(item.text);
+
+    el.createDiv({ text: displayText });
   }
 
   onChooseSuggestion(item: Suggestion, evt: MouseEvent | KeyboardEvent) {
