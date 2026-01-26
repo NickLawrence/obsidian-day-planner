@@ -61,6 +61,16 @@ const activityDefinitions: ActivityDefinition[] = [
     },
   },
   {
+    name: "call",
+    label: "Call",
+    emoji: "📞",
+    attributes: {
+      key: "call",
+      start: [{ key: "with", label: "With", type: "text", required: true }],
+      end: [],
+    },
+  },
+  {
     name: "deep work",
     label: "Deep work",
     emoji: "🧠",
@@ -85,6 +95,7 @@ const activityDefinitions: ActivityDefinition[] = [
   { name: "language", label: "Language", emoji: "🗣️" },
   { name: "housework", label: "Housework", emoji: "🧹" },
   { name: "hygiene", label: "Hygiene", emoji: "🪥" },
+  { name: "bed", label: "Bed", emoji: "🛏️" }
 ];
 
 const activityDefinitionMap = new Map(

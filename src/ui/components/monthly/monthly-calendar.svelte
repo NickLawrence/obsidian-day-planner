@@ -19,8 +19,6 @@
     type ActivityGoal,
   } from "../../../util/weekly-activity-goals";
 
-
-  
   let offIndexReady: any;
   let offMetadataChange: any;
 
@@ -61,9 +59,7 @@
     ),
   );
 
-  const monthLabel = derived(currentMonth, ($month) =>
-    $month.format("MMMM YYYY"),
-  );
+  const monthLabel = derived(currentMonth, ($month) => $month.format("MMMM YYYY"));
 
   const weeks = derived(currentMonth, ($month) => buildWeeks($month));
   const weeklyGoals = writable(new Map<number, ActivityGoal[]>());
@@ -73,12 +69,10 @@
     ([$weeks, $activities, $month, $weeklyGoals]) =>
       $weeks.map((weekStart) => {
         const { end: weekEnd } = getWeekRangeFor(weekStart);
-        const weekTotals = calculateWeeklyActivityDurations(
-          $activities,
-          weekStart,
-        );
+        const weekTotals = calculateWeeklyActivityDurations($activities, weekStart);
         const goalsForWeek =
           $weeklyGoals.get(weekStart.valueOf()) ?? ([] as ActivityGoal[]);
+
         const days = Array.from({ length: 7 }).map((_, index) => {
           const date = weekStart.clone().add(index, "day");
 
@@ -103,7 +97,7 @@
     isPlaceholder: boolean;
     goal?: import("moment").Duration;
   };
-  
+
   function buildWeeks(month: Moment) {
     const start = month.clone().startOf("month").startOf("isoWeek");
     const end = month.clone().endOf("month").endOf("isoWeek");
@@ -130,9 +124,7 @@
     currentMonth.set(window.moment().startOf("month"));
   }
 
-  function renderSummary(
-    entries: Array<ActivityDuration & { goal?: import("moment").Duration }>,
-  ): SummaryRow[] {
+  function renderSummary(entries: Array<ActivityDuration & { goal?: import("moment").Duration }>): SummaryRow[] {
     if (entries.length === 0) {
       return [
         {
@@ -147,6 +139,22 @@
     return entries.map((entry) => ({ ...entry, isPlaceholder: false }));
   }
 
+  // Progress bar vars (weekly goals)
+  function goalVars(duration: import("moment").Duration, goal: import("moment").Duration) {
+    const d = Math.max(0, duration.asMilliseconds());
+    const g = Math.max(1, goal.asMilliseconds());
+    const ratio = d / g;
+
+    const p = Math.min(1, ratio); // 0..1
+    const o = Math.max(0, Math.min(1, ratio - 1)); // 0..1 overflow
+
+    return `--p:${p}; --o:${o};`;
+  }
+
+  function hasOverflow(duration: import("moment").Duration, goal: import("moment").Duration) {
+    return duration.asMilliseconds() > goal.asMilliseconds();
+  }
+
   let weeklyGoalsRunId = 0;
 
   $: if (Array.isArray($weeks) && $weeks.length) {
@@ -156,36 +164,28 @@
   }
 
   async function loadGoalsForWeeks(weeksToLoad: ReturnType<typeof buildWeeks>) {
-    console.log("Loading Goals For Weeks");
     const thisRunId = ++weeklyGoalsRunId;
 
     if (!periodicNotes.hasWeeklyNotesSupport()) {
       weeklyGoals.set(new Map());
-      console.log("Weekly notes not supported/enabled");
       return;
     }
 
-    const app = (window as any).app; // ✅ avoid TS Window typing issues
+    const app = (window as any).app;
     if (!app) {
       weeklyGoals.set(new Map());
-      console.log("No app");
       return;
     }
 
     const goals = await Promise.all(
       weeksToLoad.map(async (weekStart) => {
-        console.log("- Checking weekly note for " + weekStart.format());
         const weeklyNote = periodicNotes.getWeeklyNote(weekStart);
-
-        if (!weeklyNote) {
-          console.log("XX No weekly note for " + weekStart.format());
-          return null;
-        }
+        if (!weeklyNote) return null;
 
         try {
           return {
             key: weekStart.valueOf(),
-            goals: await extractActivityGoals(app, weeklyNote), // ✅ await
+            goals: await extractActivityGoals(app, weeklyNote),
           };
         } catch (error) {
           console.error("Failed to read weekly note", error);
@@ -205,27 +205,22 @@
     );
   }
 
-
   async function openDailyNote(day: Moment) {
     await workspaceFacade.openFileForDay(day);
   }
 
   async function openWeeklyNote(weekStart: Moment) {
     try {
-      console.log("Creating Weekly Note: " + weekStart);
-      const weeklyNote = await periodicNotes.createWeeklyNoteIfNeeded(weekStart); 
+      const weeklyNote = await periodicNotes.createWeeklyNoteIfNeeded(weekStart);
       if (weeklyNote) {
         await workspaceFacade.openFileInEditor(weeklyNote);
       }
-    } catch(error) {
+    } catch (error) {
       console.error("Failed to create weekly note", error);
     }
   }
 
-  function handleKeyboardOpen(
-    event: KeyboardEvent,
-    openFn: () => Promise<void> | void,
-  ) {
+  function handleKeyboardOpen(event: KeyboardEvent, openFn: () => Promise<void> | void) {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       void openFn();
@@ -246,17 +241,18 @@
         →
       </button>
     </div>
+
     <div class="month-label">
       {$monthLabel}
     </div>
+
+    <div class="header-spacer" aria-hidden="true"></div>
   </div>
 
   <div class="calendar-grid">
     <div class="grid-header week-column">Week</div>
     {#each weekdayLabels as label}
-      <div class="grid-header">
-        {label}
-      </div>
+      <div class="grid-header">{label}</div>
     {/each}
 
     {#each $calendar as week (week.weekStart.valueOf())}
@@ -267,8 +263,10 @@
         on:click={() => openWeeklyNote(week.weekStart)}
         on:keydown={(event) => handleKeyboardOpen(event, () => openWeeklyNote(week.weekStart))}
       >
-        <div class="week-label">
-          {week.weekStart.format("MMM D")} – {week.weekEnd.clone().subtract(1, "day").format("MMM D")}
+        <div class="cell-header week-header">
+          <span class="week-label">
+            {week.weekStart.format("MMM D")} – {week.weekEnd.clone().subtract(1, "day").format("MMM D")}
+          </span>
         </div>
         <div class="summary-list">
           {#each renderSummary(week.weekTotals) as entry (entry.activity)}
@@ -283,10 +281,20 @@
                     ? `${formatDuration(entry.duration)} / ${formatDuration(entry.goal)}`
                     : formatDuration(entry.duration)}
               </span>
+
+              {#if !entry.isPlaceholder && entry.goal}
+                <div
+                  class="goal-bar"
+                  class:overflow={hasOverflow(entry.duration, entry.goal)}
+                  style={goalVars(entry.duration, entry.goal)}
+                  aria-hidden="true"
+                />
+              {/if}
             </div>
           {/each}
         </div>
       </div>
+
       {#each week.days as day (day.date.valueOf())}
         <div
           class="day-cell"
@@ -297,16 +305,18 @@
           on:click={() => openDailyNote(day.date)}
           on:keydown={(event) => handleKeyboardOpen(event, () => openDailyNote(day.date))}
         >
-          <div class="day-heading">
+          <div class="cell-header day-header">
             <span class="day-number">{day.date.date()}</span>
           </div>
           <div class="summary-list">
             {#each renderSummary(day.totals) as entry (entry.activity)}
-              <div class="summary-row" class:placeholder={entry.isPlaceholder}>
+              <div class="summary-row day" class:placeholder={entry.isPlaceholder}>
                 <div class="summary-activity">
                   <span class="summary-name">{entry.activity}</span>
                 </div>
-                <span class="summary-duration">{entry.isPlaceholder ? "" : formatDuration(entry.duration)}</span>
+                <span class="summary-duration">
+                  {entry.isPlaceholder ? "" : formatDuration(entry.duration)}
+                </span>
               </div>
             {/each}
           </div>
@@ -323,18 +333,46 @@
     height: 100%;
     padding: var(--size-4-4);
     gap: var(--size-4-3);
+
+    /* Header tint (based on theme accent) */
+    --calendar-header-row-bg: color-mix(
+      in srgb,
+      var(--background-secondary) 86%,
+      var(--interactive-accent) 14%
+    );
+    
+    /* Cell header band (subtle neutral tint; no accent) */
+    --calendar-cell-header-bg: color-mix(
+      in srgb,
+      var(--background-secondary) 92%,
+      var(--background-modifier-border) 8%
+    );
   }
 
   .calendar-header {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
-    justify-content: space-between;
     gap: var(--size-4-3);
   }
 
   .navigation {
+    justify-self: start;
     display: flex;
     gap: var(--size-4-2);
+  }
+
+  .header-spacer {
+    justify-self: end;
+  }
+
+  .month-label {
+    justify-self: center;
+    text-align: center;
+    font-weight: 800;
+    font-size: calc(var(--font-ui-large) * 1.45);
+    line-height: 1.1;
+    letter-spacing: 0.01em;
   }
 
   button.ghost {
@@ -345,28 +383,71 @@
     cursor: pointer;
   }
 
-  .month-label {
-    font-weight: 600;
-    font-size: var(--font-ui-large);
+  button.ghost:hover {
+    background: var(--background-secondary);
   }
 
+  button.ghost:active {
+    background: var(--background-modifier-hover);
+  }
+
+  button.ghost:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--interactive-accent);
+  }
+
+  .month-label {
+    justify-self: center;
+    text-align: center;
+    font-weight: 700;
+    font-size: calc(var(--font-ui-large) * 1.35);
+    line-height: 1.1;
+    letter-spacing: 0.01em;
+  }
+
+  /* Single-table grid (no gaps) */
   .calendar-grid {
     display: grid;
     grid-template-columns: minmax(220px, 1fr) repeat(7, 1fr);
-    gap: var(--size-4-3);
-    align-items: start;
+
+    gap: 0;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-s);
+    overflow: hidden;
+
+    background: var(--background-primary);
   }
 
   .grid-header {
-    font-weight: 600;
-    color: var(--text-muted);
-    padding-bottom: var(--size-4-1);
+    font-weight: 700;
+    color: var(--text-normal);
+    padding: var(--size-4-2);
+
+    /* subtle accent tint */
+    background: color-mix(
+      in srgb,
+      var(--background-secondary) 86%,
+      var(--interactive-accent) 14%
+    );
+    border-bottom-color: color-mix(
+      in srgb,
+      var(--background-modifier-border) 85%,
+      var(--interactive-accent) 15%
+    );
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+
+    border-right: 1px solid var(--background-modifier-border);
+    border-bottom: 1px solid var(--background-modifier-border);
   }
 
+  /* Cells */
   .week-summary,
   .day-cell {
-    border: 1px solid var(--background-modifier-border);
-    border-radius: var(--radius-s);
+    position: relative;
     padding: var(--size-4-2);
     background: var(--background-primary);
     display: flex;
@@ -374,18 +455,49 @@
     gap: var(--size-2-3);
     min-height: 120px;
     cursor: pointer;
+
+    border-right: 1px solid var(--background-modifier-border);
+    border-bottom: 1px solid var(--background-modifier-border);
+  }
+
+  /* Remove right border on last column */
+  .calendar-grid > :nth-child(8n) {
+    border-right: 0;
+  }
+
+  /* Remove bottom border on last row (last 8 cells) */
+  .calendar-grid > :nth-last-child(-n + 8) {
+    border-bottom: 0;
+  }
+
+  .week-summary:hover,
+  .day-cell:hover {
+    background: var(--background-secondary);
+  }
+
+  .week-summary:active,
+  .day-cell:active {
+    background: var(--background-modifier-hover);
   }
 
   .week-label {
-    font-weight: 600;
+    font-weight: 650;
     color: var(--text-normal);
+    text-align: center;
+    width: 100%;
   }
 
-  .day-heading {
+  .cell-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    font-weight: 600;
+    justify-content: center;
+
+    /* full-bleed header inside padded cell */
+    margin: calc(var(--size-4-2) * -1) calc(var(--size-4-2) * -1) 0 calc(var(--size-4-2) * -1);
+    padding: var(--size-2-2) var(--size-4-2);
+
+    background: var(--calendar-cell-header-bg, var(--background-secondary));
+    border-bottom: 1px solid var(--background-modifier-border);
   }
 
   .day-number {
@@ -400,12 +512,23 @@
     max-height: 240px;
   }
 
+  /* Summary rows (week goals) support a progress bar */
   .summary-row {
-    display: flex;
-    justify-content: space-between;
-    gap: var(--size-2-3);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "name dur"
+      "bar  bar";
+    column-gap: var(--size-2-3);
+    row-gap: var(--size-2-1);
     font-size: var(--font-ui-smaller);
-    align-items: flex-start;
+    align-items: start;
+  }
+
+  /* Day rows don't need the second line (bar), keep them simpler */
+  .summary-row.day {
+    grid-template-areas: "name dur";
+    row-gap: 0;
   }
 
   .summary-row.placeholder {
@@ -413,36 +536,103 @@
   }
 
   .summary-activity {
+    grid-area: name;
     display: flex;
     flex-direction: column;
     gap: var(--size-2-1);
+    min-width: 0;
   }
 
-  .summary-duration {
+  .summary-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .summary-goal {
+  .summary-duration {
+    grid-area: dur;
+    white-space: nowrap;
     color: var(--text-muted);
   }
 
+  .goal-bar {
+    grid-area: bar;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--background-modifier-border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .goal-bar::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: calc(var(--p) * 100%);
+    background: var(--interactive-accent);
+    border-radius: 999px;
+    box-shadow: 0 0 10px color-mix(in srgb, var(--interactive-accent) 60%, transparent);
+  }
+
+  .goal-bar.overflow::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    left: auto;
+    width: calc(var(--o) * 100%);
+    background: var(--color-green, var(--interactive-accent));
+    border-radius: 999px;
+    box-shadow: 0 0 12px color-mix(in srgb, var(--color-green, var(--interactive-accent)) 70%, transparent);
+  }
+
   .outside-month {
-    opacity: 0.6;
     background: var(--background-secondary);
+    color: var(--text-faint);
+  }
+
+  .outside-month .day-number {
+    color: var(--text-muted);
   }
 
   .is-today {
-    border-color: var(--interactive-accent);
-    box-shadow: 0 0 0 1px var(--interactive-accent);
+    /* (highlight is drawn via ::after so it stays visible above the header band) */
+  }
+
+  .day-cell.is-today::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    box-shadow: inset 0 0 0 2px var(--interactive-accent);
+    pointer-events: none;
+    z-index: 3;
   }
 
   .week-column {
-    text-align: left;
+    text-align: center;
   }
 
   .day-cell:focus-visible,
   .week-summary:focus-visible {
-    outline: 2px solid var(--interactive-accent);
-    outline-offset: 2px;
+    outline: none;
+  }
+
+  .day-cell:focus-visible::after,
+  .week-summary:focus-visible::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    box-shadow: inset 0 0 0 2px var(--interactive-accent);
+    pointer-events: none;
+    z-index: 4;
+  }
+
+  .day-cell:focus-visible::after,
+  .week-summary:focus-visible::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    box-shadow: inset 0 0 0 2px var(--interactive-accent);
+    pointer-events: none;
+    z-index: 4;
   }
 </style>
