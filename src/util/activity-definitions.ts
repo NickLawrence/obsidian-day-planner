@@ -1,7 +1,7 @@
 export type ActivityAttributeField = {
   key: string;
   label: string;
-  type: "text" | "number";
+  type: "text" | "number" | "textarea";
   required?: boolean;
   min?: number;
   max?: number;
@@ -94,6 +94,7 @@ const activityDefinitions: ActivityDefinition[] = [
   { name: "stretch", label: "Stretch", emoji: "🧘" },
   { name: "language", label: "Language", emoji: "🗣️" },
   { name: "housework", label: "Housework", emoji: "🧹" },
+  { name: "cook", label: "Cook", emoji: "🍳" },
   { name: "hygiene", label: "Hygiene", emoji: "🪥" },
   { name: "bed", label: "Bed", emoji: "🛏️" }
 ];
@@ -193,4 +194,10 @@ export const qualityRatingField: ActivityAttributeField = {
   type: "number",
   min: 1,
   max: 10,
+};
+
+export const activityNotesField: ActivityAttributeField = {
+  key: "notes",
+  label: "Notes",
+  type: "textarea",
 };

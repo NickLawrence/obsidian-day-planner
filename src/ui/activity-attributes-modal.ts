@@ -11,7 +11,10 @@ type ActivityAttributesModalProps = {
 };
 
 class ActivityAttributesModal extends Modal {
-  private readonly inputs = new Map<string, HTMLInputElement>();
+  private readonly inputs = new Map<
+    string,
+    HTMLInputElement | HTMLTextAreaElement
+  >();
 
   constructor(
     app: App,
@@ -38,11 +41,14 @@ class ActivityAttributesModal extends Modal {
         cls: "day-planner-activity-attributes-modal__label",
       });
 
-      const input = row.createEl("input", {
-        type: field.type === "number" ? "number" : "text",
-      });
+      const input =
+        field.type === "textarea"
+          ? row.createEl("textarea")
+          : row.createEl("input", {
+              type: field.type === "number" ? "number" : "text",
+            });
 
-      if (field.type === "number") {
+      if (field.type === "number" && input instanceof HTMLInputElement) {
         if (typeof field.min === "number") {
           input.min = String(field.min);
         }

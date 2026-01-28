@@ -124,7 +124,9 @@
     currentMonth.set(window.moment().startOf("month"));
   }
 
-  function renderSummary(entries: Array<ActivityDuration & { goal?: import("moment").Duration }>): SummaryRow[] {
+  function renderSummary(
+    entries: Array<ActivityDuration & { goal?: import("moment").Duration }>,
+  ): SummaryRow[] {
     if (entries.length === 0) {
       return [
         {
@@ -136,7 +138,40 @@
       ];
     }
 
-    return entries.map((entry) => ({ ...entry, isPlaceholder: false }));
+    const rows: SummaryRow[] = entries.map((entry) => ({
+      ...entry,
+      isPlaceholder: false,
+    }));
+
+    rows.sort((a, b) => {
+      const aHasGoal = Boolean(a.goal);
+      const bHasGoal = Boolean(b.goal);
+
+      // Goal-tracked activities first, sorted by % complete (descending)
+      if (aHasGoal && bHasGoal) {
+        const aGoalMs = Math.max(1, a.goal!.asMilliseconds());
+        const bGoalMs = Math.max(1, b.goal!.asMilliseconds());
+        const aRatio = a.duration.asMilliseconds() / aGoalMs;
+        const bRatio = b.duration.asMilliseconds() / bGoalMs;
+
+        if (Math.abs(aRatio - bRatio) > 1e-9) return aRatio - bRatio;
+
+        // tie-break: alphabetically
+        return a.activity.localeCompare(b.activity, undefined, { sensitivity: "base" });
+      }
+
+      // Goals before non-goals
+      if (aHasGoal !== bHasGoal) return aHasGoal ? -1 : 1;
+
+      // No goals: sort by time spent (descending)
+      const aMs = a.duration.asMilliseconds();
+      if (aMs !== bMs) return bMs - aMs;
+
+      // tie-break: alphabetically
+      return a.activity.localeCompare(b.activity, undefined, { sensitivity: "base" });
+    });
+
+    return rows;
   }
 
   // Progress bar vars (weekly goals)
@@ -144,10 +179,8 @@
     const d = Math.max(0, duration.asMilliseconds());
     const g = Math.max(1, goal.asMilliseconds());
     const ratio = d / g;
-
     const p = Math.min(1, ratio); // 0..1
     const o = Math.max(0, Math.min(1, ratio - 1)); // 0..1 overflow
-
     return `--p:${p}; --o:${o};`;
   }
 
@@ -288,7 +321,7 @@
                   class:overflow={hasOverflow(entry.duration, entry.goal)}
                   style={goalVars(entry.duration, entry.goal)}
                   aria-hidden="true"
-                />
+                ></div>
               {/if}
             </div>
           {/each}

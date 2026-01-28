@@ -24,6 +24,7 @@ import {
   taskActivityType,
 } from "../util/props";
 import {
+  activityNotesField,
   buildActivityAttributeUpdate,
   getActivityAttributeFields,
   getActivityLabel,
@@ -51,11 +52,27 @@ export class STaskEditor {
   clockOutUnderCursor = withNotice(async () => {
     const { sTask } = this.getSTaskUnderCursorFromLastView();
 
-    await this.updateClockPropsForTask(sTask, (props, context) => {
-      const activityIndex = this.findOpenTaskActivity(props, context.taskId);
-
-      return clockOut(props, activityIndex);
+    const taskId = await this.ensureTaskId(sTask);
+    const activityName = this.getActivityName(sTask.text);
+    const attributeUpdates = await this.getClockOutAttributeUpdates({
+      activityName,
+      taskId,
     });
+
+    if (attributeUpdates === null) {
+      return;
+    }
+
+    await this.vaultFacade.editFile(sTask.path, (contents) =>
+      upsertActivitiesBlock({
+        fileText: contents,
+        updateFn: (props) => {
+          const activityIndex = this.findOpenTaskActivity(props, taskId);
+
+          return clockOut(props, activityIndex, attributeUpdates);
+        },
+      }),
+    );
   });
 
   cancelClockUnderCursor = withNotice(async () => {
@@ -249,12 +266,8 @@ export class STaskEditor {
   }) {
     const { activityName, taskId } = props;
 
-    if (taskId || activityName === taskActivityType) {
-      return {};
-    }
-
     const endFields = getActivityAttributeFields(activityName, "end");
-    const fields = [...endFields, qualityRatingField];
+    const fields = [...endFields, qualityRatingField, activityNotesField];
 
     if (fields.length === 0) {
       return {};
@@ -269,12 +282,18 @@ export class STaskEditor {
       return null;
     }
 
-    const attributeUpdates = buildActivityAttributeUpdate(activityName, values);
     const qualityValue = values.quality;
+    const notesValue = values.notes;
+    const { quality, notes, ...attributeValues } = values;
+    const attributeUpdates = buildActivityAttributeUpdate(
+      activityName,
+      attributeValues,
+    );
 
     return {
       ...attributeUpdates,
       ...(typeof qualityValue === "number" ? { quality: qualityValue } : {}),
+      ...(typeof notesValue === "string" ? { notes: notesValue } : {}),
     };
   }
 
