@@ -165,6 +165,7 @@
 
       // No goals: sort by time spent (descending)
       const aMs = a.duration.asMilliseconds();
+      const bMs = b.duration.asMilliseconds();
       if (aMs !== bMs) return bMs - aMs;
 
       // tie-break: alphabetically
