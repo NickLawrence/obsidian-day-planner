@@ -66,6 +66,7 @@ export class STaskEditor {
     await this.vaultFacade.editFile(sTask.path, (contents) =>
       upsertActivitiesBlock({
         fileText: contents,
+        filePath: sTask.path,
         updateFn: (props) => {
           const activityIndex = this.findOpenTaskActivity(props, taskId);
 
@@ -219,6 +220,7 @@ export class STaskEditor {
     await this.vaultFacade.editFile(sTask.path, (contents) =>
       upsertActivitiesBlock({
         fileText: contents,
+        filePath: sTask.path,
         updateFn: (props) => updateFn(props, { taskId, activityName }),
       }),
     );
@@ -246,6 +248,7 @@ export class STaskEditor {
     await this.vaultFacade.editFile(location.path, (contents) =>
       upsertActivitiesBlock({
         fileText: contents,
+        filePath: location.path,
         updateFn: (props) =>
           updateFn(props, { taskId, activityName, clockActivity }),
       }),

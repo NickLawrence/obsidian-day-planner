@@ -260,6 +260,7 @@ export default class DayPlanner extends Plugin {
     await this.vaultFacade.editFile(dailyNote.path, (contents) =>
       upsertActivitiesBlock({
         fileText: contents,
+        filePath: dailyNote.path,
         updateFn: (props) =>
           startActivityLog(props, trimmedName, attributeUpdates),
       }),

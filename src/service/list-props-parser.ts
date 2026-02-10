@@ -30,12 +30,13 @@ export class ListPropsParser {
 
     const contents = await this.vault.cachedRead(file);
 
-    return this.getActivitiesProps(contents, metadata);
+    return this.getActivitiesProps(contents, metadata, path);
   }
 
   private getActivitiesProps(
     fileText: string,
     metadata: CachedMetadata,
+    filePath: string,
   ): LineToListProps {
     const headings = metadata.headings ?? [];
 
@@ -115,6 +116,11 @@ export class ListPropsParser {
           const normalized = normalizeActivities(parsedYaml);
           validated = propsSchema.parse(normalized);
         } catch (error) {
+          const startLine = contentStartLine + 1;
+          const endLine = closingLine + 1;
+          console.error(
+            `Failed to parse props schema in ${filePath} at lines ${startLine}-${endLine}.`,
+          );
           console.error(error);
           currentLine = closingLine + 1;
           continue;

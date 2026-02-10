@@ -113,13 +113,15 @@ function findExistingBlock(
 function parseExistingProps(
   lines: string[],
   existingBlock: ExistingBlock | undefined,
+  filePath?: string,
 ): Props {
   if (!existingBlock) {
     return {};
   }
 
-  const { startLine, endLine, indentation } = existingBlock;
-  const linesInsideCodeBlock = lines.slice(startLine + 1, endLine);
+  const { startLine: blockStartLine, endLine: blockEndLine, indentation } =
+    existingBlock;
+  const linesInsideCodeBlock = lines.slice(blockStartLine + 1, blockEndLine);
 
   const trimmedTextInsideCodeBlock = linesInsideCodeBlock
     .map((line) =>
@@ -135,6 +137,12 @@ function parseExistingProps(
 
     return propsSchema.parse(normalized);
   } catch (error) {
+    const startLine = blockStartLine + 1;
+    const endLine = blockEndLine + 1;
+    const source = filePath ?? "unknown file";
+    console.error(
+      `Failed to parse props schema in ${source} at lines ${startLine}-${endLine}.`,
+    );
     console.error(error);
 
     return {};
@@ -189,14 +197,15 @@ function insertBlock({
 export function upsertActivitiesBlock(props: {
   fileText: string;
   updateFn: (props: Props) => Props;
+  filePath?: string;
 }) {
-  const { fileText, updateFn } = props;
+  const { fileText, updateFn, filePath } = props;
 
   const lines = fileText.split("\n");
   const section = findActivitiesSection(lines);
 
   const existingBlock = findExistingBlock(lines, section);
-  const existingProps = parseExistingProps(lines, existingBlock);
+  const existingProps = parseExistingProps(lines, existingBlock, filePath);
   const updatedProps = updateFn(existingProps);
   const blockLines = createIndentedBlock(
     existingBlock?.indentation || "",
