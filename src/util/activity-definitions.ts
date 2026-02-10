@@ -61,6 +61,16 @@ const activityDefinitions: ActivityDefinition[] = [
     },
   },
   {
+    name: "watch",
+    label: "Watch",
+    emoji: "📺",
+    attributes: {
+      key: "watch",
+      start: [{ key: "name", label: "Program", type: "text", required: true }],
+      end: [],
+    },
+  },
+  {
     name: "call",
     label: "Call",
     emoji: "📞",
@@ -95,9 +105,17 @@ const activityDefinitions: ActivityDefinition[] = [
   { name: "language", label: "Language", emoji: "🗣️" },
   { name: "housework", label: "Housework", emoji: "🧹" },
   { name: "cook", label: "Cook", emoji: "🍳" },
+  { name: "eat", label: "Eat", emoji: "🍽️" },
   { name: "hygiene", label: "Hygiene", emoji: "🪥" },
-  { name: "bed", label: "Bed", emoji: "🛏️" }
+  { name: "bed", label: "Bed", emoji: "🛏️" },
+  { name: "ride", label: "Ride", emoji: "🚗" },
+  { name: "transit", label: "Transit", emoji: "🚃"},
+  { name: "pathfinder", label: "Pathfinder", emoji: "🪄" }
 ];
+
+export function getActivityDefinitions(): ActivityDefinition[] {
+  return activityDefinitions;
+}
 
 const activityDefinitionMap = new Map(
   activityDefinitions.map((definition) => [

@@ -13,6 +13,11 @@ import {
 import { getIndentationForListParagraph } from "./dataview";
 import { createCodeBlock, createIndentation, indent } from "./markdown";
 import { appendText } from "./task-utils";
+import {
+  type ActivityAttributeField,
+  type ActivityAttributesDefinition,
+  getActivityDefinitions,
+} from "./activity-definitions";
 
 export const taskActivityType = "task";
 
@@ -27,24 +32,39 @@ const logEntrySchema = z.object({
 
 export type LogEntry = z.infer<typeof logEntrySchema>;
 
-const readingActivityDetailsSchema = z.object({
-  start_page: z.number(),
-  end_page: z.number(),
-});
+const activityFieldSchemas = {
+  text: () => z.string(),
+  textarea: () => z.string(),
+  number: () => z.number(),
+} satisfies Record<ActivityAttributeField["type"], () => z.ZodTypeAny>;
 
-const readActivityDetailsSchema = z.object({
-  book: z.string().optional(),
-  "start-page": z.number().optional(),
-  "end-page": z.number().optional(),
-});
+function buildActivityFieldSchema(field: ActivityAttributeField) {
+  return activityFieldSchemas[field.type]().optional();
+}
 
-const gameActivityDetailsSchema = z.object({
-  name: z.string().optional(),
-});
+function buildActivityAttributeSchema(attributes: ActivityAttributesDefinition) {
+  const fields = [...attributes.start, ...attributes.end];
+  const shape = Object.fromEntries(
+    fields.map((field) => [field.key, buildActivityFieldSchema(field)]),
+  );
 
-const deepWorkActivityDetailsSchema = z.object({
-  project: z.string().optional(),
-});
+  return z.object(shape).optional();
+}
+
+const activityAttributeSchemas = getActivityDefinitions().reduce<
+  Record<string, z.ZodTypeAny>
+>((accumulator, definition) => {
+  if (!definition.attributes) {
+    return accumulator;
+  }
+
+  return {
+    ...accumulator,
+    [definition.attributes.key]: buildActivityAttributeSchema(
+      definition.attributes,
+    ),
+  };
+}, {});
 
 const activitySchema = z
   .object({
@@ -53,12 +73,9 @@ const activitySchema = z
     task_id: z.string().optional(),
     log: z.array(logEntrySchema).optional(),
     notes: z.string().optional(),
-    reading: readingActivityDetailsSchema.optional(),
-    read: readActivityDetailsSchema.optional(),
-    game: gameActivityDetailsSchema.optional(),
-    "deep work": deepWorkActivityDetailsSchema.optional(),
     quality: z.number().optional(),
     details: z.record(z.string(), z.unknown()).optional(),
+    ...activityAttributeSchemas
   })
   .passthrough()
   .transform(({ taskId, task_id, ...rest }) => ({

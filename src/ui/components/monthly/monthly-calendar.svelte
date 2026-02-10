@@ -612,11 +612,15 @@
     content: "";
     position: absolute;
     inset: 0;
-    left: auto;
+    right: auto;
     width: calc(var(--o) * 100%);
-    background: var(--color-green, var(--interactive-accent));
+    background: color-mix(in srgb, var(--interactive-accent) 60%, black);
     border-radius: 999px;
-    box-shadow: 0 0 12px color-mix(in srgb, var(--color-green, var(--interactive-accent)) 70%, transparent);
+    box-shadow: 0 0 12px color-mix(
+      in srgb,
+      color-mix(in srgb, var(--interactive-accent) 60%, black) 70%,
+      transparent
+    );
   }
 
   .outside-month {
