@@ -81,9 +81,26 @@ const activityDefinitions: ActivityDefinition[] = [
     },
   },
   {
+    name: "light work",
+    label: "Light Work",
+    emoji: "🔧",
+    attributes: {
+      key: "deep work",
+      start: [
+        {
+          key: "project",
+          label: "Project",
+          type: "text",
+          required: true,
+        },
+      ],
+      end: [],
+    },
+  },
+  {
     name: "deep work",
-    label: "Deep work",
-    emoji: "🧠",
+    label: "Deep Work",
+    emoji: "🛠️",
     attributes: {
       key: "deep work",
       start: [

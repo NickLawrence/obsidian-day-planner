@@ -72,6 +72,20 @@
         const weekTotals = calculateWeeklyActivityDurations($activities, weekStart);
         const goalsForWeek =
           $weeklyGoals.get(weekStart.valueOf()) ?? ([] as ActivityGoal[]);
+          
+        // Merge weekly totals with goals first (ensures activityKey matches ActivityDuration keys)
+        const weekTotalsWithGoals = mergeActivityDurationsWithGoals(
+          weekTotals,
+          goalsForWeek,
+        );
+
+        // Used to highlight daily rows that are part of this week's goals
+        const goalActivityKeys = new Set(
+          weekTotalsWithGoals
+            .filter((t) => Boolean((t as any).goal))
+            .map((t) => (t as any).activityKey as string | undefined)
+            .filter((it): it is string => Boolean(it)),
+        );
 
         const days = Array.from({ length: 7 }).map((_, index) => {
           const date = weekStart.clone().add(index, "day");
@@ -87,7 +101,8 @@
         return {
           weekStart,
           weekEnd,
-          weekTotals: mergeActivityDurationsWithGoals(weekTotals, goalsForWeek),
+          goalActivityKeys,
+          weekTotals: weekTotalsWithGoals,
           days,
         };
       }),
@@ -344,7 +359,11 @@
           </div>
           <div class="summary-list">
             {#each renderSummary(day.totals) as entry (entry.activity)}
-              <div class="summary-row day" class:placeholder={entry.isPlaceholder}>
+              <div
+                class="summary-row day"
+                class:placeholder={entry.isPlaceholder}
+                class:goal-match={!entry.isPlaceholder && week.goalActivityKeys.has(entry.activityKey)}
+              >
                 <div class="summary-activity">
                   <span class="summary-name">{entry.activity}</span>
                 </div>
@@ -563,7 +582,32 @@
   .summary-row.day {
     grid-template-areas: "name dur";
     row-gap: 0;
+    align-items: center;
   }
+
+  /* Daily activity matches a weekly goal */
+  .summary-row.day.goal-match {
+    padding: 2px 6px;
+    border-radius: var(--radius-l);
+
+    /* Accent-tinted pill background */
+    background: color-mix(
+      in srgb,
+      var(--interactive-accent) 18%,
+      var(--background-primary)
+    );
+    border: 1px solid color-mix(
+      in srgb,
+      var(--interactive-accent) 28%,
+      var(--background-modifier-border)
+    );
+  }
+
+  .summary-row.day.goal-match .summary-duration {
+    color: var(--text-normal);
+  }
+
+  
 
   .summary-row.placeholder {
     color: var(--text-faint);
