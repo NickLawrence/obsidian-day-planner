@@ -61,12 +61,25 @@ const activityDefinitions: ActivityDefinition[] = [
     },
   },
   {
-    name: "watch",
-    label: "Watch",
+    name: "movie",
+    label: "Movie",
     emoji: "📺",
     attributes: {
-      key: "watch",
-      start: [{ key: "name", label: "Program", type: "text", required: true }],
+      key: "movie",
+      start: [{ key: "name", label: "Movie", type: "text", required: true }],
+      end: [],
+    },
+  },
+  {
+    name: "tv",
+    label: "TV",
+    emoji: "📺",
+    attributes: {
+      key: "tv",
+      start: [
+        { key: "name", label: "Show", type: "text", required: true },
+        { key: "episodes", label: "Episodes", type: "text", required: true }
+      ],
       end: [],
     },
   },
@@ -126,7 +139,8 @@ const activityDefinitions: ActivityDefinition[] = [
   { name: "hygiene", label: "Hygiene", emoji: "🪥" },
   { name: "bed", label: "Bed", emoji: "🛏️" },
   { name: "ride", label: "Ride", emoji: "🚗" },
-  { name: "transit", label: "Transit", emoji: "🚃"},
+  { name: "transit", label: "Transit", emoji: "🚃" },
+  { name: "shop", label: "Shop", emoji: "🛍️" },
   { name: "pathfinder", label: "Pathfinder", emoji: "🪄" }
 ];
 
