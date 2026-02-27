@@ -439,6 +439,12 @@ export default class DayPlanner extends Plugin {
       name: "Cancel clock",
       editorCallback: () => this.sTaskEditor.cancelClockUnderCursor(),
     });
+
+    this.addCommand({
+      id: "add-note-to-activity",
+      name: "Add Note to Activity",
+      callback: () => this.sTaskEditor.addNoteToFirstActiveClock(),
+    });
   }
 
   private initSettingsStore(props: {

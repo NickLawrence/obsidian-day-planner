@@ -12,7 +12,7 @@ describe("calculateWeeklyActivityDurations", () => {
   test("aggregates durations per activity within the iso week", () => {
       const activities: Activity[] = [
         {
-          taskId: undefined,
+          taskIds: [],
           activity: "activity: piano",
           log: [
             {
@@ -26,7 +26,7 @@ describe("calculateWeeklyActivityDurations", () => {
         ],
         },
         {
-          taskId: undefined,
+          taskIds: [],
           activity: "activity: reading",
           log: [
             {
@@ -54,10 +54,10 @@ describe("calculateWeeklyActivityDurations", () => {
     ).toBe(45);
   });
 
-  test("ignores entries outside the week or without an end time", () => {
+  test("ignores entries outside the week and includes active clock time", () => {
       const activities: Activity[] = [
         {
-          taskId: undefined,
+          taskIds: [],
           activity: "activity: piano",
           log: [
             {
@@ -71,7 +71,7 @@ describe("calculateWeeklyActivityDurations", () => {
         ],
         },
         {
-          taskId: undefined,
+          taskIds: [],
           activity: "activity: Reading",
           log: [
             {
@@ -96,7 +96,7 @@ describe("calculateWeeklyActivityDurations", () => {
     ).toBe(30);
     expect(
       totals.find((it) => it.activity === "activity: Reading")?.duration.asMinutes(),
-    ).toBe(0);
+    ).toBeGreaterThan(0);
   });
 });
 
@@ -113,7 +113,7 @@ describe("calculateDailyActivityDurations", () => {
   test("aggregates per-day durations and normalizes activity names", () => {
       const activities: Activity[] = [
         {
-          taskId: undefined,
+          taskIds: [],
           activity: "Piano ",
           log: [
             {
@@ -127,7 +127,7 @@ describe("calculateDailyActivityDurations", () => {
         ],
         },
         {
-          taskId: undefined,
+          taskIds: [],
           activity: "piano",
           log: [
             {
@@ -137,7 +137,7 @@ describe("calculateDailyActivityDurations", () => {
         ],
         },
         {
-          taskId: undefined,
+          taskIds: [],
           activity: "Reading",
           log: [
             {
@@ -154,12 +154,12 @@ describe("calculateDailyActivityDurations", () => {
     );
 
     expect(totals.map((it) => it.activity)).toEqual([
-      "Piano",
+      "🎹 Piano",
       "Reading",
     ]);
 
     expect(
-      totals.find((it) => it.activity === "Piano")?.duration.asMinutes(),
+      totals.find((it) => it.activity === "🎹 Piano")?.duration.asMinutes(),
     ).toBe(70);
     expect(
       totals.find((it) => it.activity === "Reading")?.duration.asMinutes(),

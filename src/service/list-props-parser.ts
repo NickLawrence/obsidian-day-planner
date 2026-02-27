@@ -184,7 +184,7 @@ export function normalizeActivities(parsedYaml: unknown): Props {
         const [firstActivity] =
           activities.length > 0
             ? activities
-            : [{ activity: "Activity", log: [], taskId: undefined }];
+            : [{ activity: "Activity", log: [], taskIds: [] }];
 
         const restActivities = activities.slice(1);
 

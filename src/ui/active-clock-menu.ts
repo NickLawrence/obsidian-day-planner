@@ -34,6 +34,16 @@ export function createActiveClockMenu(props: {
       });
   });
 
+
+  menu.addItem((item) => {
+    item
+      .setTitle("Add note to activity")
+      .setIcon("sticky-note")
+      .onClick(async () => {
+        await sTaskEditor.addNoteToClockActivity(task);
+      });
+  });
+
   menu.addItem((item) => {
     item
       .setTitle("Cancel clock")

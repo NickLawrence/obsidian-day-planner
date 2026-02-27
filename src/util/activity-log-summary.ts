@@ -1,6 +1,6 @@
 import type { Duration, Moment } from "moment";
 
-import { getActivityLabel, normalizeActivityName } from "./activity-definitions";
+import { getActivityDisplayLabel, normalizeActivityName } from "./activity-definitions";
 import type { Activity } from "./props";
 
 export type ActivityDuration = {
@@ -41,10 +41,12 @@ function calculateActivityDurationsForRange(
   const normalizedToLabel = new Map<string, string>();
   const seenInRange = new Set<string>();
 
-  activities.forEach(({ activity, log }) => {
+  activities.forEach((activityEntry) => {
+    const { activity, log } = activityEntry;
     const normalizedName = normalizeActivityName(activity);
     const label =
-      normalizedToLabel.get(normalizedName) ?? getActivityLabel(activity);
+      normalizedToLabel.get(normalizedName) ??
+      getActivityDisplayLabel(activity, activityEntry as Record<string, unknown>);
 
     if (!normalizedToLabel.has(normalizedName)) {
       normalizedToLabel.set(normalizedName, label);
@@ -61,18 +63,15 @@ function calculateActivityDurationsForRange(
         return;
       }
 
+      const endMoment = end
+        ? window.moment(end, window.moment.ISO_8601, true)
+        : window.moment();
+
       if (!end) {
-        if (
-          startMoment.isSameOrAfter(rangeStart) &&
-          startMoment.isBefore(rangeEnd)
-        ) {
+        if (startMoment.isBefore(rangeEnd) && endMoment.isAfter(rangeStart)) {
           seenInRange.add(normalizedName);
         }
-
-        return;
       }
-
-      const endMoment = window.moment(end, window.moment.ISO_8601, true);
 
       if (!endMoment.isValid()) {
         return;

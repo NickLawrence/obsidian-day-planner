@@ -17,6 +17,8 @@ import {
 } from "../util/markdown";
 import {
   addOpenClock,
+  addTaskToOpenActivity,
+  appendNoteToActivity,
   cancelOpenClock,
   clockOut,
   createProp,
@@ -49,6 +51,97 @@ export class STaskEditor {
     );
   });
 
+
+
+  addTaskToCurrentActivity = withNotice(async (task: LocalTask) => {
+    isNotVoid(task.location, "Cannot update task without location");
+
+    const sTask = this.dataviewFacade.getTaskAtLine({
+      path: task.location.path,
+      line: task.location.position.start.line,
+    });
+
+    isNotVoid(sTask, "No task found for selected time block");
+
+    const taskId = await this.ensureTaskId(sTask);
+
+    await this.vaultFacade.editFile(task.location.path, (contents) =>
+      upsertActivitiesBlock({
+        fileText: contents,
+        filePath: task.location.path,
+        updateFn: (props) => addTaskToOpenActivity(props, taskId),
+      }),
+    );
+  });
+
+  addTaskUnderCursorToCurrentActivity = withNotice(async () => {
+    const { sTask } = this.getSTaskUnderCursorFromLastView();
+    const taskId = await this.ensureTaskId(sTask);
+
+    await this.vaultFacade.editFile(sTask.path, (contents) =>
+      upsertActivitiesBlock({
+        fileText: contents,
+        filePath: sTask.path,
+        updateFn: (props) => addTaskToOpenActivity(props, taskId),
+      }),
+    );
+  });
+
+  addNoteToClockActivity = withNotice(async (
+    task: LocalTask & { clockActivity?: Props["activities"][number] },
+  ) => {
+    const values = await askForActivityAttributes(this.app, {
+      title: "Add note to activity",
+      fields: [activityNotesField],
+    });
+
+    const note = values?.notes;
+
+    if (typeof note !== "string" || note.trim().length === 0) {
+      return;
+    }
+
+    await this.updateClockPropsForLocalTask(task, (props, context) => {
+      const activityIndexByClock = this.findActivityIndexForClockActivity(
+        props,
+        context.clockActivity,
+      );
+      const activityIndex =
+        activityIndexByClock === -1
+          ? this.findOpenActivityByName(props, context.activityName)
+          : activityIndexByClock;
+
+      return appendNoteToActivity(props, activityIndex, note);
+    });
+  });
+
+  addNoteToFirstActiveClock = withNotice(async () => {
+    const openActivities = this.getOpenActivities();
+
+    if (openActivities.length === 0) {
+      throw new Error("There is no open clock");
+    }
+
+    const target = openActivities[0];
+    const values = await askForActivityAttributes(this.app, {
+      title: "Add note to activity",
+      fields: [activityNotesField],
+    });
+
+    const note = values?.notes;
+
+    if (typeof note !== "string" || note.trim().length === 0) {
+      return;
+    }
+
+    await this.vaultFacade.editFile(target.path, (contents) =>
+      upsertActivitiesBlock({
+        fileText: contents,
+        filePath: target.path,
+        updateFn: (props) => appendNoteToActivity(props, target.activityIndex, note),
+      }),
+    );
+  });
   clockOutUnderCursor = withNotice(async () => {
     const { sTask } = this.getSTaskUnderCursorFromLastView();
 
@@ -125,6 +218,19 @@ export class STaskEditor {
     );
   });
 
+
+  private getOpenActivities() {
+    const listProps = this.getState().dataview.listProps;
+
+    return Object.entries(listProps).flatMap(([path, lineToProps]) =>
+      Object.values(lineToProps).flatMap(({ parsed }) =>
+        (parsed.activities ?? [])
+          .map((activity, activityIndex) => ({ path, activity, activityIndex }))
+          .filter(({ activity }) => activity.log?.some((entry) => !entry.end)),
+      ),
+    );
+  }
+
   constructor(
     private readonly getState: AppStore["getState"],
     private readonly app: App,
@@ -155,7 +261,7 @@ export class STaskEditor {
     return Object.values(listProps).some(({ parsed }) =>
       parsed.activities?.some(
         (activity) =>
-          activity.taskId === taskId &&
+          activity.taskIds.includes(taskId) &&
           activity.log?.some((entry) => !entry.end),
       ),
     );
@@ -172,7 +278,8 @@ export class STaskEditor {
     }
 
     return (props.activities ?? []).findIndex((activity) => {
-      if (clockActivity?.taskId && activity.taskId !== clockActivity.taskId) {
+      const clockTaskId = clockActivity?.taskIds?.[0];
+      if (clockTaskId && !activity.taskIds.includes(clockTaskId)) {
         return false;
       }
 
@@ -193,7 +300,7 @@ export class STaskEditor {
 
     return (props.activities ?? []).findIndex(
       (activity) =>
-        activity.taskId === taskId &&
+        activity.taskIds.includes(taskId) &&
         activity.activity === taskActivityType &&
         activity.log?.some((entry) => !entry.end),
     );

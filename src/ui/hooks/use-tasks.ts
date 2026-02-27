@@ -12,7 +12,7 @@ import { WorkspaceFacade } from "../../service/workspace-facade";
 import type { DayPlannerSettings } from "../../settings";
 import type { LocalTask, RemoteTask, Task, WithTime } from "../../task-types";
 import type { OnEditAbortedFn, OnUpdateFn, PointerDateTime } from "../../types";
-import { getActivityLabel } from "../../util/activity-definitions";
+import { getActivityDisplayLabel } from "../../util/activity-definitions";
 import { createClockTaskFromActivity } from "../../util/clock";
 import { splitMultiday } from "../../util/moment";
 import { type LogEntry } from "../../util/props";
@@ -83,9 +83,9 @@ export function useTasks(props: {
           .filter((activity) => activity?.log?.length)
           .map((activity) => ({
             activity: activity.activity,
-            title: getActivityLabel(activity.activity),
+            title: getActivityDisplayLabel(activity.activity, activity),
             log: activity.log as LogEntry[],
-            taskId: activity.taskId,
+            taskId: activity.taskIds?.[0],
             location: {
               path,
               position,

@@ -9,6 +9,7 @@ export type ActivityAttributeField = {
 
 export type ActivityAttributesDefinition = {
   key: string;
+  mainKey?: string;
   start: ActivityAttributeField[];
   end: ActivityAttributeField[];
 };
@@ -29,6 +30,7 @@ const activityDefinitions: ActivityDefinition[] = [
     emoji: "📖",
     attributes: {
       key: "read",
+      mainKey: "book",
       start: [
         { key: "book", label: "Book", type: "text", required: true },
         {
@@ -184,6 +186,28 @@ export function getActivityLabel(activityName: string) {
   }
 
   return `${definition.emoji} ${label}`;
+}
+
+export function getActivityDisplayLabel(
+  activityName: string,
+  activityEntry?: Record<string, unknown>,
+) {
+  const baseLabel = getActivityLabel(activityName);
+  const definition = getActivityDefinition(activityName);
+  const attributes = definition?.attributes;
+
+  if (!attributes?.mainKey || !activityEntry) {
+    return baseLabel;
+  }
+
+  const values = getActivityAttributeValues(activityName, activityEntry);
+  const mainValue = values[attributes.mainKey];
+
+  if (typeof mainValue !== "string" || mainValue.trim().length === 0) {
+    return baseLabel;
+  }
+
+  return `${baseLabel} - ${mainValue.trim()}`;
 }
 
 export function getActivityAttributeFields(
