@@ -37,9 +37,9 @@ export const createEditorMenuCallback =
     } else {
       menu.addItem((item) => {
         item
-          .setTitle("Clock in")
-          .setIcon("play")
-          .onClick(() => sTaskEditor.clockInUnderCursor());
+          .setTitle("Add to current activity")
+          .setIcon("plus")
+          .onClick(() => sTaskEditor.addTaskUnderCursorToCurrentActivity());
       });
     }
   };

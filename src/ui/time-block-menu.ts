@@ -4,13 +4,15 @@ import { isNotVoid } from "typed-assert";
 import type { LocalTask } from "../task-types";
 
 import type { WorkspaceFacade } from "src/service/workspace-facade";
+import type { STaskEditor } from "../service/stask-editor";
 
 export function createTimeBlockMenu(props: {
   event: MouseEvent | TouchEvent;
   task: LocalTask;
   workspaceFacade: WorkspaceFacade;
+  sTaskEditor: STaskEditor;
 }) {
-  const { event, task, workspaceFacade } = props;
+  const { event, task, workspaceFacade, sTaskEditor } = props;
   const { location } = task;
 
   // todo: remove when types are fixed
@@ -24,6 +26,16 @@ export function createTimeBlockMenu(props: {
   } = location;
 
   const menu = new Menu();
+
+
+  menu.addItem((item) => {
+    item
+      .setTitle("Add to current activity")
+      .setIcon("plus")
+      .onClick(async () => {
+        await sTaskEditor.addTaskToCurrentActivity(task);
+      });
+  });
 
   menu.addItem((item) => {
     item

@@ -69,21 +69,20 @@ const activityAttributeSchemas = getActivityDefinitions().reduce<
 const activitySchema = z
   .object({
     activity: z.string(),
-    taskId: z.string().optional(),
-    task_id: z.string().optional(),
     log: z.array(logEntrySchema).optional(),
+    taskIds: z.array(z.string()).optional(),
     notes: z.string().optional(),
     quality: z.number().optional(),
     details: z.record(z.string(), z.unknown()).optional(),
-    ...activityAttributeSchemas
+    ...activityAttributeSchemas,
   })
   .passthrough()
-  .transform(({ taskId, task_id, ...rest }) => ({
+  .transform(({ taskIds, ...rest }) => ({
     ...rest,
-    taskId: taskId || task_id,
+    taskIds: taskIds ?? [],
   }));
 
-export type Activity = Omit<z.infer<typeof activitySchema>, "task_id">;
+export type Activity = z.infer<typeof activitySchema>;
 
 const activitiesSchema = z.array(activitySchema);
 
@@ -102,11 +101,14 @@ export function isWithOpenClock(props?: Props) {
 }
 
 export function getTaskIdFromActivity(activity: Activity) {
-  return activity.taskId;
+  return activity.taskIds[0];
 }
 
 function getActivities(props: Props): Activity[] {
-  return props.activities ?? [];
+  return (props.activities ?? []).map((activity) => ({
+    ...activity,
+    taskIds: activity.taskIds ?? [],
+  }));
 }
 
 function getActivitiesCopy(props: Props): Activity[] {
@@ -148,10 +150,9 @@ function mergeActivityDetails(
 function findActivityByTaskId(
   activities: Activity[],
   taskId: string,
-  activityName: string,
 ) {
   const existingIndex = activities.findIndex(
-    (activity) => activity.taskId === taskId,
+    (activity) => activity.taskIds.includes(taskId),
   );
 
   const existing = activities[existingIndex];
@@ -167,7 +168,7 @@ function findActivityByTaskId(
     index: activities.length,
     activity: {
       activity: taskActivityType,
-      taskId,
+      taskIds: [taskId],
       log: [],
     },
   };
@@ -188,7 +189,6 @@ export function addOpenClock(
   const { activity, index } = findActivityByTaskId(
     activities,
     task.taskId,
-    task.activityName,
   );
 
   if (activity.log?.some((entry) => !entry.end)) {
@@ -198,7 +198,7 @@ export function addOpenClock(
   const updatedActivity: Activity = {
     ...activity,
     activity: taskActivityType,
-    taskId: task.taskId,
+    taskIds: activity.taskIds.length > 0 ? activity.taskIds : [task.taskId],
     log: [
       ...(activity.log ?? []),
       {
@@ -227,8 +227,8 @@ export function startActivityLog(
 
   const updatedActivity: Activity = mergeActivityDetails(
     {
-      taskId: undefined,
       activity: activityName,
+      taskIds: [],
       log: [
         {
           start: window.moment().format(clockFormat),
@@ -244,10 +244,70 @@ export function startActivityLog(
   };
 }
 
+export function addTaskToOpenActivity(
+  props: Props,
+  taskId: string,
+): Props {
+  const activities = getActivitiesCopy(props);
+  const openActivityIndex = activities.findIndex((activity) =>
+    activity.log?.some((entry) => !entry.end),
+  );
+
+  if (openActivityIndex === -1) {
+    throw new Error("There is no open clock");
+  }
+
+  const openActivity = activities[openActivityIndex];
+  const currentTaskIds = openActivity.taskIds ?? [];
+
+  if (currentTaskIds.includes(taskId)) {
+    return props;
+  }
+
+  const updatedActivities = activities.with(openActivityIndex, {
+    ...openActivity,
+    taskIds: currentTaskIds.concat(taskId),
+  });
+
+  return {
+    ...props,
+    activities: updatedActivities,
+  };
+}
+
+export function appendNoteToActivity(
+  props: Props,
+  activityIndex: number,
+  note: string,
+): Props {
+  const activities = getActivitiesCopy(props);
+
+  if (activityIndex < 0 || activityIndex >= activities.length) {
+    throw new Error("There is no activity");
+  }
+
+  const activity = activities[activityIndex];
+  const trimmedNote = note.trim();
+
+  if (!trimmedNote) {
+    return props;
+  }
+
+  const updatedActivities = activities.with(activityIndex, {
+    ...activity,
+    notes: activity.notes ? `${activity.notes}\n${trimmedNote}` : trimmedNote,
+  });
+
+  return {
+    ...props,
+    activities: updatedActivities,
+  };
+}
+
 export function cancelOpenClock(props: Props, taskId: string): Props {
   const activities = getActivitiesCopy(props);
   const activityWithOpenClockIndex = activities.findIndex((activity) => {
-    return activity.taskId === taskId && activity.log?.some((it) => !it.end);
+    return activity.taskIds.includes(taskId) && activity.log?.some((it) => !it.end);
   });
 
   if (activityWithOpenClockIndex === -1) {
@@ -328,9 +388,9 @@ export function clockOut(
 export function toMarkdown(props: Props) {
   const yamlReadyProps = {
     ...props,
-    activities: props.activities?.map(({ taskId, ...activity }) => ({
+    activities: props.activities?.map(({ taskIds, ...activity }) => ({
       ...activity,
-      ...(taskId ? { task_id: taskId } : {}),
+      ...(taskIds ? { taskIds } : {}),
     })),
   };
 

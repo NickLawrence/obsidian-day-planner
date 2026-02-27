@@ -31,7 +31,8 @@ describe("upsertActivitiesBlock", () => {
     });
 
     expect(result).toContain("# Activities");
-    expect(result).toContain("task_id: task-123");
+    expect(result).toContain("taskIds:");
+    expect(result).toContain("- task-123");
     expect(result).toContain("activity: task");
     expect(result).toContain("- [ ] Task");
     expect(result).not.toContain("text:");
