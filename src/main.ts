@@ -98,6 +98,10 @@ import {
   getActivityLabel,
 } from "./util/activity-definitions";
 import { askForActivityAttributes } from "./ui/activity-attributes-modal";
+import {
+  createDayPlannerActivityApi,
+  type DayPlannerActivityApi,
+} from "./util/activity-totals";
 
 export default class DayPlanner extends Plugin {
   settings!: () => DayPlannerSettings;
@@ -108,6 +112,7 @@ export default class DayPlanner extends Plugin {
   private sTaskEditor!: STaskEditor;
   private vaultFacade!: VaultFacade;
   private transactionWriter!: TransactionWriter;
+  public api!: DayPlannerActivityApi;
 
   async onload() {
     const initialPluginData: PluginData = {
@@ -160,6 +165,8 @@ export default class DayPlanner extends Plugin {
         await this.saveData({ ...this.settings(), rawIcals });
       },
     });
+
+    this.api = createDayPlannerActivityApi(listProps);
 
     this.sTaskEditor = new STaskEditor(
       getState,
