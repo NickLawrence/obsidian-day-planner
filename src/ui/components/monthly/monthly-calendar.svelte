@@ -12,7 +12,7 @@
     getWeekRangeFor,
     type ActivityDuration,
   } from "../../../util/activity-log-summary";
-  import type { Activity } from "../../../util/props";
+  import { getAllActivitiesFromListProps } from "../../../util/activity-totals";
   import {
     extractActivityGoals,
     mergeActivityDurationsWithGoals,
@@ -30,10 +30,13 @@
       void loadGoalsForWeeks($weeks);
     });
 
-    offMetadataChange = app?.metadataCache?.on("dataview:metadata-change", () => {
-      // rerun when DV updates metadata for any file
-      void loadGoalsForWeeks($weeks);
-    });
+    offMetadataChange = app?.metadataCache?.on(
+      "dataview:metadata-change",
+      () => {
+        // rerun when DV updates metadata for any file
+        void loadGoalsForWeeks($weeks);
+      },
+    );
   });
 
   onDestroy(() => {
@@ -48,18 +51,19 @@
   const currentMonth = writable(window.moment().startOf("month"));
 
   const weekdayLabels = Array.from({ length: 7 }, (_, index) =>
-    window.moment().isoWeekday(index + 1).format("ddd"),
+    window
+      .moment()
+      .isoWeekday(index + 1)
+      .format("ddd"),
   );
 
   const activities = derived(listProps, ($listProps) =>
-    Object.values($listProps).flatMap((lineToProps) =>
-      Object.values(lineToProps).flatMap(
-        ({ parsed }) => (parsed.activities as Activity[]) ?? [],
-      ),
-    ),
+    getAllActivitiesFromListProps($listProps),
   );
 
-  const monthLabel = derived(currentMonth, ($month) => $month.format("MMMM YYYY"));
+  const monthLabel = derived(currentMonth, ($month) =>
+    $month.format("MMMM YYYY"),
+  );
 
   const weeks = derived(currentMonth, ($month) => buildWeeks($month));
   const weeklyGoals = writable(new Map<number, ActivityGoal[]>());
@@ -69,10 +73,13 @@
     ([$weeks, $activities, $month, $weeklyGoals]) =>
       $weeks.map((weekStart) => {
         const { end: weekEnd } = getWeekRangeFor(weekStart);
-        const weekTotals = calculateWeeklyActivityDurations($activities, weekStart);
+        const weekTotals = calculateWeeklyActivityDurations(
+          $activities,
+          weekStart,
+        );
         const goalsForWeek =
           $weeklyGoals.get(weekStart.valueOf()) ?? ([] as ActivityGoal[]);
-          
+
         // Merge weekly totals with goals first (ensures activityKey matches ActivityDuration keys)
         const weekTotalsWithGoals = mergeActivityDurationsWithGoals(
           weekTotals,
@@ -172,7 +179,9 @@
         if (Math.abs(aRatio - bRatio) > 1e-9) return aRatio - bRatio;
 
         // tie-break: alphabetically
-        return a.activity.localeCompare(b.activity, undefined, { sensitivity: "base" });
+        return a.activity.localeCompare(b.activity, undefined, {
+          sensitivity: "base",
+        });
       }
 
       // Goals before non-goals
@@ -184,14 +193,19 @@
       if (aMs !== bMs) return bMs - aMs;
 
       // tie-break: alphabetically
-      return a.activity.localeCompare(b.activity, undefined, { sensitivity: "base" });
+      return a.activity.localeCompare(b.activity, undefined, {
+        sensitivity: "base",
+      });
     });
 
     return rows;
   }
 
   // Progress bar vars (weekly goals)
-  function goalVars(duration: import("moment").Duration, goal: import("moment").Duration) {
+  function goalVars(
+    duration: import("moment").Duration,
+    goal: import("moment").Duration,
+  ) {
     const d = Math.max(0, duration.asMilliseconds());
     const g = Math.max(1, goal.asMilliseconds());
     const ratio = d / g;
@@ -200,7 +214,10 @@
     return `--p:${p}; --o:${o};`;
   }
 
-  function hasOverflow(duration: import("moment").Duration, goal: import("moment").Duration) {
+  function hasOverflow(
+    duration: import("moment").Duration,
+    goal: import("moment").Duration,
+  ) {
     return duration.asMilliseconds() > goal.asMilliseconds();
   }
 
@@ -248,7 +265,9 @@
     weeklyGoals.set(
       new Map(
         goals
-          .filter((it): it is { key: number; goals: ActivityGoal[] } => Boolean(it))
+          .filter((it): it is { key: number; goals: ActivityGoal[] } =>
+            Boolean(it),
+          )
           .map((it) => [it.key, it.goals]),
       ),
     );
@@ -260,7 +279,8 @@
 
   async function openWeeklyNote(weekStart: Moment) {
     try {
-      const weeklyNote = await periodicNotes.createWeeklyNoteIfNeeded(weekStart);
+      const weeklyNote =
+        await periodicNotes.createWeeklyNoteIfNeeded(weekStart);
       if (weeklyNote) {
         await workspaceFacade.openFileInEditor(weeklyNote);
       }
@@ -269,7 +289,10 @@
     }
   }
 
-  function handleKeyboardOpen(event: KeyboardEvent, openFn: () => Promise<void> | void) {
+  function handleKeyboardOpen(
+    event: KeyboardEvent,
+    openFn: () => Promise<void> | void,
+  ) {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       void openFn();
@@ -280,10 +303,18 @@
 <div class="calendar-shell">
   <div class="calendar-header">
     <div class="navigation">
-      <button aria-label="Previous month" class="ghost" on:click={goToPreviousMonth}>
+      <button
+        aria-label="Previous month"
+        class="ghost"
+        on:click={goToPreviousMonth}
+      >
         ←
       </button>
-      <button aria-label="Jump to current month" class="ghost" on:click={goToCurrentMonth}>
+      <button
+        aria-label="Jump to current month"
+        class="ghost"
+        on:click={goToCurrentMonth}
+      >
         Today
       </button>
       <button aria-label="Next month" class="ghost" on:click={goToNextMonth}>
@@ -310,11 +341,15 @@
         role="button"
         tabindex="0"
         on:click={() => openWeeklyNote(week.weekStart)}
-        on:keydown={(event) => handleKeyboardOpen(event, () => openWeeklyNote(week.weekStart))}
+        on:keydown={(event) =>
+          handleKeyboardOpen(event, () => openWeeklyNote(week.weekStart))}
       >
         <div class="cell-header week-header">
           <span class="week-label">
-            {week.weekStart.format("MMM D")} – {week.weekEnd.clone().subtract(1, "day").format("MMM D")}
+            {week.weekStart.format("MMM D")} – {week.weekEnd
+              .clone()
+              .subtract(1, "day")
+              .format("MMM D")}
           </span>
         </div>
         <div class="summary-list">
@@ -352,7 +387,8 @@
           role="button"
           tabindex="0"
           on:click={() => openDailyNote(day.date)}
-          on:keydown={(event) => handleKeyboardOpen(event, () => openDailyNote(day.date))}
+          on:keydown={(event) =>
+            handleKeyboardOpen(event, () => openDailyNote(day.date))}
         >
           <div class="cell-header day-header">
             <span class="day-number">{day.date.date()}</span>
@@ -362,7 +398,8 @@
               <div
                 class="summary-row day"
                 class:placeholder={entry.isPlaceholder}
-                class:goal-match={!entry.isPlaceholder && week.goalActivityKeys.has(entry.activityKey)}
+                class:goal-match={!entry.isPlaceholder &&
+                  week.goalActivityKeys.has(entry.activityKey)}
               >
                 <div class="summary-activity">
                   <span class="summary-name">{entry.activity}</span>
@@ -393,7 +430,7 @@
       var(--background-secondary) 86%,
       var(--interactive-accent) 14%
     );
-    
+
     /* Cell header band (subtle neutral tint; no accent) */
     --calendar-cell-header-bg: color-mix(
       in srgb,
@@ -546,7 +583,8 @@
     justify-content: center;
 
     /* full-bleed header inside padded cell */
-    margin: calc(var(--size-4-2) * -1) calc(var(--size-4-2) * -1) 0 calc(var(--size-4-2) * -1);
+    margin: calc(var(--size-4-2) * -1) calc(var(--size-4-2) * -1) 0
+      calc(var(--size-4-2) * -1);
     padding: var(--size-2-2) var(--size-4-2);
 
     background: var(--calendar-cell-header-bg, var(--background-secondary));
@@ -596,18 +634,17 @@
       var(--interactive-accent) 18%,
       var(--background-primary)
     );
-    border: 1px solid color-mix(
-      in srgb,
-      var(--interactive-accent) 28%,
-      var(--background-modifier-border)
-    );
+    border: 1px solid
+      color-mix(
+        in srgb,
+        var(--interactive-accent) 28%,
+        var(--background-modifier-border)
+      );
   }
 
   .summary-row.day.goal-match .summary-duration {
     color: var(--text-normal);
   }
-
-  
 
   .summary-row.placeholder {
     color: var(--text-faint);
@@ -649,7 +686,8 @@
     width: calc(var(--p) * 100%);
     background: var(--interactive-accent);
     border-radius: 999px;
-    box-shadow: 0 0 10px color-mix(in srgb, var(--interactive-accent) 60%, transparent);
+    box-shadow: 0 0 10px
+      color-mix(in srgb, var(--interactive-accent) 60%, transparent);
   }
 
   .goal-bar.overflow::after {
@@ -660,11 +698,12 @@
     width: calc(var(--o) * 100%);
     background: color-mix(in srgb, var(--interactive-accent) 60%, black);
     border-radius: 999px;
-    box-shadow: 0 0 12px color-mix(
-      in srgb,
-      color-mix(in srgb, var(--interactive-accent) 60%, black) 70%,
-      transparent
-    );
+    box-shadow: 0 0 12px
+      color-mix(
+        in srgb,
+        color-mix(in srgb, var(--interactive-accent) 60%, black) 70%,
+        transparent
+      );
   }
 
   .outside-month {
