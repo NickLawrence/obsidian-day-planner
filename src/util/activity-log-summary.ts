@@ -1,6 +1,9 @@
 import type { Duration, Moment } from "moment";
 
-import { getActivityDisplayLabel, normalizeActivityName } from "./activity-definitions";
+import {
+  getActivityLabel,
+  normalizeActivityName,
+} from "./activity-definitions";
 import type { Activity } from "./props";
 
 export type ActivityDuration = {
@@ -32,10 +35,13 @@ export function getWeekRangeFor(date: Moment) {
   return { start, end };
 }
 
-function calculateActivityDurationsForRange(
+export function calculateActivityDurationsForRange(
   activities: Activity[],
   rangeStart: Moment,
   rangeEnd: Moment,
+  options?: {
+    getLabel?: (activityName: string, activityEntry: Activity) => string;
+  },
 ): ActivityDuration[] {
   const durationByNormalized = new Map<string, Duration>();
   const normalizedToLabel = new Map<string, string>();
@@ -46,18 +52,15 @@ function calculateActivityDurationsForRange(
     const normalizedName = normalizeActivityName(activity);
     const label =
       normalizedToLabel.get(normalizedName) ??
-      getActivityDisplayLabel(activity, activityEntry as Record<string, unknown>);
+      options?.getLabel?.(activity, activityEntry) ??
+      getActivityLabel(activity);
 
     if (!normalizedToLabel.has(normalizedName)) {
       normalizedToLabel.set(normalizedName, label);
     }
 
     log?.forEach(({ start, end }) => {
-      const startMoment = window.moment(
-        start,
-        window.moment.ISO_8601,
-        true,
-      );
+      const startMoment = window.moment(start, window.moment.ISO_8601, true);
 
       if (!startMoment.isValid()) {
         return;
