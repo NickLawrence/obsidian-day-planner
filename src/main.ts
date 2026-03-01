@@ -72,6 +72,8 @@ import {
 import type { RemoteTask } from "./task-types";
 import { createGetTasksApi } from "./tasks-plugin";
 import type { ObsidianContext, OnUpdateFn, PointerDateTime } from "./types";
+import { askForActivityAttributes } from "./ui/activity-attributes-modal";
+import { renderActivityGoalsCodeBlock } from "./ui/activity-goals-code-block";
 import { askForConfirmation } from "./ui/confirmation-modal";
 import { createEditorMenuCallback } from "./ui/editor-menu";
 import { useDateRanges } from "./ui/hooks/use-date-ranges";
@@ -80,28 +82,27 @@ import { mountStatusBarWidget } from "./ui/hooks/use-status-bar-widget";
 import { useTasks } from "./ui/hooks/use-tasks";
 import { useVisibleDays } from "./ui/hooks/use-visible-days";
 import { LogSummaryView } from "./ui/log-summary";
-import MultiDayView from "./ui/multi-day-view";
 import MonthlyView from "./ui/monthly-view";
+import MultiDayView from "./ui/multi-day-view";
 import { DayPlannerReleaseNotesView } from "./ui/release-notes";
 import { DayPlannerSettingsTab } from "./ui/settings-tab";
 import TimelineView from "./ui/timeline-view";
 import { createUndoNotice } from "./ui/undo-notice";
 import { upsertActivitiesBlock } from "./util/activities-file";
-import { createEnvironmentHooks } from "./util/create-environment-hooks";
-import { createRenderMarkdown } from "./util/create-render-markdown";
-import { createShowPreview } from "./util/create-show-preview";
-import { notifyAboutStartedTasks } from "./util/notify-about-started-tasks";
-import { startActivityLog } from "./util/props";
 import {
   buildActivityAttributeUpdate,
   getActivityAttributeFields,
   getActivityLabel,
 } from "./util/activity-definitions";
-import { askForActivityAttributes } from "./ui/activity-attributes-modal";
 import {
   createDayPlannerActivityApi,
   type DayPlannerActivityApi,
 } from "./util/activity-totals";
+import { createEnvironmentHooks } from "./util/create-environment-hooks";
+import { createRenderMarkdown } from "./util/create-render-markdown";
+import { createShowPreview } from "./util/create-show-preview";
+import { notifyAboutStartedTasks } from "./util/notify-about-started-tasks";
+import { startActivityLog } from "./util/props";
 
 export default class DayPlanner extends Plugin {
   settings!: () => DayPlannerSettings;
@@ -202,6 +203,16 @@ export default class DayPlanner extends Plugin {
     this.registerCommands();
     this.addRibbonIcons();
     this.addSettingTab(new DayPlannerSettingsTab(this, this.settingsStore));
+
+    this.registerMarkdownCodeBlockProcessor("activitygoals", (_, el, ctx) => {
+      renderActivityGoalsCodeBlock({
+        app: this.app,
+        el,
+        ctx,
+        periodicNotes: this.periodicNotes,
+        activityApi: this.api,
+      });
+    });
 
     await this.handleNewPluginVersion();
     await this.initTimelineLeafSilently();
