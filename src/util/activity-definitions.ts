@@ -58,6 +58,7 @@ const activityDefinitions: ActivityDefinition[] = [
     emoji: "🎮",
     attributes: {
       key: "game",
+      mainKey: "name",
       start: [{ key: "name", label: "Game", type: "text", required: true }],
       end: [],
     },
@@ -68,6 +69,7 @@ const activityDefinitions: ActivityDefinition[] = [
     emoji: "📺",
     attributes: {
       key: "movie",
+      mainKey: "name",
       start: [{ key: "name", label: "Movie", type: "text", required: true }],
       end: [],
     },
@@ -78,6 +80,7 @@ const activityDefinitions: ActivityDefinition[] = [
     emoji: "📺",
     attributes: {
       key: "tv",
+      mainKey: "name",
       start: [
         { key: "name", label: "Show", type: "text", required: true },
         { key: "episodes", label: "Episodes", type: "text", required: true }
@@ -91,6 +94,7 @@ const activityDefinitions: ActivityDefinition[] = [
     emoji: "📞",
     attributes: {
       key: "call",
+      mainKey: "with",
       start: [{ key: "with", label: "With", type: "text", required: true }],
       end: [],
     },
@@ -100,7 +104,8 @@ const activityDefinitions: ActivityDefinition[] = [
     label: "Light Work",
     emoji: "🔧",
     attributes: {
-      key: "deep work",
+      key: "light work",
+      mainKey: "project",
       start: [
         {
           key: "project",
@@ -118,6 +123,7 @@ const activityDefinitions: ActivityDefinition[] = [
     emoji: "🛠️",
     attributes: {
       key: "deep work",
+      mainKey: "project",
       start: [
         {
           key: "project",

@@ -42,7 +42,21 @@
       return undefined;
     }
 
-    return m.fromDiff(latestEnd, currentTimeSignal.current).humanize();
+    const now = window.moment(currentTimeSignal.current);
+    const d = window.moment.duration(now.diff(latestEnd));
+
+    // total whole minutes elapsed
+    const totalMinutes = Math.max(0, Math.floor(d.asMinutes()));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    const parts: string[] = [];
+    if (hours > 0) parts.push(`${hours} hour${hours === 1 ? "" : "s"}`);
+    // show minutes if nonzero OR if there are no hours (so you don't get an empty string)
+    if (minutes > 0 || hours === 0)
+      parts.push(`${minutes} minute${minutes === 1 ? "" : "s"}`);
+
+    return parts.join(" ");
   });
 </script>
 
