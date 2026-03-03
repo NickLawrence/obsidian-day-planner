@@ -59,6 +59,12 @@ import { type AppDispatch, createReactor } from "./redux/store";
 import { createUseSelector } from "./redux/use-selector";
 import { DataviewFacade } from "./service/dataview-facade";
 import { TransactionWriter } from "./service/diff-writer";
+import {
+  completeFitbitLinking,
+  shouldAutoSyncFitbit,
+  startFitbitAuthorization,
+  syncFitbitData,
+} from "./service/fitbit";
 import { ListPropsParser } from "./service/list-props-parser";
 import { PeriodicNotes } from "./service/periodic-notes";
 import { STaskEditor } from "./service/stask-editor";
@@ -114,6 +120,50 @@ export default class DayPlanner extends Plugin {
   private vaultFacade!: VaultFacade;
   private transactionWriter!: TransactionWriter;
   public api!: DayPlannerActivityApi;
+
+  beginFitbitLink = async () => {
+    await startFitbitAuthorization({
+      settings: this.settings(),
+      onSettingsUpdate: (patch) =>
+        this.settingsStore.update((s) => ({ ...s, ...patch })),
+    });
+  };
+
+  completeFitbitLink = async (code: string) => {
+    const patch = await completeFitbitLinking({
+      settings: this.settings(),
+      code,
+    });
+
+    this.settingsStore.update((previous) => ({ ...previous, ...patch }));
+  };
+
+  unlinkFitbit = () => {
+    this.settingsStore.update((previous) => ({
+      ...previous,
+      fitbitCodeVerifier: "",
+      fitbitAccessToken: "",
+      fitbitRefreshToken: "",
+      fitbitTokenExpiresAt: 0,
+      fitbitUserId: "",
+      fitbitLastSyncAt: 0,
+      fitbitLastDateSynced: "",
+    }));
+  };
+
+  reSyncFitbit = async (force = true) => {
+    const patch = await syncFitbitData({
+      vault: this.app.vault,
+      settings: this.settings(),
+      force,
+    });
+
+    if (!patch) {
+      return;
+    }
+
+    this.settingsStore.update((previous) => ({ ...previous, ...patch }));
+  };
 
   async onload() {
     const initialPluginData: PluginData = {
@@ -610,6 +660,12 @@ export default class DayPlanner extends Plugin {
     this.registerInterval(
       window.setInterval(() => {
         dispatch(icalRefreshRequested());
+
+        if (shouldAutoSyncFitbit(this.settings())) {
+          this.reSyncFitbit(false).catch((error: unknown) => {
+            console.error("Fitbit auto-sync failed", error);
+          });
+        }
       }, icalRefreshIntervalMillis),
     );
 
@@ -711,6 +767,9 @@ export default class DayPlanner extends Plugin {
       showPreview: createShowPreview(this.app),
       isModPressed,
       reSync: () => dispatch(icalRefreshRequested()),
+      reSyncFitbit: () => {
+        void this.reSyncFitbit();
+      },
       isOnline,
       isDarkMode,
       settings,

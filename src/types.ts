@@ -57,6 +57,7 @@ export interface ObsidianContext {
   showPreview: ShowPreview;
   isModPressed: Readable<boolean>;
   reSync: () => void;
+  reSyncFitbit: () => void;
   isOnline: Readable<boolean>;
   isDarkMode: { current: boolean };
   settings: Writable<DayPlannerSettings>;
