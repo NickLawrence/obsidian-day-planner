@@ -67,6 +67,15 @@ export interface DayPlannerSettings {
   firstDayOfWeek: (typeof firstDaysOfWeek)[number];
   multiDayRange: "full-week" | "work-week" | "3-days";
   timelineColumns: TimelineColumns;
+  fitbitClientId: string;
+  fitbitClientSecret: string;
+  fitbitCodeVerifier: string;
+  fitbitAccessToken: string;
+  fitbitRefreshToken: string;
+  fitbitTokenExpiresAt: number;
+  fitbitUserId: string;
+  fitbitLastSyncAt: number;
+  fitbitLastDateSynced: string;
 }
 
 export interface Cache {
@@ -115,6 +124,15 @@ export const defaultSettings: DayPlannerSettings = {
   showActiveClocks: false,
   showTimelineInSidebar: true,
   timelineColumns: { planner: true, timeTracker: false },
+  fitbitClientId: "",
+  fitbitClientSecret: "",
+  fitbitCodeVerifier: "",
+  fitbitAccessToken: "",
+  fitbitRefreshToken: "",
+  fitbitTokenExpiresAt: 0,
+  fitbitUserId: "",
+  fitbitLastSyncAt: 0,
+  fitbitLastDateSynced: "",
 };
 
 export const defaultSettingsForTests = {

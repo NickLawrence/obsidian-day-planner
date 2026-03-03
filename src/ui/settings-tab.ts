@@ -1,4 +1,5 @@
 import { produce } from "immer";
+import { Notice } from "obsidian";
 import { PluginSettingTab, Setting } from "obsidian";
 import type { Writable } from "svelte/store";
 import { isOneOf } from "typed-assert";
@@ -12,6 +13,8 @@ import {
 } from "../settings";
 
 export class DayPlannerSettingsTab extends PluginSettingTab {
+  private fitbitAuthorizationCode = "";
+
   constructor(
     private readonly plugin: DayPlanner,
     private readonly settingsStore: Writable<DayPlannerSettings>,
@@ -282,6 +285,115 @@ export class DayPlannerSettingsTab extends PluginSettingTab {
         this.display();
       }),
     );
+
+    containerEl.createEl("h2", { text: "Fitbit" });
+
+    new Setting(containerEl)
+      .setName("Fitbit client ID")
+      .setDesc(
+        "From your Fitbit app settings (OAuth 2.0 Application Type: Personal).",
+      )
+      .addText((el) =>
+        el
+          .setPlaceholder("Fitbit client ID")
+          .setValue(this.plugin.settings().fitbitClientId)
+          .onChange((value: string) => {
+            this.update({ fitbitClientId: value.trim() });
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("Fitbit client secret")
+      .setDesc("Required by Fitbit token exchange for many app configurations.")
+      .addText((el) =>
+        el
+          .setPlaceholder("Fitbit client secret")
+          .setValue(this.plugin.settings().fitbitClientSecret)
+          .onChange((value: string) => {
+            this.update({ fitbitClientSecret: value.trim() });
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("Link Fitbit account")
+      .setDesc(
+        "Click to authorize with Fitbit. After approving, copy the `code` from the redirect URL and paste it below.",
+      )
+      .addButton((button) =>
+        button.setButtonText("Start Fitbit authorization").onClick(async () => {
+          await this.plugin.beginFitbitLink();
+        }),
+      );
+
+    new Setting(containerEl)
+      .setName("Authorization code")
+      .setDesc(
+        "Paste the `code` query parameter value from Fitbit's redirect URL.",
+      )
+      .addText((text) =>
+        text
+          .setPlaceholder("Authorization code")
+          .setValue(this.fitbitAuthorizationCode)
+          .onChange((value) => {
+            this.fitbitAuthorizationCode = value.trim();
+          }),
+      )
+      .addButton((button) =>
+        button.setButtonText("Complete linking").onClick(async () => {
+          if (!this.fitbitAuthorizationCode) {
+            new Notice("Paste a Fitbit authorization code first.");
+
+            return;
+          }
+
+          try {
+            await this.plugin.completeFitbitLink(this.fitbitAuthorizationCode);
+            this.fitbitAuthorizationCode = "";
+            new Notice("Fitbit account linked.");
+            this.display();
+          } catch (error) {
+            console.error(error);
+            new Notice(
+              "Failed to link Fitbit account. Check client ID, client secret, and authorization code.",
+            );
+          }
+        }),
+      );
+
+    const isLinked = Boolean(this.plugin.settings().fitbitRefreshToken);
+
+    new Setting(containerEl)
+      .setName("Linked Fitbit account")
+      .setDesc(
+        isLinked
+          ? `Linked user: ${this.plugin.settings().fitbitUserId || "(unknown)"}`
+          : "No linked Fitbit account.",
+      )
+      .addButton((button) =>
+        button
+          .setButtonText("Re-sync Fitbit now")
+          .setDisabled(!isLinked)
+          .onClick(async () => {
+            try {
+              await this.plugin.reSyncFitbit();
+              new Notice("Fitbit data synced to _Data/Fitbit/.");
+            } catch (error) {
+              console.error(error);
+              new Notice("Fitbit sync failed.");
+            }
+          }),
+      )
+      .addButton((button) =>
+        button
+          .setWarning()
+          .setButtonText("Unlink Fitbit")
+          .setDisabled(!isLinked)
+          .onClick(() => {
+            this.plugin.unlinkFitbit();
+            new Notice("Fitbit account unlinked.");
+            this.display();
+          }),
+      );
 
     containerEl.createEl("h2", { text: "Date & Time Formats" });
 

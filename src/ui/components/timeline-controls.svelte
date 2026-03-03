@@ -24,6 +24,7 @@
     initWeeklyView,
     dataviewLoaded,
     reSync,
+    reSyncFitbit,
     periodicNotes,
   } = getObsidianContext();
   const dateRange = getDateRangeContext();
@@ -66,6 +67,13 @@
         .setTitle("Re-sync internet calendars")
         .setIcon("sync")
         .onClick(reSync),
+    );
+
+    menu.addItem((item) =>
+      item
+        .setTitle("Re-sync Fitbit")
+        .setIcon("heart-pulse")
+        .onClick(reSyncFitbit),
     );
 
     menu.addItem((item) =>
