@@ -127,6 +127,23 @@ function mergeActivityDetails(
   }
 
   return Object.entries(updates).reduce<Activity>((result, [key, value]) => {
+    if (key === "notes" && typeof value === "string") {
+      const trimmedValue = value.trim();
+
+      if (!trimmedValue) {
+        return result;
+      }
+
+      return {
+        ...result,
+        notes:
+          typeof result.notes === "string" && result.notes.length > 0
+            ? `${result.notes}
+${trimmedValue}`
+            : trimmedValue,
+      };
+    }
+
     if (value && typeof value === "object" && !Array.isArray(value)) {
       const existing = result[key];
       if (existing && typeof existing === "object" && !Array.isArray(existing)) {
