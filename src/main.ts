@@ -291,7 +291,12 @@ export default class DayPlanner extends Plugin {
   }
 
   private startActivity = async () => {
-    const activityName = await getActivityNameFromUser(this.app);
+    const activitySelection = await getActivityNameFromUser(
+      this.app,
+      this.api.getAllActivities(),
+    );
+
+    const activityName = activitySelection?.activityName;
 
     if (!activityName) {
       return;
@@ -312,6 +317,7 @@ export default class DayPlanner extends Plugin {
       const values = await askForActivityAttributes(this.app, {
         title: `Start ${getActivityLabel(trimmedName)}`,
         fields: startFields,
+        initialValues: activitySelection?.initialValues,
       });
 
       if (!values) {
