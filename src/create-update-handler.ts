@@ -37,6 +37,49 @@ export type ActivitySelection = {
   initialValues?: Record<string, string | number | undefined>;
 };
 
+function getActivityTimestamp(value?: string) {
+  if (!value) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  const timestamp = Date.parse(value);
+
+  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
+}
+
+function getActivityRecencyScore(activity: Activity) {
+  const log = activity.log ?? [];
+
+  if (log.length === 0) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  return log.reduce((latest, entry) => {
+    return Math.max(
+      latest,
+      getActivityTimestamp(entry.end),
+      getActivityTimestamp(entry.start),
+    );
+  }, Number.NEGATIVE_INFINITY);
+}
+
+function getActivitiesByRecency(activities: Activity[]) {
+  return activities
+    .map((activity, index) => ({
+      activity,
+      recency: getActivityRecencyScore(activity),
+      index,
+    }))
+    .sort((a, b) => {
+      if (a.recency !== b.recency) {
+        return b.recency - a.recency;
+      }
+
+      return b.index - a.index;
+    })
+    .map(({ activity }) => activity);
+}
+
 function getRecentMainKeyValues(activityName: string, activities: Activity[]) {
   const definition = getActivityDefinition(activityName);
   const mainKey = definition?.attributes?.mainKey;
@@ -49,8 +92,9 @@ function getRecentMainKeyValues(activityName: string, activities: Activity[]) {
   const uniqueValues = new Set<string | number>();
   const values: Array<string | number> = [];
 
-  for (let index = activities.length - 1; index >= 0; index -= 1) {
-    const activity = activities[index];
+  const sortedActivities = getActivitiesByRecency(activities);
+
+  for (const activity of sortedActivities) {
 
     if (normalizeActivityName(activity.activity) !== normalizedActivityName) {
       continue;
@@ -97,12 +141,9 @@ function getSuggestedRangeStartValues(
     return initialValues;
   }
 
-  const history = activities
-    .filter(
-      (activity) =>
-        normalizeActivityName(activity.activity) === normalizedActivityName,
-    )
-    .reverse();
+  const history = getActivitiesByRecency(activities).filter(
+    (activity) => normalizeActivityName(activity.activity) === normalizedActivityName,
+  );
 
   const updates: Record<string, string | number | undefined> = {
     ...initialValues,

@@ -46,4 +46,28 @@ describe("getActivitySuggestionsWithHistory", () => {
       "start-page": 105,
     });
   });
+
+  it("uses the most recent range end value when suggesting next start", () => {
+    const suggestions = getActivitySuggestionsWithHistory([
+      createActivity("read", {
+        log: [{ start: "2025-01-03T08:00:00.000Z", end: "2025-01-03T09:00:00.000Z" }],
+        read: { book: "War and Peace", "start-page": 200, "end-page": 220 },
+      }),
+      createActivity("read", {
+        log: [{ start: "2025-01-01T08:00:00.000Z", end: "2025-01-01T09:00:00.000Z" }],
+        read: { book: "War and Peace", "start-page": 90, "end-page": 104 },
+      }),
+    ]);
+
+    const readSuggestion = suggestions.find(
+      ({ displayText }) =>
+        displayText === "📖 Read - War and Peace - Start page: 221",
+    );
+
+    expect(readSuggestion?.initialValues).toEqual({
+      book: "War and Peace",
+      "start-page": 221,
+    });
+  });
+
 });
