@@ -37,7 +37,6 @@ export type ActivitySelection = {
   initialValues?: Record<string, string | number | undefined>;
 };
 
-
 function getActivityTimestamp(value?: string) {
   if (!value) {
     return Number.NEGATIVE_INFINITY;
