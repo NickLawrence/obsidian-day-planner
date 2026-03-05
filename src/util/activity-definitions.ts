@@ -12,6 +12,11 @@ export type ActivityAttributesDefinition = {
   mainKey?: string;
   start: ActivityAttributeField[];
   end: ActivityAttributeField[];
+  ranges?: {
+    key: string;
+    start: string;
+    end: string;
+  }[];
 };
 
 export type ActivityDefinition = {
@@ -48,6 +53,13 @@ const activityDefinitions: ActivityDefinition[] = [
           type: "number",
           required: true,
           min: 1,
+        },
+      ],
+      ranges: [
+        {
+          key: "pages",
+          start: "start-page",
+          end: "end-page",
         },
       ],
     },

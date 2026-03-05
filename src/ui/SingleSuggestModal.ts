@@ -1,8 +1,11 @@
 import { App, SuggestModal } from "obsidian";
 
-type Suggestion = { text: string; displayText?: string };
+export type BaseSuggestion = {
+  text: string;
+  displayText?: string;
+};
 
-export class SingleSuggestModal extends SuggestModal<Suggestion> {
+export class SingleSuggestModal<Suggestion extends BaseSuggestion> extends SuggestModal<Suggestion> {
   constructor(
     private readonly props: {
       app: App;
