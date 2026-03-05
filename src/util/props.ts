@@ -327,6 +327,15 @@ export function cancelOpenClock(props: Props, taskId: string): Props {
     return activity.taskIds.includes(taskId) && activity.log?.some((it) => !it.end);
   });
 
+  return cancelOpenClockByActivityIndex(props, activityWithOpenClockIndex);
+}
+
+export function cancelOpenClockByActivityIndex(
+  props: Props,
+  activityWithOpenClockIndex: number,
+): Props {
+  const activities = getActivitiesCopy(props);
+
   if (activityWithOpenClockIndex === -1) {
     throw new Error("There is no open clock");
   }

@@ -20,6 +20,7 @@ import {
   addTaskToOpenActivity,
   appendNoteToActivity,
   cancelOpenClock,
+  cancelOpenClockByActivityIndex,
   clockOut,
   createProp,
   type Props,
@@ -211,11 +212,23 @@ export class STaskEditor {
   });
 
   cancelClockForTask = withNotice(async (task: LocalTask) => {
-    isNotVoid(task.taskId, "Cannot update clock for a task without an ID");
+    await this.updateClockPropsForLocalTask(task, (props, context) => {
+      const activityIndexByClock = this.findActivityIndexForClockActivity(
+        props,
+        context.clockActivity,
+      );
+      const activityIndexByTaskId =
+        activityIndexByClock === -1
+          ? this.findOpenTaskActivity(props, context.taskId)
+          : activityIndexByClock;
 
-    await this.updateClockPropsForLocalTask(task, (props, context) =>
-      cancelOpenClock(props, context.taskId as string),
-    );
+      const activityIndex =
+        activityIndexByTaskId === -1
+          ? this.findOpenActivityByName(props, context.activityName)
+          : activityIndexByTaskId;
+
+      return cancelOpenClockByActivityIndex(props, activityIndex);
+    });
   });
 
 

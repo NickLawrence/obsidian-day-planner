@@ -51,6 +51,7 @@
   let weekLabel = $state("");
   let isWeeklyNotesEnabled = $state(true);
   let dayColors = $state<DayColorInfo[]>([]);
+  let legendDays = $state<DayColorInfo[]>([]);
 
   let refreshTimer: ReturnType<typeof setInterval> | undefined;
   let offIndexReady: unknown;
@@ -71,13 +72,14 @@
     return `hsl(${Math.round((dayIndex * 360) / 7)} 72% 62%)`;
   }
 
-  function getDayColors(weekStart: import("moment").Moment): DayColorInfo[] {
+  function getDayColors(weekStart: import("moment").Moment) {
     const dailyAccentPlugin = app.plugins?.getPlugin?.(
       "obsidian-daily-accent",
     ) as { api?: DailyAccentApi } | undefined;
     const accentApi = dailyAccentPlugin?.api;
+    const isDailyAccentPluginActive = Boolean(dailyAccentPlugin);
 
-    return Array.from({ length: 7 }, (_, dayIndex) => {
+    const colors = Array.from({ length: 7 }, (_, dayIndex) => {
       const day = weekStart.clone().add(dayIndex, "day");
       const dayKey = day.format("YYYY-MM-DD");
       const accentInfo = accentApi?.getAccentForDayKey?.(dayKey);
@@ -88,6 +90,25 @@
         color: accentInfo?.css ?? getFallbackDayColor(dayIndex),
       };
     });
+
+    return {
+      colors,
+      isDailyAccentPluginActive,
+    };
+  }
+
+  function getLegendDays(
+    colors: DayColorInfo[],
+    isDailyAccentPluginActive: boolean,
+    weekStart: import("moment").Moment,
+    now: import("moment").Moment,
+  ) {
+    if (!isDailyAccentPluginActive) {
+      return colors;
+    }
+
+    const todayIndex = now.clone().startOf("day").diff(weekStart, "days");
+    return colors.filter((_, dayIndex) => dayIndex <= todayIndex);
   }
 
   function getDailyDurationsForWeek(
@@ -213,7 +234,14 @@
 
     const weekNote = periodicNotes.getWeeklyNote(weekStart);
     const goals = await getGoalsForWeek(weekNote);
-    dayColors = getDayColors(weekStart);
+    const { colors, isDailyAccentPluginActive } = getDayColors(weekStart);
+    dayColors = colors;
+    legendDays = getLegendDays(
+      colors,
+      isDailyAccentPluginActive,
+      weekStart,
+      now,
+    );
 
     const allActivities = activityApi.getAllActivities();
     const dailyDurationsByActivity = getDailyDurationsForWeek(
@@ -339,7 +367,7 @@
     </div>
 
     <div class="legend" aria-label="Weekly day color legend">
-      {#each dayColors as day}
+      {#each legendDays as day}
         <div class="legend-item">
           <span style={`--legend-color:${day.color};`} class="legend-swatch"
           ></span>
