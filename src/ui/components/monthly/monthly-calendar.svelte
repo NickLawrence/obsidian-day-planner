@@ -19,6 +19,12 @@
     type ActivityGoal,
   } from "../../../util/weekly-activity-goals";
 
+  type DailyAccentApi = {
+    getAccentForDayKey?: (dayKey: string) => {
+      css?: string;
+    };
+  };
+
   let offIndexReady: any;
   let offMetadataChange: any;
 
@@ -68,6 +74,27 @@
   const weeks = derived(currentMonth, ($month) => buildWeeks($month));
   const weeklyGoals = writable(new Map<number, ActivityGoal[]>());
 
+  function getDailyAccentColor(day: Moment) {
+    const app = (window as any).app;
+    const dailyAccentPlugin = app?.plugins?.getPlugin?.(
+      "obsidian-daily-accent",
+    ) as { api?: DailyAccentApi } | undefined;
+
+    if (!dailyAccentPlugin) {
+      return undefined;
+    }
+
+    if (day.isAfter(window.moment(), "day")) {
+      return undefined;
+    }
+
+    const accentInfo = dailyAccentPlugin.api?.getAccentForDayKey?.(
+      day.format("YYYY-MM-DD"),
+    );
+
+    return accentInfo?.css;
+  }
+
   const calendar = derived(
     [weeks, activities, currentMonth, weeklyGoals],
     ([$weeks, $activities, $month, $weeklyGoals]) =>
@@ -99,6 +126,7 @@
 
           return {
             date,
+            accentColor: getDailyAccentColor(date),
             inCurrentMonth: date.isSame($month, "month"),
             isToday: date.isSame(window.moment(), "day"),
             totals: calculateDailyActivityDurations($activities, date),
@@ -391,6 +419,13 @@
             handleKeyboardOpen(event, () => openDailyNote(day.date))}
         >
           <div class="cell-header day-header">
+            {#if day.accentColor}
+              <span
+                class="daily-accent-dot"
+                style={`--daily-accent-color: ${day.accentColor};`}
+                aria-hidden="true"
+              ></span>
+            {/if}
             <span class="day-number">{day.date.date()}</span>
           </div>
           <div class="summary-list">
@@ -589,6 +624,28 @@
 
     background: var(--calendar-cell-header-bg, var(--background-secondary));
     border-bottom: 1px solid var(--background-modifier-border);
+  }
+
+
+  .day-header {
+    justify-content: center;
+    position: relative;
+  }
+
+  .daily-accent-dot {
+    position: absolute;
+    inset-inline-start: var(--size-4-2);
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1.25em;
+    height: 1.25em;
+    border-radius: 999px;
+    background: var(--daily-accent-color);
+    border: 1px solid color-mix(
+      in srgb,
+      var(--daily-accent-color) 80%,
+      var(--background-modifier-border)
+    );
   }
 
   .day-number {
