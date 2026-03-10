@@ -3,10 +3,12 @@ import { describe, expect, test } from "vitest";
 import type { PathToListProps } from "../src/redux/dataview/dataview-slice";
 import { calculateDailyActivityDurations } from "../src/util/activity-log-summary";
 import {
+  createDayPlannerActivityApi,
   filterActivitiesByMainKey,
   getAllActivitiesFromListProps,
   getActivityTotalsForRange,
 } from "../src/util/activity-totals";
+import { readable } from "svelte/store";
 import type { Activity } from "../src/util/props";
 
 describe("activity totals utilities", () => {
@@ -93,5 +95,19 @@ describe("activity totals utilities", () => {
 
     expect(activities).toHaveLength(1);
     expect(filtered).toHaveLength(1);
+  });
+
+  test("api exposes activity definitions", () => {
+    const api = createDayPlannerActivityApi(readable({}));
+
+    const definitions = api.getActivityDefinitions();
+    const read = definitions.find((it) => it.name === "read");
+
+    expect(definitions.length).toBeGreaterThan(0);
+    expect(read?.attributes?.ranges?.[0]).toEqual({
+      key: "pages",
+      start: "start-page",
+      end: "end-page",
+    });
   });
 });

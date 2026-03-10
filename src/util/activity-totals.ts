@@ -3,7 +3,9 @@ import { get, type Readable } from "svelte/store";
 
 import type { PathToListProps } from "../redux/dataview/dataview-slice";
 import {
+  getActivityDefinitions,
   getActivityAttributeValues,
+  type ActivityDefinition,
   getActivityDefinition,
   getActivityLabel,
   normalizeActivityName,
@@ -22,6 +24,7 @@ export type ActivityTotalsFilter = {
 
 export type DayPlannerActivityApi = {
   getAllActivities: () => Activity[];
+  getActivityDefinitions: () => ActivityDefinition[];
   getTotalsForRange: (
     rangeStart: Moment,
     rangeEnd: Moment,
@@ -98,6 +101,7 @@ export function createDayPlannerActivityApi(
 ): DayPlannerActivityApi {
   return {
     getAllActivities: () => getAllActivitiesFromListProps(get(listPropsStore)),
+    getActivityDefinitions: () => getActivityDefinitions(),
     getTotalsForRange: (rangeStart, rangeEnd, filter) =>
       getActivityTotalsForRange(
         getAllActivitiesFromListProps(get(listPropsStore)),
