@@ -34,6 +34,7 @@ import {
   qualityRatingField,
 } from "../util/activity-definitions";
 import { askForActivityAttributes } from "../ui/activity-attributes-modal";
+import { askForConfirmation } from "../ui/confirmation-modal";
 import { propRegexp } from "../regexp";
 import { extractPlannerTaskId, plannerTaskIdKey } from "../util/task-id";
 import { appendText, removeTimestampFromStart } from "../util/task-utils";
@@ -171,6 +172,17 @@ export class STaskEditor {
   });
 
   cancelClockUnderCursor = withNotice(async () => {
+    const shouldCancel = await askForConfirmation({
+      app: this.app,
+      title: "Cancel clock",
+      text: "Are you sure you want to cancel this clock?",
+      cta: "Cancel clock",
+    });
+
+    if (!shouldCancel) {
+      return;
+    }
+
     const { sTask } = this.getSTaskUnderCursorFromLastView();
 
     await this.updateClockPropsForTask(sTask, (props, context) =>
@@ -212,6 +224,17 @@ export class STaskEditor {
   });
 
   cancelClockForTask = withNotice(async (task: LocalTask) => {
+    const shouldCancel = await askForConfirmation({
+      app: this.app,
+      title: "Cancel clock",
+      text: "Are you sure you want to cancel this clock?",
+      cta: "Cancel clock",
+    });
+
+    if (!shouldCancel) {
+      return;
+    }
+
     await this.updateClockPropsForLocalTask(task, (props, context) => {
       const activityIndexByClock = this.findActivityIndexForClockActivity(
         props,
