@@ -84,6 +84,8 @@ export function useTasks(props: {
           .map((activity) => ({
             activity: activity.activity,
             title: getActivityDisplayLabel(activity.activity, activity),
+            notes: activity.notes,
+            quality: activity.quality,
             log: activity.log as LogEntry[],
             taskId: activity.taskIds?.[0],
             location: {
@@ -194,14 +196,15 @@ export function useTasks(props: {
               clockMoments,
             }));
         })
-        .map(({ activity, clockMoments }) =>
-          createClockTaskFromActivity({
+        .map(({ activity, clockMoments }) => ({
+          ...createClockTaskFromActivity({
             activity,
             clockMoments,
             defaultDurationMinutes,
             tasksById: $tasksById,
           }),
-        ),
+          clockActivity: activity,
+        })),
   );
 
   const combinedClocks = derived(

@@ -88,6 +88,14 @@ function getRecentMainKeyValues(activityName: string, activities: Activity[]) {
     return [];
   }
 
+  const mainKeyField = getActivityAttributeFields(activityName, "start").find(
+    ({ key }) => key === mainKey,
+  );
+
+  if (mainKeyField?.suggestHistory === false) {
+    return [];
+  }
+
   const normalizedActivityName = normalizeActivityName(activityName);
   const uniqueValues = new Set<string | number>();
   const values: Array<string | number> = [];
@@ -95,7 +103,6 @@ function getRecentMainKeyValues(activityName: string, activities: Activity[]) {
   const sortedActivities = getActivitiesByRecency(activities);
 
   for (const activity of sortedActivities) {
-
     if (normalizeActivityName(activity.activity) !== normalizedActivityName) {
       continue;
     }

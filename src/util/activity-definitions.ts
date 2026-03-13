@@ -2,6 +2,7 @@ export type ActivityAttributeField = {
   key: string;
   label: string;
   type: "text" | "number" | "textarea";
+  suggestHistory?: boolean;
   required?: boolean;
   min?: number;
   max?: number;
@@ -82,7 +83,15 @@ const activityDefinitions: ActivityDefinition[] = [
     attributes: {
       key: "movie",
       mainKey: "name",
-      start: [{ key: "name", label: "Movie", type: "text", required: true }],
+      start: [
+        {
+          key: "name",
+          label: "Movie",
+          type: "text",
+          required: true,
+          suggestHistory: false,
+        },
+      ],
       end: [],
     },
   },
@@ -96,6 +105,25 @@ const activityDefinitions: ActivityDefinition[] = [
       start: [
         { key: "name", label: "Show", type: "text", required: true },
         { key: "episodes", label: "Episodes", type: "text", required: true }
+      ],
+      end: [],
+    },
+  },
+  {
+    name: "theater",
+    label: "Theater",
+    emoji: "📽️",
+    attributes: {
+      key: "theater",
+      mainKey: "name",
+      start: [
+        {
+          key: "name",
+          label: "Movie",
+          type: "text",
+          required: true,
+          suggestHistory: false,
+        },
       ],
       end: [],
     },

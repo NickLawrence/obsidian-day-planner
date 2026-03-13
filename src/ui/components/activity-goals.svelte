@@ -388,10 +388,10 @@
 
     background: color-mix(
       in srgb,
-      var(--background-primary) 88%,
-      var(--interactive-accent) 12%
+      var(--background-primary) 98%,
+      var(--interactive-accent) 2%
     );
-    border: 1px solid var(--background-modifier-border);
+    border: 1px solid var(--background-modifier);
     border-radius: var(--radius-m);
   }
 
@@ -424,8 +424,8 @@
 
     background: color-mix(
       in srgb,
-      var(--background-secondary) 92%,
-      var(--interactive-accent) 8%
+      var(--background-secondary) 95%,
+      var(--interactive-accent) 5%
     );
     border: 1px solid var(--background-modifier-border);
     border-radius: var(--radius-m);
@@ -441,11 +441,11 @@
     border-radius: var(--radius-m);
     background: color-mix(
       in srgb,
-      var(--background-modifier-border) 78%,
-      white
+      var(--background-modifier-border) 60%,
+      black
     );
     opacity: 0.86;
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, white 36%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, black 36%, transparent);
   }
 
   .emoji {

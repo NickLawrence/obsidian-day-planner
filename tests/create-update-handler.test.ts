@@ -30,6 +30,21 @@ describe("getActivitySuggestionsWithHistory", () => {
     ]);
   });
 
+  it("skips mainKey history suggestions when suggestHistory is false", () => {
+    const suggestions = getActivitySuggestionsWithHistory([
+      createActivity("movie", { movie: { name: "Dune" } }),
+      createActivity("movie", { movie: { name: "Arrival" } }),
+    ]);
+
+    const movieSuggestions = suggestions.filter(
+      ({ activityName }) => activityName === "movie",
+    );
+
+    expect(movieSuggestions.map(({ displayText }) => displayText)).toEqual([
+      "📺 Movie",
+    ]);
+  });
+
   it("adds next range start value for read suggestions", () => {
     const suggestions = getActivitySuggestionsWithHistory([
       createActivity("read", {
