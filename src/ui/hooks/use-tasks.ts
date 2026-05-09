@@ -133,32 +133,33 @@ export function useTasks(props: {
     [activitiesWithLogs, currentTime, tasksById],
     ([$activitiesWithLogs, $currentTime, $tasksById]) =>
       $activitiesWithLogs
-        .flatMap((activity) => {
-          return activity.log
+        .flatMap((activity) =>
+          activity.log
             .filter(({ end }) => typeof end === "undefined")
-            .flatMap(({ start }) => {
-              const parsedStart = window.moment(
-                start,
-                window.moment.ISO_8601,
-                true,
-              );
-
-              return splitMultiday(parsedStart, $currentTime);
-            })
-            .map((clockMoments) => ({
+            .map(({ start }) => ({
+              activity,
+              start,
+              clockMoments: [
+                window.moment(start, window.moment.ISO_8601, true),
+                $currentTime.clone(),
+              ] as const,
+            })),
+        )
+        .filter(({ clockMoments: [start] }) => start.isValid())
+        .map(({ activity, start, clockMoments }) => ({
+          key: `${activity.activity}-${start}`,
+          task: {
+            ...createClockTaskFromActivity({
               activity,
               clockMoments,
-            }));
-        })
-        .map(({ activity, clockMoments }) => ({
-          ...createClockTaskFromActivity({
-            activity,
-            clockMoments,
-            tasksById: $tasksById,
-            defaultDurationMinutes,
-          }),
-          clockActivity: activity,
-        })),
+              tasksById: $tasksById,
+              defaultDurationMinutes,
+            }),
+            clockActivity: activity,
+          },
+        }))
+        .filter(uniqBy(({ key }) => key))
+        .map(({ task }) => task),
   );
 
   const truncatedTasksWithActiveClockProps = derived(

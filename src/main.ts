@@ -80,6 +80,7 @@ import { createGetTasksApi } from "./tasks-plugin";
 import type { ObsidianContext, OnUpdateFn, PointerDateTime } from "./types";
 import { askForActivityAttributes } from "./ui/activity-attributes-modal";
 import { renderActivityGoalsCodeBlock } from "./ui/activity-goals-code-block";
+import { renderActivityPlanCodeBlock } from "./ui/activity-plan-code-block";
 import { askForConfirmation } from "./ui/confirmation-modal";
 import { createEditorMenuCallback } from "./ui/editor-menu";
 import { useDateRanges } from "./ui/hooks/use-date-ranges";
@@ -261,6 +262,13 @@ export default class DayPlanner extends Plugin {
         ctx,
         periodicNotes: this.periodicNotes,
         activityApi: this.api,
+      });
+    });
+
+    this.registerMarkdownCodeBlockProcessor("activityplan", (_, el, ctx) => {
+      renderActivityPlanCodeBlock({
+        el,
+        ctx,
       });
     });
 
