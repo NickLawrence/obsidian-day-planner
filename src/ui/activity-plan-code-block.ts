@@ -20,16 +20,22 @@ class ActivityPlanChild extends MarkdownRenderChild {
 }
 
 export function renderActivityPlanCodeBlock(props: {
+  app: import("obsidian").App;
   el: HTMLElement;
   ctx: MarkdownPostProcessorContext;
+  periodicNotes: import("../service/periodic-notes").PeriodicNotes;
 }) {
-  const { el, ctx } = props;
+  const { app, el, ctx, periodicNotes } = props;
 
   el.empty();
   el.addClass("day-planner-activity-plan-code-block");
 
   const component = mount(ActivityPlan as never, {
     target: el,
+    props: {
+      app,
+      periodicNotes,
+    },
   });
 
   ctx.addChild(

@@ -20,19 +20,30 @@ export type ActivityAttributesDefinition = {
   }[];
 };
 
+export type ActivityPlanDefinition = {
+  defaultHours: number;
+  maxHours?: number;
+  intervalMinutes?: number;
+};
+
 export type ActivityDefinition = {
   name: string;
   label: string;
   emoji?: string;
   attributes?: ActivityAttributesDefinition;
+  plan?: ActivityPlanDefinition;
 };
 
-export type ActivitySuggestion = Pick<ActivityDefinition, "name" | "label" | "emoji">;
+export type ActivitySuggestion = Pick<
+  ActivityDefinition,
+  "name" | "label" | "emoji"
+>;
 
 const activityDefinitions: ActivityDefinition[] = [
   {
     name: "read",
     label: "Read",
+    plan: { defaultHours: 5 },
     emoji: "📖",
     attributes: {
       key: "read",
@@ -68,6 +79,7 @@ const activityDefinitions: ActivityDefinition[] = [
   {
     name: "game",
     label: "Game",
+    plan: { defaultHours: 15 },
     emoji: "🎮",
     attributes: {
       key: "game",
@@ -104,7 +116,7 @@ const activityDefinitions: ActivityDefinition[] = [
       mainKey: "name",
       start: [
         { key: "name", label: "Show", type: "text", required: true },
-        { key: "episodes", label: "Episodes", type: "text", required: true }
+        { key: "episodes", label: "Episodes", type: "text", required: true },
       ],
       end: [],
     },
@@ -142,6 +154,7 @@ const activityDefinitions: ActivityDefinition[] = [
   {
     name: "light work",
     label: "Light Work",
+    plan: { defaultHours: 30 },
     emoji: "🔧",
     attributes: {
       key: "light work",
@@ -160,6 +173,7 @@ const activityDefinitions: ActivityDefinition[] = [
   {
     name: "deep work",
     label: "Deep Work",
+    plan: { defaultHours: 10 },
     emoji: "🛠️",
     attributes: {
       key: "deep work",
@@ -176,20 +190,65 @@ const activityDefinitions: ActivityDefinition[] = [
     },
   },
   { name: "piano", label: "Piano", emoji: "🎹" },
-  { name: "walk", label: "Walk", emoji: "🚶" },
-  { name: "juggle", label: "Juggle", emoji: "🤹" },
-  { name: "exercise", label: "Exercise", emoji: "🏋️" },
-  { name: "stretch", label: "Stretch", emoji: "🧘" },
-  { name: "language", label: "Language", emoji: "🗣️" },
-  { name: "housework", label: "Housework", emoji: "🧹" },
-  { name: "cook", label: "Cook", emoji: "🍳" },
+  {
+    name: "walk",
+    label: "Walk",
+    emoji: "🚶",
+    plan: { defaultHours: 3, intervalMinutes: 30 },
+  },
+  {
+    name: "juggle",
+    label: "Juggle",
+    emoji: "🤹",
+    plan: { defaultHours: 3, intervalMinutes: 15 },
+  },
+  {
+    name: "exercise",
+    label: "Exercise",
+    emoji: "🏋️",
+    plan: { defaultHours: 2, intervalMinutes: 30 },
+  },
+  {
+    name: "stretch",
+    label: "Stretch",
+    emoji: "🧘",
+    plan: { defaultHours: 2, intervalMinutes: 15 },
+  },
+  {
+    name: "language",
+    label: "Language",
+    emoji: "🗣️",
+    plan: { defaultHours: 3, intervalMinutes: 30 },
+  },
+  {
+    name: "housework",
+    label: "Housework",
+    emoji: "🧹",
+    plan: { defaultHours: 5, intervalMinutes: 30 },
+  },
+  {
+    name: "cook",
+    label: "Cook",
+    emoji: "🍳",
+    plan: { defaultHours: 5, intervalMinutes: 30 },
+  },
   { name: "eat", label: "Eat", emoji: "🍽️" },
-  { name: "hygiene", label: "Hygiene", emoji: "🪥" },
-  { name: "bed", label: "Bed", emoji: "🛏️" },
+  {
+    name: "hygiene",
+    label: "Hygiene",
+    emoji: "🪥",
+    plan: { defaultHours: 2, intervalMinutes: 15 },
+  },
+  {
+    name: "bed",
+    label: "Bed",
+    emoji: "🛏️",
+    plan: { defaultHours: 56, maxHours: 70 },
+  },
   { name: "ride", label: "Ride", emoji: "🚗" },
   { name: "transit", label: "Transit", emoji: "🚃" },
   { name: "shop", label: "Shop", emoji: "🛍️" },
-  { name: "pathfinder", label: "Pathfinder", emoji: "🪄" }
+  { name: "pathfinder", label: "Pathfinder", emoji: "🪄" },
 ];
 
 export function getActivityDefinitions(): ActivityDefinition[] {

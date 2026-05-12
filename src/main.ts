@@ -267,8 +267,10 @@ export default class DayPlanner extends Plugin {
 
     this.registerMarkdownCodeBlockProcessor("activityplan", (_, el, ctx) => {
       renderActivityPlanCodeBlock({
+        app: this.app,
         el,
         ctx,
+        periodicNotes: this.periodicNotes,
       });
     });
 
