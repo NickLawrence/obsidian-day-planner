@@ -25,6 +25,8 @@
     dailyDurationsMs: number[];
   };
 
+  type OtherActivityRow = ActivityDuration;
+
   type DayColorInfo = {
     dayKey: string;
     shortLabel: string;
@@ -48,7 +50,9 @@
   } = $props();
 
   let rows = $state<GoalProgressRow[]>([]);
+  let otherActivityRows = $state<OtherActivityRow[]>([]);
   let weekLabel = $state("");
+  let weekProgressPercent = $state(0);
   let isWeeklyNotesEnabled = $state(true);
   let dayColors = $state<DayColorInfo[]>([]);
   let legendDays = $state<DayColorInfo[]>([]);
@@ -164,6 +168,17 @@
     return durationsByActivity;
   }
 
+  function getWeekProgressPercent(
+    weekStart: import("moment").Moment,
+    weekEnd: import("moment").Moment,
+    now: import("moment").Moment,
+  ) {
+    const weekDurationMs = Math.max(1, weekEnd.diff(weekStart));
+    const elapsedMs = now.diff(weekStart);
+
+    return Math.max(0, Math.min(100, (elapsedMs / weekDurationMs) * 100));
+  }
+
   function getProgressSegments(row: GoalProgressRow) {
     const goalMs = Math.max(1, row.goal.asMilliseconds());
     let left = 0;
@@ -226,9 +241,11 @@
       .clone()
       .subtract(1, "day")
       .format("MMM D")}`;
+    weekProgressPercent = getWeekProgressPercent(weekStart, weekEnd, now);
 
     if (!isWeeklyNotesEnabled) {
       rows = [];
+      otherActivityRows = [];
       return;
     }
 
@@ -269,6 +286,27 @@
 
         if (Math.abs(aRatio - bRatio) > 1e-9) {
           return bRatio - aRatio;
+        }
+
+        return a.activity.localeCompare(b.activity, undefined, {
+          sensitivity: "base",
+        });
+      });
+
+    otherActivityRows = withGoals
+      .filter((entry) => !entry.goal)
+      .filter((entry) => entry.duration.asMilliseconds() > 0)
+      .map(({ activity, activityKey, duration }) => ({
+        activity,
+        activityKey,
+        duration,
+      }))
+      .sort((a, b) => {
+        const durationDiff =
+          b.duration.asMilliseconds() - a.duration.asMilliseconds();
+
+        if (durationDiff !== 0) {
+          return durationDiff;
         }
 
         return a.activity.localeCompare(b.activity, undefined, {
@@ -333,7 +371,7 @@
         {@const emoji = definition?.emoji ?? "🏁"}
         {@const label = definition?.label ?? sanitizeLabel(row.activity)}
         <div
-          style={`--progress:${progressPercent(row.duration, row.goal)}%;--half-hour-step:${tickStepPercent(row.goal, 30)};--hour-step:${tickStepPercent(row.goal, 60)};`}
+          style={`--progress:${progressPercent(row.duration, row.goal)}%;--week-progress:${weekProgressPercent}%;--half-hour-step:${tickStepPercent(row.goal, 30)};--hour-step:${tickStepPercent(row.goal, 60)};`}
           class="goal-card"
         >
           <div class="emoji-box" aria-hidden="true">
@@ -360,11 +398,29 @@
                   class="goal-day-segment"
                 ></div>
               {/each}
+              <div class="week-progress-marker" title="Week progress"></div>
             </div>
           </div>
         </div>
       {/each}
     </div>
+
+    {#if otherActivityRows.length > 0}
+      <div class="other-activities" aria-label="Other weekly activities">
+        {#each otherActivityRows as activity (activity.activityKey)}
+          {@const definition = getActivityDefinition(activity.activityKey)}
+          {@const emoji = definition?.emoji ?? "•"}
+          {@const label = definition?.label ?? sanitizeLabel(activity.activity)}
+          <div class="other-activity-card" title={label}>
+            <span class="other-activity-emoji" aria-hidden="true">{emoji}</span>
+            <span class="other-activity-label">{label}</span>
+            <span class="other-activity-duration"
+              >{formatDuration(activity.duration)}</span
+            >
+          </div>
+        {/each}
+      </div>
+    {/if}
 
     <div class="legend" aria-label="Weekly day color legend">
       {#each legendDays as day}
@@ -435,16 +491,18 @@
     display: flex;
     align-items: center;
     justify-content: center;
+
     width: 2.8em;
     height: 2.8em;
     padding: 0.2em;
-    border-radius: var(--radius-m);
+
+    opacity: 0.86;
     background: color-mix(
       in srgb,
       var(--background-modifier-border) 60%,
       black
     );
-    opacity: 0.86;
+    border-radius: var(--radius-m);
     box-shadow: inset 0 0 0 1px color-mix(in srgb, black 36%, transparent);
   }
 
@@ -470,9 +528,11 @@
   }
 
   .name {
-    font-weight: 650;
-    min-width: 0;
     overflow: hidden;
+
+    min-width: 0;
+
+    font-weight: 650;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -490,7 +550,9 @@
   /* --- Progress bar with time ticks --- */
   .goal-track {
     position: relative;
+
     overflow: hidden;
+
     height: 12px;
 
     background: color-mix(
@@ -504,12 +566,12 @@
   .goal-fill-bg {
     position: absolute;
     inset: 0;
-    border-radius: 999px;
     background: color-mix(
       in srgb,
       black 12%,
       var(--background-modifier-border)
     );
+    border-radius: 999px;
   }
 
   .goal-day-segment {
@@ -517,16 +579,38 @@
     top: 0;
     bottom: 0;
     left: var(--segment-left, 0%);
+
     width: var(--segment-width, 0%);
+
     background: var(--segment-color, var(--interactive-accent));
     box-shadow: inset 0 0 0 1px color-mix(in srgb, white 35%, transparent);
   }
 
+  .week-progress-marker {
+    pointer-events: none;
+
+    position: absolute;
+    z-index: 2;
+    top: -2px;
+    bottom: -2px;
+    left: var(--week-progress, 0%);
+    transform: translateX(-1px);
+
+    width: 2px;
+
+    background: color-mix(in srgb, var(--text-normal) 78%, white);
+    border-radius: 999px;
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--background-primary) 72%, transparent),
+      0 0 6px color-mix(in srgb, black 35%, transparent);
+  }
+
   .goal-ticks {
+    pointer-events: none;
+
     position: absolute;
     inset: 0;
-    border-radius: 999px;
-    pointer-events: none;
+
     background-image: repeating-linear-gradient(
         to right,
         transparent 0,
@@ -543,30 +627,82 @@
           calc(var(--hour-step, 100%) - 2px),
         color-mix(in srgb, white 52%, transparent) var(--hour-step, 100%)
       );
+    border-radius: 999px;
+  }
+
+  .other-activities {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--size-2-2);
+  }
+
+  .other-activity-card {
+    display: inline-flex;
+    gap: var(--size-2-1);
+    align-items: center;
+
+    min-width: 0;
+    max-width: 22em;
+    min-height: 2.75em;
+    padding: var(--size-4-1) var(--size-4-3);
+
+    font-size: var(--font-ui-large);
+    color: var(--text-muted);
+
+    background: color-mix(
+      in srgb,
+      var(--background-secondary) 92%,
+      var(--background-modifier-border) 8%
+    );
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-s);
+  }
+
+  .other-activity-emoji {
+    flex: 0 0 auto;
+    font-size: --font-ui-large;
+  }
+
+  .other-activity-label {
+    overflow: hidden;
+    min-width: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .other-activity-duration {
+    flex: 0 0 auto;
+    margin-left: var(--size-4-1);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-normal);
   }
 
   .legend {
     display: flex;
     flex-wrap: wrap;
     gap: var(--size-2-2) var(--size-4-2);
+
     padding-top: var(--size-2-1);
-    border-top: 1px solid var(--background-modifier-border);
+
     font-size: var(--font-ui-smaller);
     color: var(--text-muted);
+
+    border-top: 1px solid var(--background-modifier-border);
   }
 
   .legend-item {
     display: inline-flex;
-    align-items: center;
     gap: var(--size-2-1);
+    align-items: center;
   }
 
   .legend-swatch {
     width: 10px;
     height: 10px;
-    border-radius: 999px;
+
     background: var(--legend-color, var(--interactive-accent));
     border: 1px solid color-mix(in srgb, black 30%, transparent);
+    border-radius: 999px;
   }
 
   .empty-state {
