@@ -24,6 +24,10 @@ export class WorkspaceFacade {
     private readonly periodicNotes: PeriodicNotes,
   ) {}
 
+  async openFileByPath(path: string) {
+    return this.openFileInEditor(this.vaultFacade.getFileByPath(path));
+  }
+
   async openFileInEditor(file: TFile) {
     const leafWithThisFile = this.workspace
       .getLeavesOfType("markdown")

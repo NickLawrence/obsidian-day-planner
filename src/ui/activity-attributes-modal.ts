@@ -6,6 +6,7 @@ type ActivityAttributesModalProps = {
   title: string;
   fields: ActivityAttributeField[];
   initialValues?: Record<string, string | number | undefined>;
+  fieldOptions?: Record<string, string[]>;
   onSubmit: (values: Record<string, string | number | undefined>) => void;
   onCancel: () => void;
 };
@@ -25,7 +26,7 @@ class ActivityAttributesModal extends Modal {
 
   onOpen() {
     const { contentEl } = this;
-    const { fields, title, initialValues } = this.props;
+    const { fields, title, initialValues, fieldOptions } = this.props;
 
     contentEl.empty();
     contentEl.addClass("day-planner-activity-attributes-modal");
@@ -47,6 +48,20 @@ class ActivityAttributesModal extends Modal {
           : row.createEl("input", {
               type: field.type === "number" ? "number" : "text",
             });
+
+      if (
+        field.type === "text" &&
+        input instanceof HTMLInputElement &&
+        fieldOptions?.[field.key]?.length
+      ) {
+        const listId = `day-planner-activity-${field.key}-options`;
+        const datalist = row.createEl("datalist");
+        datalist.id = listId;
+        fieldOptions[field.key].forEach((resourceName) => {
+          datalist.createEl("option", { attr: { value: resourceName } });
+        });
+        input.setAttr("list", listId);
+      }
 
       if (field.type === "number" && input instanceof HTMLInputElement) {
         if (typeof field.min === "number") {
@@ -145,6 +160,7 @@ export function askForActivityAttributes(
     title: string;
     fields: ActivityAttributeField[];
     initialValues?: Record<string, string | number | undefined>;
+    fieldOptions?: Record<string, string[]>;
   },
 ): Promise<Record<string, string | number | undefined> | undefined> {
   return new Promise((resolve) => {

@@ -3,6 +3,7 @@ export type ActivityAttributeField = {
   label: string;
   type: "text" | "number" | "textarea";
   suggestHistory?: boolean;
+  resourceTag?: string;
   required?: boolean;
   min?: number;
   max?: number;
@@ -26,9 +27,16 @@ export type ActivityPlanDefinition = {
   intervalMinutes?: number;
 };
 
+export type ActivityGroupDefinition = {
+  name: string;
+  label: string;
+  color: string;
+};
+
 export type ActivityDefinition = {
   name: string;
   label: string;
+  group: ActivityGroupDefinition["name"];
   emoji?: string;
   attributes?: ActivityAttributesDefinition;
   plan?: ActivityPlanDefinition;
@@ -39,17 +47,39 @@ export type ActivitySuggestion = Pick<
   "name" | "label" | "emoji"
 >;
 
+const activityGroups: ActivityGroupDefinition[] = [
+  { name: "work", label: "Work", color: "#808080" },
+  { name: "media", label: "Media", color: "#00bcd4" },
+  { name: "bed", label: "Bed", color: "#0000b9" },
+  {
+    name: "exercise",
+    label: "Exercise",
+    color: "#2e7d32",
+  },
+  { name: "hygiene", label: "Hygiene", color: "#ffd600" },
+  { name: "household", label: "Household", color: "#8b4513" },
+  { name: "social", label: "Social", color: "#8e24aa" },
+  { name: "transit", label: "Transit", color: "#d32f2f" },
+];
+
 const activityDefinitions: ActivityDefinition[] = [
   {
     name: "read",
     label: "Read",
+    group: "media",
     plan: { defaultHours: 5 },
     emoji: "📖",
     attributes: {
       key: "read",
       mainKey: "book",
       start: [
-        { key: "book", label: "Book", type: "text", required: true },
+        {
+          key: "book",
+          label: "Book",
+          type: "text",
+          required: true,
+          resourceTag: "book",
+        },
         {
           key: "start-page",
           label: "Start page",
@@ -79,18 +109,20 @@ const activityDefinitions: ActivityDefinition[] = [
   {
     name: "game",
     label: "Game",
+    group: "media",
     plan: { defaultHours: 15 },
     emoji: "🎮",
     attributes: {
       key: "game",
       mainKey: "name",
-      start: [{ key: "name", label: "Game", type: "text", required: true }],
+      start: [{ key: "name", label: "Game", type: "text", required: true, resourceTag: "game" }],
       end: [],
     },
   },
   {
     name: "movie",
     label: "Movie",
+    group: "media",
     emoji: "📺",
     attributes: {
       key: "movie",
@@ -110,6 +142,7 @@ const activityDefinitions: ActivityDefinition[] = [
   {
     name: "tv",
     label: "TV",
+    group: "media",
     emoji: "📺",
     attributes: {
       key: "tv",
@@ -124,6 +157,7 @@ const activityDefinitions: ActivityDefinition[] = [
   {
     name: "theater",
     label: "Theater",
+    group: "media",
     emoji: "📽️",
     attributes: {
       key: "theater",
@@ -143,6 +177,7 @@ const activityDefinitions: ActivityDefinition[] = [
   {
     name: "call",
     label: "Call",
+    group: "social",
     emoji: "📞",
     attributes: {
       key: "call",
@@ -154,6 +189,7 @@ const activityDefinitions: ActivityDefinition[] = [
   {
     name: "light work",
     label: "Light Work",
+    group: "work",
     plan: { defaultHours: 30 },
     emoji: "🔧",
     attributes: {
@@ -173,6 +209,7 @@ const activityDefinitions: ActivityDefinition[] = [
   {
     name: "deep work",
     label: "Deep Work",
+    group: "work",
     plan: { defaultHours: 10 },
     emoji: "🛠️",
     attributes: {
@@ -189,71 +226,106 @@ const activityDefinitions: ActivityDefinition[] = [
       end: [],
     },
   },
-  { name: "piano", label: "Piano", emoji: "🎹" },
+  {
+    name: "piano",
+    label: "Piano",
+    group: "media",
+    emoji: "🎹",
+  },
   {
     name: "walk",
     label: "Walk",
+    group: "exercise",
     emoji: "🚶",
     plan: { defaultHours: 3, intervalMinutes: 30 },
   },
   {
     name: "juggle",
     label: "Juggle",
+    group: "exercise",
     emoji: "🤹",
     plan: { defaultHours: 3, intervalMinutes: 15 },
   },
   {
     name: "exercise",
     label: "Exercise",
+    group: "exercise",
     emoji: "🏋️",
     plan: { defaultHours: 2, intervalMinutes: 30 },
   },
   {
     name: "stretch",
     label: "Stretch",
+    group: "exercise",
     emoji: "🧘",
     plan: { defaultHours: 2, intervalMinutes: 15 },
   },
   {
     name: "language",
     label: "Language",
+    group: "work",
     emoji: "🗣️",
     plan: { defaultHours: 3, intervalMinutes: 30 },
   },
   {
     name: "housework",
     label: "Housework",
+    group: "household",
     emoji: "🧹",
     plan: { defaultHours: 5, intervalMinutes: 30 },
   },
   {
     name: "cook",
     label: "Cook",
+    group: "household",
     emoji: "🍳",
     plan: { defaultHours: 5, intervalMinutes: 30 },
   },
-  { name: "eat", label: "Eat", emoji: "🍽️" },
+  { name: "eat", label: "Eat", group: "household", emoji: "🍽️" },
   {
     name: "hygiene",
     label: "Hygiene",
+    group: "hygiene",
     emoji: "🪥",
     plan: { defaultHours: 2, intervalMinutes: 15 },
   },
+  { name: "restaurant", label: "Restaurant", group: "social", emoji: "🍜" },
+  { name: "bar", label: "Bar", group: "social", emoji: "🍸" },
+  { name: "social", label: "Social", group: "social", emoji: "👯" },
   {
     name: "bed",
     label: "Bed",
+    group: "bed",
     emoji: "🛏️",
     plan: { defaultHours: 56, maxHours: 70 },
   },
-  { name: "ride", label: "Ride", emoji: "🚗" },
-  { name: "transit", label: "Transit", emoji: "🚃" },
-  { name: "shop", label: "Shop", emoji: "🛍️" },
-  { name: "pathfinder", label: "Pathfinder", emoji: "🪄" },
+  { name: "ride", label: "Ride", group: "transit", emoji: "🚗" },
+  {
+    name: "transit",
+    label: "Transit",
+    group: "transit",
+    emoji: "🚃",
+  },
+  { name: "shop", label: "Shop", group: "household", emoji: "🛍️" },
+  {
+    name: "pathfinder",
+    label: "Pathfinder",
+    group: "social",
+    emoji: "🪄",
+  },
 ];
+
+export function getActivityGroups(): ActivityGroupDefinition[] {
+  return activityGroups;
+}
 
 export function getActivityDefinitions(): ActivityDefinition[] {
   return activityDefinitions;
 }
+
+const activityGroupMap = new Map(
+  activityGroups.map((group) => [group.name, group]),
+);
 
 const activityDefinitionMap = new Map(
   activityDefinitions.map((definition) => [
@@ -272,6 +344,12 @@ function sanitizeLabel(name: string) {
 
 export function getActivityDefinition(activityName: string) {
   return activityDefinitionMap.get(normalizeActivityName(activityName));
+}
+
+export function getActivityGroup(activityName: string) {
+  const definition = getActivityDefinition(activityName);
+
+  return definition ? activityGroupMap.get(definition.group) : undefined;
 }
 
 export function getActivitySuggestions(): ActivitySuggestion[] {

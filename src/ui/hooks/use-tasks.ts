@@ -13,6 +13,7 @@ import type { DayPlannerSettings } from "../../settings";
 import type { LocalTask, RemoteTask, Task, WithTime } from "../../task-types";
 import type { OnEditAbortedFn, OnUpdateFn, PointerDateTime } from "../../types";
 import { getActivityDisplayLabel } from "../../util/activity-definitions";
+import { getActivityResourcePath } from "../../util/activity-resources";
 import { createClockTaskFromActivity } from "../../util/clock";
 import { splitMultiday } from "../../util/moment";
 import { type LogEntry } from "../../util/props";
@@ -86,6 +87,12 @@ export function useTasks(props: {
             title: getActivityDisplayLabel(activity.activity, activity),
             notes: activity.notes,
             quality: activity.quality,
+            resourcePath: getActivityResourcePath({
+              metadataCache,
+              activityName: activity.activity,
+              activityEntry: activity,
+              sourcePath: path,
+            }),
             log: activity.log as LogEntry[],
             taskId: activity.taskIds?.[0],
             location: {

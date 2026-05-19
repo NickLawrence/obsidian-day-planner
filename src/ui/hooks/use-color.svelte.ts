@@ -2,7 +2,8 @@ import chroma from "chroma-js";
 
 import { getObsidianContext } from "../../context/obsidian-context";
 import { currentTimeSignal } from "../../global-store/current-time";
-import type { Task } from "../../task-types";
+import type { LocalTask, Task } from "../../task-types";
+import { getActivityGroup } from "../../util/activity-definitions";
 import { getTextColorWithEnoughContrast } from "../../util/color";
 import { getRelationToNow } from "../../util/moment";
 import * as t from "../../util/task-utils";
@@ -13,6 +14,24 @@ interface UseColorProps {
 }
 
 const defaultBorderColor = "var(--color-base-50)";
+const groupBackgroundMix = 5;
+const groupBorderMix = 45;
+
+type ActivityBlockTask = LocalTask & {
+  clockActivity?: {
+    activity: string;
+  };
+};
+
+function getClockActivityName(task: Task) {
+  return "text" in task
+    ? (task as ActivityBlockTask).clockActivity?.activity
+    : undefined;
+}
+
+function getOpaqueGroupColor(color: string, mixPercent: number) {
+  return `color-mix(in srgb, ${color} ${mixPercent}%, var(--background-primary))`;
+}
 
 export function useColor({ task }: UseColorProps) {
   const { settingsSignal, isDarkMode } = getObsidianContext();
@@ -51,6 +70,23 @@ export function useColor({ task }: UseColorProps) {
     );
   });
 
+  const activityGroup = $derived.by(() => {
+    const activityName = getClockActivityName(task);
+
+    return activityName ? getActivityGroup(activityName) : undefined;
+  });
+
+  const activityGroupColors = $derived.by(() => {
+    if (!activityGroup) {
+      return undefined;
+    }
+
+    return {
+      background: getOpaqueGroupColor(activityGroup.color, groupBackgroundMix),
+      border: getOpaqueGroupColor(activityGroup.color, groupBorderMix),
+    };
+  });
+
   const backgroundColor = $derived.by(() => {
     const { timelineColored, startHour } = settingsSignal.current;
 
@@ -58,6 +94,10 @@ export function useColor({ task }: UseColorProps) {
       return isDarkMode.current
         ? colorOverride?.darkModeColor
         : colorOverride?.color;
+    }
+
+    if (activityGroupColors) {
+      return activityGroupColors.background;
     }
 
     if (timelineColored) {
@@ -73,16 +113,20 @@ export function useColor({ task }: UseColorProps) {
     return "var(--background-primary)";
   });
 
-  const borderColor = $derived(
-    relationToNow === "present" && !task.isAllDayEvent
+  const borderColor = $derived.by(() => {
+    if (activityGroupColors) {
+      return activityGroupColors.border;
+    }
+
+    return relationToNow === "present" && !task.isAllDayEvent
       ? "var(--color-accent)"
-      : defaultBorderColor,
-  );
+      : defaultBorderColor;
+  });
 
   const properContrastColors = $derived.by(() => {
     const { timelineColored } = settingsSignal.current;
 
-    return timelineColored || colorOverride
+    return (timelineColored && !activityGroupColors) || colorOverride
       ? getTextColorWithEnoughContrast(backgroundColor)
       : {
           normal: "inherit",

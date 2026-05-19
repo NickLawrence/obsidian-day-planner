@@ -101,6 +101,7 @@ import {
   getActivityAttributeFields,
   getActivityLabel,
 } from "./util/activity-definitions";
+import { getAvailableResourceNamesByFieldKey } from "./util/activity-resources";
 import {
   createDayPlannerActivityApi,
   type DayPlannerActivityApi,
@@ -328,6 +329,10 @@ export default class DayPlanner extends Plugin {
         title: `Start ${getActivityLabel(trimmedName)}`,
         fields: startFields,
         initialValues: activitySelection?.initialValues,
+        fieldOptions: getAvailableResourceNamesByFieldKey(
+          this.app,
+          startFields,
+        ),
       });
 
       if (!values) {
