@@ -1,3 +1,4 @@
+import type { App } from "obsidian";
 import type Fraction from "fraction.js";
 import type { Moment } from "moment";
 import type { Readable, Writable } from "svelte/store";
@@ -17,6 +18,8 @@ import { EditMode } from "./ui/hooks/use-edit/types";
 import { useEditContext } from "./ui/hooks/use-edit/use-edit-context";
 import type { useTasks } from "./ui/hooks/use-tasks";
 import { type ShowPreview } from "./util/create-show-preview";
+import type { ActivitySelection } from "./create-update-handler";
+import type { Activity } from "./util/props";
 
 export type OnUpdateFn = (
   base: Array<LocalTask>,
@@ -46,6 +49,7 @@ export type PointerDateTime = {
 export type RefreshDataviewFn = (source: string) => Promise<unknown>;
 
 export interface ObsidianContext {
+  app: App;
   workspaceFacade: WorkspaceFacade;
   periodicNotes: PeriodicNotes;
   initWeeklyView: () => Promise<void>;
@@ -71,6 +75,10 @@ export interface ObsidianContext {
   ) => Readable<Array<WithPlacing<LocalTask>>>;
   dispatch: AppDispatch;
   useSelector: UseSelector;
+  getAllActivities: () => Activity[];
+  startActivityWithSelection: (
+    selection: ActivitySelection,
+  ) => Promise<{ started: boolean }>;
 }
 
 export type ComponentContext = Map<string, unknown>;

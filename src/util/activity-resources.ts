@@ -59,6 +59,33 @@ function getFileDisplayName(file: TFile) {
   return file.basename ?? file.name?.replace(/\.md$/i, "") ?? file.path;
 }
 
+export function getResourceFilesForField(
+  app: App,
+  field: ActivityAttributeField,
+) {
+  const { resourceTag } = field;
+
+  if (!resourceTag) {
+    return [];
+  }
+
+  return app.vault
+    .getMarkdownFiles()
+    .map((file) => {
+      const metadata = app.metadataCache.getFileCache(file);
+
+      return {
+        file,
+        name: getFileDisplayName(file),
+        status: normalizeStatus(metadata?.frontmatter?.status),
+        hasResourceTag:
+          frontmatterHasTag(metadata?.frontmatter, resourceTag) ||
+          metadataHasTag(metadata, resourceTag),
+      };
+    })
+    .filter(({ hasResourceTag }) => hasResourceTag);
+}
+
 export function getAvailableResourceNamesForField(
   app: App,
   field: ActivityAttributeField,
@@ -71,18 +98,9 @@ export function getAvailableResourceNamesForField(
 
   const uniqueResourceNames = new Set<string>();
 
-  return app.vault
-    .getMarkdownFiles()
-    .filter((file) => {
-      const metadata = app.metadataCache.getFileCache(file);
-
-      return (
-        normalizeStatus(metadata?.frontmatter?.status) !== completeStatus &&
-        (frontmatterHasTag(metadata?.frontmatter, resourceTag) ||
-          metadataHasTag(metadata, resourceTag))
-      );
-    })
-    .map(getFileDisplayName)
+  return getResourceFilesForField(app, field)
+    .filter(({ status }) => status !== completeStatus)
+    .map(({ name }) => name)
     .filter((resourceName) => {
       if (uniqueResourceNames.has(resourceName)) {
         return false;

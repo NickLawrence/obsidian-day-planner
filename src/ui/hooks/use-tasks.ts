@@ -271,6 +271,7 @@ export function useTasks(props: {
   });
 
   return {
+    dataviewTasks,
     tasksWithActiveClockProps,
     getDisplayedTasksWithClocksForTimeline,
     tasksWithTimeForToday,

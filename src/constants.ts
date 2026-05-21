@@ -3,6 +3,7 @@ export const viewTypeMultiDay = "planner-weekly";
 export const viewTypeMonthlyCalendar = "planner-monthly";
 export const viewTypeReleaseNotes = "planner-release-notes";
 export const viewTypeLogSummary = "planner-log-summary";
+export const viewTypeActivityQueue = "planner-activity-queue";
 
 export const obsidianContextKey = "obsidianContext";
 export const dateRangeContextKey = "dateRangeContext";

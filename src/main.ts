@@ -26,6 +26,7 @@ import {
   reQueryAfterMillis,
   icalRefreshIntervalMillis,
   viewTypeLogSummary,
+  viewTypeActivityQueue,
 } from "./constants";
 import {
   createUpdateHandler,
@@ -46,6 +47,7 @@ import {
 } from "./mdast/mdast";
 import {
   dataviewChange,
+  dataviewTasksUpdated,
   type PathToListProps,
 } from "./redux/dataview/dataview-slice";
 import { editCanceled, visibleDaysUpdated } from "./redux/global-slice";
@@ -89,6 +91,7 @@ import { mountStatusBarWidget } from "./ui/hooks/use-status-bar-widget";
 import { useTasks } from "./ui/hooks/use-tasks";
 import { useVisibleDays } from "./ui/hooks/use-visible-days";
 import { LogSummaryView } from "./ui/log-summary";
+import { ActivityQueueView } from "./ui/activity-queue-view";
 import MonthlyView from "./ui/monthly-view";
 import MultiDayView from "./ui/multi-day-view";
 import { DayPlannerReleaseNotesView } from "./ui/release-notes";
@@ -284,6 +287,7 @@ export default class DayPlanner extends Plugin {
       this.detachLeavesOfType(viewTypeTimeline),
       this.detachLeavesOfType(viewTypeMultiDay),
       this.detachLeavesOfType(viewTypeMonthlyCalendar),
+      this.detachLeavesOfType(viewTypeActivityQueue),
     ]);
   }
 
@@ -299,18 +303,21 @@ export default class DayPlanner extends Plugin {
       "Open Monthly Calendar",
       this.initMonthlyLeaf,
     );
+    this.addRibbonIcon(
+      "star-list",
+      "Open Activity Queue",
+      this.initActivityQueueLeaf,
+    );
   }
 
-  private startActivity = async () => {
-    const activitySelection = await getActivityNameFromUser(
-      this.app,
-      this.api.getAllActivities(),
-    );
-
-    const activityName = activitySelection?.activityName;
+  private startActivityWithSelection = async (activitySelection: {
+    activityName: string;
+    initialValues?: Record<string, string | number | undefined>;
+  }) => {
+    const activityName = activitySelection.activityName;
 
     if (!activityName) {
-      return;
+      return { started: false };
     }
 
     const trimmedName = activityName.trim();
@@ -318,7 +325,7 @@ export default class DayPlanner extends Plugin {
     if (trimmedName.length === 0) {
       new Notice("Activity name cannot be empty");
 
-      return;
+      return { started: false };
     }
 
     const startFields = getActivityAttributeFields(trimmedName, "start");
@@ -336,7 +343,7 @@ export default class DayPlanner extends Plugin {
       });
 
       if (!values) {
-        return;
+        return { started: false };
       }
 
       attributeUpdates = buildActivityAttributeUpdate(trimmedName, values);
@@ -356,6 +363,20 @@ export default class DayPlanner extends Plugin {
     );
 
     new Notice(`Started activity "${trimmedName}"`);
+    return { started: true };
+  };
+
+  private startActivity = async () => {
+    const activitySelection = await getActivityNameFromUser(
+      this.app,
+      this.api.getAllActivities(),
+    );
+
+    if (!activitySelection) {
+      return;
+    }
+
+    await this.startActivityWithSelection(activitySelection);
   };
 
   initWeeklyLeaf = async () => {
@@ -370,6 +391,21 @@ export default class DayPlanner extends Plugin {
       type: viewTypeMonthlyCalendar,
       active: true,
     });
+  };
+
+  initActivityQueueLeaf = async () => {
+    const [existing] = this.app.workspace.getLeavesOfType(viewTypeActivityQueue);
+    if (existing) {
+      this.app.workspace.revealLeaf(existing);
+      return;
+    }
+
+    await this.detachLeavesOfType(viewTypeActivityQueue);
+    await this.app.workspace.getRightLeaf(false)?.setViewState({
+      type: viewTypeActivityQueue,
+      active: true,
+    });
+    this.app.workspace.rightSplit.expand();
   };
 
   initTimelineLeafSilently = async () => {
@@ -455,6 +491,11 @@ export default class DayPlanner extends Plugin {
           type: viewTypeLogSummary,
           active: true,
         }),
+    });
+    this.addCommand({
+      id: "show-activity-queue",
+      name: "Show activity queue",
+      callback: this.initActivityQueueLeaf,
     });
 
     this.addCommand({
@@ -654,6 +695,7 @@ export default class DayPlanner extends Plugin {
 
     const {
       tasksWithActiveClockProps,
+      dataviewTasks,
       getDisplayedTasksWithClocksForTimeline,
       tasksWithTimeForToday,
       editContext,
@@ -729,6 +771,10 @@ export default class DayPlanner extends Plugin {
     this.register(destroyStatusBarWidget);
 
     this.register(
+      dataviewTasks.subscribe((value) => dispatch(dataviewTasksUpdated(value))),
+    );
+
+    this.register(
       newlyStartedTasks.subscribe((value) =>
         notifyAboutStartedTasks(value, this.settings()),
       ),
@@ -776,6 +822,7 @@ export default class DayPlanner extends Plugin {
     }
 
     const defaultObsidianContext: ObsidianContext = {
+      app: this.app,
       periodicNotes: this.periodicNotes,
       sTaskEditor: this.sTaskEditor,
       workspaceFacade: this.workspaceFacade,
@@ -801,6 +848,8 @@ export default class DayPlanner extends Plugin {
       getDisplayedTasksWithClocksForTimeline,
       dispatch,
       useSelector,
+      getAllActivities: () => this.api.getAllActivities(),
+      startActivityWithSelection: this.startActivityWithSelection,
     };
 
     const componentContext = new Map<
@@ -847,6 +896,11 @@ export default class DayPlanner extends Plugin {
     this.registerView(
       viewTypeLogSummary,
       (leaf: WorkspaceLeaf) => new LogSummaryView(leaf, componentContext),
+    );
+
+    this.registerView(
+      viewTypeActivityQueue,
+      (leaf: WorkspaceLeaf) => new ActivityQueueView(leaf, componentContext),
     );
   }
 }
