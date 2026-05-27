@@ -42,8 +42,15 @@ export function mountStatusBarWidget(props: {
   errorStore: Writable<Error | undefined>;
   dateRanges: DateRanges;
   tasksWithTimeForToday: Readable<Array<WithTime<Task>>>;
+  activityHistoryForStatusBar: Readable<Array<WithTime<Task>>>;
 }) {
-  const { plugin, tasksWithTimeForToday, errorStore, dateRanges } = props;
+  const {
+    plugin,
+    tasksWithTimeForToday,
+    activityHistoryForStatusBar,
+    errorStore,
+    dateRanges,
+  } = props;
 
   const statusBarWidgetContainer = plugin.addStatusBarItem();
 
@@ -54,6 +61,7 @@ export function mountStatusBarWidget(props: {
     props: {
       onClick: plugin.initTimelineLeaf,
       tasksWithTimeForToday,
+      activityHistoryForStatusBar,
       errorStore,
     },
   });

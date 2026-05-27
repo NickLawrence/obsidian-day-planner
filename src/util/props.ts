@@ -416,7 +416,7 @@ export function toMarkdown(props: Props) {
     ...props,
     activities: props.activities?.map(({ taskIds, ...activity }) => ({
       ...activity,
-      ...(taskIds ? { taskIds } : {}),
+      ...(taskIds && taskIds.length > 0 ? { taskIds } : {}),
     })),
   };
 

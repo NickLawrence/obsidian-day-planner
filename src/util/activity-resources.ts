@@ -20,6 +20,19 @@ function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [value];
 }
 
+function getFrontmatterAliases(frontmatter: CachedMetadata["frontmatter"]) {
+  if (!frontmatter) {
+    return [];
+  }
+
+  const aliases = frontmatter.aliases ?? frontmatter.alias;
+
+  return asArray(aliases)
+    .filter((alias): alias is string => typeof alias === "string")
+    .map((alias) => alias.trim())
+    .filter(Boolean);
+}
+
 function frontmatterHasTag(
   frontmatter: CachedMetadata["frontmatter"],
   tag: string,
@@ -77,6 +90,7 @@ export function getResourceFilesForField(
       return {
         file,
         name: getFileDisplayName(file),
+        aliases: getFrontmatterAliases(metadata?.frontmatter),
         status: normalizeStatus(metadata?.frontmatter?.status),
         hasResourceTag:
           frontmatterHasTag(metadata?.frontmatter, resourceTag) ||

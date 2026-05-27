@@ -228,6 +228,7 @@ async function setUp(props: {
 
   const {
     tasksWithActiveClockProps,
+    activityHistoryForStatusBar,
     getDisplayedTasksWithClocksForTimeline,
     tasksWithTimeForToday,
     editContext,
@@ -295,6 +296,7 @@ async function setUp(props: {
   return {
     dispatch,
     tasksWithActiveClockProps,
+    activityHistoryForStatusBar,
     getDisplayedTasksWithClocksForTimeline,
     tasksWithTimeForToday,
     editContext,
@@ -375,6 +377,57 @@ describe("Clocks", () => {
         durationMinutes: 30,
       },
     ]);
+  });
+
+  test("Active clocks crossing midnight display on the next day's timeline without duplicating active clocks", async () => {
+    const {
+      getDisplayedTasksWithClocksForTimeline,
+      currentTime,
+      tasksWithActiveClockProps,
+    } = await setUp({
+      visibleDays: ["2025-01-02"],
+    });
+
+    currentTime.set(window.moment("2025-01-02 01:30"));
+
+    const displayedClocks = getDisplayedTasksWithClocksForTimeline(
+      window.moment("2025-01-02"),
+    );
+
+    expect(get(displayedClocks)).toMatchObject([
+      {
+        startTime: window.moment("2025-01-02 00:00"),
+        durationMinutes: 90,
+      },
+    ]);
+
+    expect(get(tasksWithActiveClockProps)).toMatchObject([
+      {
+        startTime: window.moment("2025-01-01 17:00"),
+        durationMinutes: 510,
+      },
+    ]);
+  });
+
+  test("Status bar activity history reads database activity logs from the previous 24 hours", async () => {
+    const { activityHistoryForStatusBar, currentTime } = await setUp({
+      visibleDays: ["2025-07-20"],
+    });
+
+    currentTime.set(window.moment("2025-07-20 12:00"));
+
+    expect(get(activityHistoryForStatusBar)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          startTime: window.moment("2025-07-19 12:00"),
+          durationMinutes: 150,
+        }),
+        expect.objectContaining({
+          startTime: window.moment("2025-07-19 15:00"),
+          durationMinutes: 90,
+        }),
+      ]),
+    );
   });
 
   test.todo("Splits log entries over midnight");

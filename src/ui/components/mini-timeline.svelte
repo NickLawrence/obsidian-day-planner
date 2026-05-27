@@ -4,34 +4,52 @@
   import { currentTimeSignal } from "../../global-store/current-time";
   import { addHorizontalPlacing } from "../../overlap/overlap";
   import { isRemote, type Task, type WithTime } from "../../task-types";
+  import { getActivityGroup } from "../../util/activity-definitions";
   import { doesOverlapWithRange } from "../../util/moment";
   import * as t from "../../util/task-utils";
 
   const {
-    tasksWithTimeForToday,
+    blocks,
   }: {
-    tasksWithTimeForToday: Readable<Array<WithTime<Task>>>;
+    blocks: Readable<Array<WithTime<Task>>>;
   } = $props();
 
-  const blocksPerHour = 6;
-  const hours = 3;
-  const totalBlocks = blocksPerHour * hours;
+  type ActivityBlockTask = Task & {
+    clockActivity?: {
+      activity: string;
+    };
+  };
+
+  const hours = 24;
+  const timelineWidthPx = 360;
+  const hourSegmentWidthPx = timelineWidthPx / hours;
+  const majorHourStep = 6;
+  const minuteWidthPx = timelineWidthPx / (hours * 60);
 
   const timeMarkerWidthPx = 8;
   const timeMarkerHalfWidthPx = timeMarkerWidthPx / 2;
-  const timeMarkerOffsetPx = $derived(
-    currentTimeSignal.current.minutes() - timeMarkerHalfWidthPx,
-  );
+  const timeMarkerOffsetPx = $derived(timelineWidthPx - timeMarkerHalfWidthPx);
 
   const rangeStart = $derived(
-    currentTimeSignal.current.clone().startOf("hour"),
+    currentTimeSignal.current.clone().subtract(hours, "hours"),
   );
-  const rangeEnd = $derived(
-    currentTimeSignal.current.clone().add(hours, "hours").endOf("hour"),
-  );
+  const rangeEnd = $derived(currentTimeSignal.current.clone());
+
+  function getBlockColor(block: WithTime<Task>) {
+    if (isRemote(block)) {
+      return block.calendar.color;
+    }
+
+    const activityName = (block as ActivityBlockTask).clockActivity?.activity;
+    const activityGroup = activityName
+      ? getActivityGroup(activityName)
+      : undefined;
+
+    return activityGroup?.color ?? "var(--color-base-50)";
+  }
 
   const displayedBlocks = $derived.by(() => {
-    const clampedTasksForRange = $tasksWithTimeForToday
+    const clampedTasksForRange = $blocks
       .filter((it) =>
         doesOverlapWithRange(
           { start: it.startTime, end: t.getEndTime(it) },
@@ -51,6 +69,7 @@
   style:--time-marker-half-width-px="{timeMarkerHalfWidthPx}px"
   style:--time-marker-offset-y-px="-3px"
   class="status-bar-item-segment mini-timeline"
+  style:width="{timelineWidthPx}px"
 >
   <div style:left="{timeMarkerOffsetPx}px" class="time-marker top"></div>
   <div style:left="{timeMarkerOffsetPx}px" class="time-marker bottom"></div>
@@ -58,29 +77,24 @@
   <div class="mini-time-block-wrapper">
     {#each displayedBlocks as block}
       <div
-        style:width="{block.durationMinutes}px"
-        style:left="{block.startTime.clone().diff(rangeStart, `minutes`)}px"
+        style:width="{block.durationMinutes * minuteWidthPx}px"
+        style:left="{block.startTime.clone().diff(rangeStart, `minutes`) * minuteWidthPx}px"
         style:height="{block.placing.spanPercent}%"
         style:bottom="{block.placing.offsetPercent}%"
+        style:background-color={getBlockColor(block)}
         class="mini-time-block"
         aria-label={t.getOneLineSummary(block)}
-      >
-        {#if isRemote(block)}
-          <div
-            style:background-color={block.calendar.color}
-            class="remote-block-strip"
-          ></div>
-        {/if}
-      </div>
+      ></div>
     {/each}
   </div>
 
-  {#each Array.from({ length: totalBlocks }) as _, index}
+  {#each Array.from({ length: hours }) as _, index}
     <div
       class={[
         "hour-segment",
-        (index + 1) % blocksPerHour === 0 && "hour-end-segment",
+        (index + 1) % majorHourStep === 0 && "hour-end-segment",
       ]}
+      style:width="{hourSegmentWidthPx}px"
     ></div>
   {/each}
 </div>
@@ -95,7 +109,7 @@
 
     height: 100%;
 
-    background-color: var(--color-base-30);
+    background-color: transparent;
   }
 
   .time-marker {
@@ -127,7 +141,7 @@
     position: relative;
     top: -15%;
 
-    width: 10px;
+    flex: 0 0 auto;
     height: 130%;
 
     background-color: transparent;
@@ -157,12 +171,6 @@
     display: flex;
     align-items: center;
 
-    background-color: var(--background-primary);
-    border: 1px solid var(--text-faint);
-  }
-
-  .remote-block-strip {
-    flex: 1 0 0;
-    height: 30%;
+    border: 1px solid color-mix(in srgb, white 20%, transparent);
   }
 </style>

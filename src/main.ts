@@ -695,6 +695,7 @@ export default class DayPlanner extends Plugin {
 
     const {
       tasksWithActiveClockProps,
+      activityHistoryForStatusBar,
       dataviewTasks,
       getDisplayedTasksWithClocksForTimeline,
       tasksWithTimeForToday,
@@ -766,6 +767,7 @@ export default class DayPlanner extends Plugin {
       errorStore,
       dateRanges,
       tasksWithTimeForToday,
+      activityHistoryForStatusBar,
     });
 
     this.register(destroyStatusBarWidget);

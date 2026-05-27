@@ -4,6 +4,7 @@ import type { ActivityAttributeField } from "../src/util/activity-definitions";
 import {
   getActivityResourcePath,
   getAvailableResourceNamesForField,
+  getResourceFilesForField,
 } from "../src/util/activity-resources";
 
 function getFileName(path: string) {
@@ -44,6 +45,36 @@ const bookField: ActivityAttributeField = {
 };
 
 describe("getAvailableResourceNamesForField", () => {
+  it("includes resource file aliases from frontmatter", () => {
+    const app = createApp([
+      {
+        path: "Books/The Hobbit.md",
+        metadata: {
+          frontmatter: {
+            aliases: ["There and Back Again"],
+            tags: ["book"],
+            status: "Backlog",
+          },
+        },
+      },
+      {
+        path: "Books/Dune.md",
+        metadata: {
+          frontmatter: {
+            alias: "Dune Book One",
+            tags: ["book"],
+            status: "Backlog",
+          },
+        },
+      },
+    ]);
+
+    expect(getResourceFilesForField(app as never, bookField)).toMatchObject([
+      { name: "The Hobbit", aliases: ["There and Back Again"] },
+      { name: "Dune", aliases: ["Dune Book One"] },
+    ]);
+  });
+
   it("returns resource names matching the configured resource tag", () => {
     const app = createApp([
       {

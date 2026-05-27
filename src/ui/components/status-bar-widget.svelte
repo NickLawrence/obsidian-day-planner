@@ -11,10 +11,12 @@
   const {
     onClick,
     tasksWithTimeForToday,
+    activityHistoryForStatusBar,
     errorStore,
   }: {
     onClick: () => Promise<void>;
     tasksWithTimeForToday: Readable<Array<WithTime<Task>>>;
+    activityHistoryForStatusBar: Readable<Array<WithTime<Task>>>;
     errorStore: Readable<Error | undefined>;
   } = $props();
 
@@ -67,7 +69,7 @@
   {/if}
 
   {#if progressIndicator === "mini-timeline"}
-    <MiniTimeline {tasksWithTimeForToday} />
+    <MiniTimeline blocks={activityHistoryForStatusBar} />
   {/if}
 </div>
 

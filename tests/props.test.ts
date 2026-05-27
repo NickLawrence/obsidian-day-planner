@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { cancelOpenClockByActivityIndex, clockOut } from "../src/util/props";
+import {
+  cancelOpenClockByActivityIndex,
+  clockOut,
+  toMarkdown,
+} from "../src/util/props";
 
 vi.mock("obsidian", async () => {
   const yaml = await import("js-yaml");
@@ -37,6 +41,29 @@ describe("clockOut", () => {
     expect(result.activities?.[0].notes).toBe(
       "Already had notes\nAdded on clock out",
     );
+  });
+});
+
+describe("toMarkdown", () => {
+  test("omits empty task ids from activities", () => {
+    const result = toMarkdown({
+      activities: [
+        {
+          activity: "work",
+          taskIds: [],
+          log: [{ start: "2026-01-01T10:00:00Z" }],
+        },
+        {
+          activity: "task",
+          taskIds: ["task-123"],
+          log: [{ start: "2026-01-01T11:00:00Z" }],
+        },
+      ],
+    });
+
+    expect(result).not.toContain("taskIds: []");
+    expect(result).toContain("taskIds:");
+    expect(result).toContain("- task-123");
   });
 });
 

@@ -62,7 +62,7 @@
 
     width: var(--time-block-width, 100%);
     height: var(--time-block-height, auto);
-    padding: var(--time-block-padding, 0 1px 2px);
+    padding: var(--time-block-padding, 0 1px);
 
     transition: 0.05s linear;
   }

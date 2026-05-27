@@ -15,7 +15,7 @@ import type { OnEditAbortedFn, OnUpdateFn, PointerDateTime } from "../../types";
 import { getActivityDisplayLabel } from "../../util/activity-definitions";
 import { getActivityResourcePath } from "../../util/activity-resources";
 import { createClockTaskFromActivity } from "../../util/clock";
-import { splitMultiday } from "../../util/moment";
+import { doesOverlapWithRange, splitMultiday } from "../../util/moment";
 import { type LogEntry } from "../../util/props";
 import { getUpdateTrigger } from "../../util/store";
 import { getDayKey, getRenderKey } from "../../util/task-utils";
@@ -149,7 +149,7 @@ export function useTasks(props: {
               clockMoments: [
                 window.moment(start, window.moment.ISO_8601, true),
                 $currentTime.clone(),
-              ] as const,
+              ] as [Moment, Moment],
             })),
         )
         .filter(({ clockMoments: [start] }) => start.isValid())
@@ -165,17 +165,30 @@ export function useTasks(props: {
             clockActivity: activity,
           },
         }))
-        .filter(uniqBy(({ key }) => key))
+        .filter(
+          ({ key }, index, entries) =>
+            entries.findIndex((entry) => entry.key === key) === index,
+        )
         .map(({ task }) => task),
   );
 
-  const truncatedTasksWithActiveClockProps = derived(
+  const splitTasksWithActiveClockProps = derived(
     [tasksWithActiveClockProps],
     ([$tasksWithActiveClockProps]) =>
-      $tasksWithActiveClockProps.map((task) => ({
-        ...task,
-        truncated: ["bottom" as const],
-      })),
+      $tasksWithActiveClockProps.flatMap((task) => {
+        const endTime = task.startTime
+          .clone()
+          .add(task.durationMinutes, "minutes");
+
+        return splitMultiday(task.startTime, endTime).map(
+          ([startTime, endTime]) => ({
+            ...task,
+            startTime,
+            durationMinutes: endTime.diff(startTime, "minutes"),
+            truncated: ["bottom" as const],
+          }),
+        );
+      }),
   );
 
   const logRecords = derived(
@@ -216,11 +229,32 @@ export function useTasks(props: {
   );
 
   const combinedClocks = derived(
-    [truncatedTasksWithActiveClockProps, logRecords],
-    ([$truncatedTasksWithActiveClockProps, $logRecords]: [
+    [splitTasksWithActiveClockProps, logRecords],
+    ([$splitTasksWithActiveClockProps, $logRecords]: [
       LocalTask[],
       LocalTask[],
-    ]) => $truncatedTasksWithActiveClockProps.concat($logRecords),
+    ]) => $splitTasksWithActiveClockProps.concat($logRecords),
+  );
+
+  const activityHistoryForStatusBar = derived(
+    [combinedClocks, currentTime],
+    ([$combinedClocks, $currentTime]) => {
+      const rangeStart = $currentTime.clone().subtract(24, "hours");
+      const rangeEnd = $currentTime.clone();
+
+      return $combinedClocks.filter((clock) =>
+        doesOverlapWithRange(
+          {
+            start: clock.startTime,
+            end: clock.startTime.clone().add(clock.durationMinutes, "minutes"),
+          },
+          {
+            start: rangeStart,
+            end: rangeEnd,
+          },
+        ),
+      );
+    },
   );
 
   const dayToLogRecords = derived(combinedClocks, ($combinedClocks) =>
@@ -273,6 +307,7 @@ export function useTasks(props: {
   return {
     dataviewTasks,
     tasksWithActiveClockProps,
+    activityHistoryForStatusBar,
     getDisplayedTasksWithClocksForTimeline,
     tasksWithTimeForToday,
     editContext,

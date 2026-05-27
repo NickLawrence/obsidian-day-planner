@@ -18,12 +18,15 @@
   import { getResourceFilesForField } from "../../util/activity-resources";
   import type { Activity } from "../../util/props";
 
+  import Tree from "./obsidian/tree.svelte";
+
   type QueueSuggestion = {
     key: string;
     displayText: string;
     activityName: string;
     initialValues: Record<string, string | number | undefined>;
     recency: number;
+    needsFile?: boolean;
   };
 
   const { app, getAllActivities, startActivityWithSelection, useSelector } =
@@ -158,17 +161,19 @@
       return "";
     }
 
-    const startField = getActivityAttributeFields(definition.name, "start").find(
-      ({ key }) => key === range.start,
-    );
+    const startField = getActivityAttributeFields(
+      definition.name,
+      "start",
+    ).find(({ key }) => key === range.start);
 
     return ` - ${startField?.label ?? range.start}: ${startValue}`;
   }
 
   function hasTaskTag(task: STask) {
     return (
-      task.tags.some((tag) => tag.replace(/^#/, "").toLowerCase() === "task") ||
-      /(^|\s)#task(?=\s|$)/i.test(task.text)
+      task.tags.some(
+        (tag: string) => tag.replace(/^#/, "").toLowerCase() === "task",
+      ) || /(^|\s)#task(?=\s|$)/i.test(task.text)
     );
   }
 
@@ -189,8 +194,20 @@
       const recentActivities = getRecentActivities(activityName);
 
       for (const field of fields) {
-        for (const resource of getResourceFilesForField(app, field)) {
-          if (resource.status !== "in progress" && resource.status !== "queued") {
+        const resourceFiles = getResourceFilesForField(app, field);
+        const resourceNames = new Set(
+          resourceFiles.flatMap((resource) =>
+            [resource.name, resource.file.name, ...resource.aliases].map(
+              (name) => name.trim().toLowerCase(),
+            ),
+          ),
+        );
+
+        for (const resource of resourceFiles) {
+          if (
+            resource.status !== "in progress" &&
+            resource.status !== "queued"
+          ) {
             continue;
           }
 
@@ -225,6 +242,55 @@
           if (resource.status === "queued") {
             queued[activityName] = [...(queued[activityName] ?? []), item];
           }
+        }
+
+        const missingResourceNames = new Set<string>();
+
+        for (const { activity, recency } of recentActivities) {
+          const values = getActivityAttributeValues(activityName, activity);
+          const value = values[field.key];
+
+          if (typeof value !== "string" && typeof value !== "number") {
+            continue;
+          }
+
+          const resourceName = String(value).trim();
+
+          if (!resourceName) {
+            continue;
+          }
+
+          const normalizedResourceName = resourceName.toLowerCase();
+
+          if (
+            resourceNames.has(normalizedResourceName) ||
+            missingResourceNames.has(normalizedResourceName)
+          ) {
+            continue;
+          }
+
+          missingResourceNames.add(normalizedResourceName);
+
+          const initialValues = getInitialValues({
+            activityName,
+            definition,
+            resourceKey: field.key,
+            resourceValue: resourceName,
+            recentActivities,
+          });
+          const item: QueueSuggestion = {
+            key: `${activityName}:${field.key}:missing:${normalizedResourceName}`,
+            displayText: `${getActivityLabel(activityName)} - ${resourceName}${getRangeSuffix(definition, initialValues)} [Needs File]`,
+            activityName,
+            initialValues,
+            recency,
+            needsFile: true,
+          };
+
+          inProgress[activityName] = [
+            ...(inProgress[activityName] ?? []),
+            item,
+          ];
         }
       }
     }
@@ -269,11 +335,21 @@
     event.preventDefault();
     const menu = new Menu();
     menu.addItem((item) =>
-      item.setTitle("Start activity").setIcon("play").onClick(() => {
-        void startActivityWithSelection(selection);
-      }),
+      item
+        .setTitle("Start activity")
+        .setIcon("play")
+        .onClick(() => {
+          void startActivityWithSelection(selection);
+        }),
     );
     menu.showAtMouseEvent(event);
+  }
+
+  function getEntryCount(groups: Record<string, QueueSuggestion[]>) {
+    return Object.values(groups).reduce(
+      (total, entries) => total + entries.length,
+      0,
+    );
   }
 
   $effect(() => {
@@ -284,43 +360,150 @@
 </script>
 
 <div class="activity-queue-panel">
-  <h3>In Progress</h3>
-  {#if Object.keys(inProgressByActivity).length === 0}
-    <div>None</div>
-  {:else}
-    {#each Object.entries(inProgressByActivity) as [activity, entries]}
-      <h4>{activity}</h4>
-      {#each entries as entry (entry.key)}
-        <div class="entry" oncontextmenu={(event) => onContextMenu(event, { activityName: entry.activityName, initialValues: entry.initialValues })}>{entry.displayText}</div>
-      {/each}
-    {/each}
-  {/if}
+  <div class="top-level-tree">
+    <Tree isInitiallyOpen title="▶️ In Progress">
+      {#snippet flair()}
+        {String(getEntryCount(inProgressByActivity))}
+      {/snippet}
+      {#if Object.keys(inProgressByActivity).length === 0}
+        <div class="empty-entry">None</div>
+      {:else}
+        {#each Object.entries(inProgressByActivity) as [activity, entries]}
+          <Tree isInitiallyOpen title={getActivityLabel(activity)}>
+            {#snippet flair()}
+              {String(entries.length)}
+            {/snippet}
+            <div class="entry-list">
+              {#each entries as entry (entry.key)}
+                <div
+                  class:needs-file={entry.needsFile}
+                  class="entry"
+                  oncontextmenu={(event) =>
+                    onContextMenu(event, {
+                      activityName: entry.activityName,
+                      initialValues: entry.initialValues,
+                    })}
+                >
+                  {entry.displayText}
+                </div>
+              {/each}
+            </div>
+          </Tree>
+        {/each}
+      {/if}
+    </Tree>
+  </div>
 
-  <h3>Queued</h3>
-  {#if Object.keys(queuedByActivity).length === 0}
-    <div>None</div>
-  {:else}
-    {#each Object.entries(queuedByActivity) as [activity, entries]}
-      <h4>{activity}</h4>
-      {#each entries as entry (entry.key)}
-        <div class="entry" oncontextmenu={(event) => onContextMenu(event, { activityName: entry.activityName, initialValues: entry.initialValues })}>{entry.displayText}</div>
-      {/each}
-    {/each}
-  {/if}
+  <div class="top-level-tree">
+    <Tree isInitiallyOpen title="⏳ Queued">
+      {#snippet flair()}
+        {String(getEntryCount(queuedByActivity))}
+      {/snippet}
+      {#if Object.keys(queuedByActivity).length === 0}
+        <div class="empty-entry">None</div>
+      {:else}
+        {#each Object.entries(queuedByActivity) as [activity, entries]}
+          <Tree isInitiallyOpen title={getActivityLabel(activity)}>
+            {#snippet flair()}
+              {String(entries.length)}
+            {/snippet}
+            <div class="entry-list">
+              {#each entries as entry (entry.key)}
+                <div
+                  class="entry"
+                  oncontextmenu={(event) =>
+                    onContextMenu(event, {
+                      activityName: entry.activityName,
+                      initialValues: entry.initialValues,
+                    })}
+                >
+                  {entry.displayText}
+                </div>
+              {/each}
+            </div>
+          </Tree>
+        {/each}
+      {/if}
+    </Tree>
+  </div>
 
-  <h3>Open Tasks</h3>
-  {#if openTasks.length === 0}
-    <div>None</div>
-  {:else}
-    {#each openTasks as task (`${task.path}:${task.line}`)}
-      <div class="entry" onclick={() => void openTask(task)}>{task.text}</div>
-    {/each}
-  {/if}
+  <div class="top-level-tree">
+    <Tree isInitiallyOpen title="📋 Open Tasks">
+      {#snippet flair()}
+        {String(openTasks.length)}
+      {/snippet}
+      {#if openTasks.length === 0}
+        <div class="empty-entry">None</div>
+      {:else}
+        <div class="entry-list">
+          {#each openTasks as task (`${task.path}:${task.line}`)}
+            <div class="entry" onclick={() => void openTask(task)}>
+              {task.text}
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </Tree>
+  </div>
 </div>
 
 <style>
   .activity-queue-panel {
-    padding: var(--size-4-2);
+    display: flex;
+    flex-direction: column;
   }
-  .entry { padding: 4px 0; }
+  .top-level-tree {
+    border-bottom: 2px solid var(--background-modifier-border);
+  }
+  .top-level-tree:first-child {
+    border-top: 2px solid var(--background-modifier-border);
+  }
+  .activity-queue-panel :global(.tree-item-self) {
+    align-items: center;
+  }
+  .activity-queue-panel
+    :global(.tree-container .tree-container .tree-header-container),
+  .activity-queue-panel :global(.tree-container .tree-container .entry-list),
+  .activity-queue-panel :global(.tree-container .tree-container .empty-entry) {
+    padding-left: var(--size-4-4);
+  }
+  .top-level-tree
+    :global(
+      > .tree-container
+        > .tree-header-container
+        > .tree-item-self
+        > .tree-item-inner
+    ) {
+    font-size: calc(var(--font-ui-medium) * 2);
+  }
+  .entry {
+    position: relative;
+
+    padding: var(--size-2-1) var(--size-4-2) var(--size-2-1) var(--size-4-8);
+
+    font-size: var(--font-ui-small);
+  }
+  .entry + .entry::before {
+    content: "";
+
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: var(--size-4-8);
+
+    border-top: 1px solid var(--background-modifier-border);
+  }
+  .entry-list {
+    display: flex;
+    flex-direction: column;
+  }
+  .empty-entry {
+    padding: var(--size-2-1) var(--size-4-2) var(--size-2-1) var(--size-4-8);
+
+    font-size: var(--font-ui-small);
+    color: var(--text-faint);
+  }
+  .needs-file {
+    color: var(--text-error);
+  }
 </style>
