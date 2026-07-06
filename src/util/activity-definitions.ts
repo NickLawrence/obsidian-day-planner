@@ -67,7 +67,7 @@ const activityDefinitions: ActivityDefinition[] = [
     name: "read",
     label: "Read",
     group: "media",
-    plan: { defaultHours: 5 },
+    plan: { defaultHours: 5, maxHours: 15 },
     emoji: "📖",
     attributes: {
       key: "read",
@@ -110,7 +110,7 @@ const activityDefinitions: ActivityDefinition[] = [
     name: "game",
     label: "Game",
     group: "media",
-    plan: { defaultHours: 15 },
+    plan: { defaultHours: 15, maxHours: 40 },
     emoji: "🎮",
     attributes: {
       key: "game",
@@ -289,8 +289,66 @@ const activityDefinitions: ActivityDefinition[] = [
     emoji: "🪥",
     plan: { defaultHours: 2, intervalMinutes: 15 },
   },
-  { name: "restaurant", label: "Restaurant", group: "social", emoji: "🍜" },
-  { name: "bar", label: "Bar", group: "social", emoji: "🍸" },
+  {
+    name: "restaurant",
+    label: "Restaurant",
+    group: "social",
+    emoji: "🍜",
+    attributes: {
+      key: "restaurant",
+      mainKey: "name",
+      start: [
+        {
+          key: "name",
+          label: "Restaurant",
+          type: "text",
+          required: true,
+          suggestHistory: false,
+        },
+      ],
+      end: [],
+    },
+  },
+  {
+    name: "bar",
+    label: "Bar",
+    group: "social",
+    emoji: "🍸",
+    attributes: {
+      key: "bar",
+      mainKey: "name",
+      start: [
+        {
+          key: "name",
+          label: "Bar",
+          type: "text",
+          required: true,
+          suggestHistory: false,
+        },
+      ],
+      end: [],
+    },
+  },
+  {
+    name: "cafe",
+    label: "Cafe",
+    group: "social",
+    emoji: "☕",
+    attributes: {
+      key: "cafe",
+      mainKey: "name",
+      start: [
+        {
+          key: "name",
+          label: "Cafe",
+          type: "text",
+          required: true,
+          suggestHistory: false,
+        },
+      ],
+      end: [],
+    },
+  },
   { name: "social", label: "Social", group: "social", emoji: "👯" },
   {
     name: "bed",
@@ -306,7 +364,26 @@ const activityDefinitions: ActivityDefinition[] = [
     group: "transit",
     emoji: "🚃",
   },
-  { name: "shop", label: "Shop", group: "household", emoji: "🛍️" },
+  {
+    name: "shop",
+    label: "Shop",
+    group: "household",
+    emoji: "🛍️",
+    attributes: {
+      key: "shop",
+      mainKey: "name",
+      start: [
+        {
+          key: "name",
+          label: "Store",
+          type: "text",
+          required: true,
+          suggestHistory: false,
+        },
+      ],
+      end: [],
+    },
+  },
   {
     name: "pathfinder",
     label: "Pathfinder",

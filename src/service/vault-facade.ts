@@ -16,6 +16,10 @@ export class VaultFacade {
     const contents = await this.vault.read(file);
     const newContents = editFn(contents);
 
+    if (newContents === contents) {
+      return;
+    }
+
     await this.vault.modify(file, newContents);
   }
 

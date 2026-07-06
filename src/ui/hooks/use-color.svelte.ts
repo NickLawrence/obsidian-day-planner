@@ -16,6 +16,10 @@ interface UseColorProps {
 const defaultBorderColor = "var(--color-base-50)";
 const groupBackgroundMix = 5;
 const groupBorderMix = 45;
+const baseBackgroundColor =
+  "var(--background-primary, var(--background-secondary, #ffffff))";
+const lightThemeBackgroundColor = "#ffffff";
+const darkThemeBackgroundColor = "#1e1e1e";
 
 type ActivityBlockTask = LocalTask & {
   clockActivity?: {
@@ -29,8 +33,16 @@ function getClockActivityName(task: Task) {
     : undefined;
 }
 
-function getOpaqueGroupColor(color: string, mixPercent: number) {
-  return `color-mix(in srgb, ${color} ${mixPercent}%, var(--background-primary))`;
+function getOpaqueGroupColor(
+  color: string,
+  mixPercent: number,
+  isDarkMode: boolean,
+) {
+  const backgroundColor = isDarkMode
+    ? darkThemeBackgroundColor
+    : lightThemeBackgroundColor;
+
+  return chroma.mix(backgroundColor, color, mixPercent / 100, "rgb").hex();
 }
 
 export function useColor({ task }: UseColorProps) {
@@ -82,8 +94,16 @@ export function useColor({ task }: UseColorProps) {
     }
 
     return {
-      background: getOpaqueGroupColor(activityGroup.color, groupBackgroundMix),
-      border: getOpaqueGroupColor(activityGroup.color, groupBorderMix),
+      background: getOpaqueGroupColor(
+        activityGroup.color,
+        groupBackgroundMix,
+        isDarkMode.current,
+      ),
+      border: getOpaqueGroupColor(
+        activityGroup.color,
+        groupBorderMix,
+        isDarkMode.current,
+      ),
     };
   });
 
@@ -110,7 +130,7 @@ export function useColor({ task }: UseColorProps) {
       return "var(--background-secondary)";
     }
 
-    return "var(--background-primary)";
+    return baseBackgroundColor;
   });
 
   const borderColor = $derived.by(() => {

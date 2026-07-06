@@ -107,6 +107,11 @@
   background-color: transparent;
 }
 
+[data-type="planner-timeline"] .planner-timeline-scroller {
+  box-sizing: border-box;
+  padding-bottom: var(--status-bar-height, 24px);
+}
+
 [data-type="planner-timeline"] .view-content,
 [data-type="planner-weekly"] .view-content {
   --scrollbar-width: 12px;

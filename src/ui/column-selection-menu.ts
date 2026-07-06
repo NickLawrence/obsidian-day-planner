@@ -9,7 +9,7 @@ export function createColumnSelectionMenu(props: {
 }) {
   const { settings, event } = props;
 
-  const { planner, timeTracker } = get(settings).timelineColumns;
+  const { planner, timeTracker, combined } = get(settings).timelineColumns;
 
   function updateColumns(next: TimelineColumns) {
     settings.update((previous) => ({
@@ -27,6 +27,7 @@ export function createColumnSelectionMenu(props: {
           updateColumns({
             planner: true,
             timeTracker: false,
+            combined: false,
           });
         }),
     )
@@ -38,17 +39,31 @@ export function createColumnSelectionMenu(props: {
           updateColumns({
             planner: false,
             timeTracker: true,
+            combined: false,
           });
         }),
     )
     .addItem((item) =>
       item
         .setTitle("Show Planner & Time Tracker")
-        .setChecked(planner && timeTracker)
+        .setChecked(planner && timeTracker && !combined)
         .onClick(() => {
           updateColumns({
             planner: true,
             timeTracker: true,
+            combined: false,
+          });
+        }),
+    )
+    .addItem((item) =>
+      item
+        .setTitle("Show Planner & Upcoming Tracker Together")
+        .setChecked(combined)
+        .onClick(() => {
+          updateColumns({
+            planner: true,
+            timeTracker: true,
+            combined: true,
           });
         }),
     )

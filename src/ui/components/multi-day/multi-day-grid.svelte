@@ -51,9 +51,14 @@
 
   let visibleSideControls = $state<SideControls>("none");
   let timelineInternalColumnCount = $derived.by(() => {
-    const columnFlags = Object.values(settingsSignal.current.timelineColumns);
+    const { combined, ...splitColumns } =
+      settingsSignal.current.timelineColumns;
 
-    return columnFlags.filter(Boolean).length;
+    if (combined) {
+      return 1;
+    }
+
+    return Object.values(splitColumns).filter(Boolean).length;
   });
 
   function toggleSideControls(toggledControls: SideControls) {

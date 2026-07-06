@@ -24,7 +24,7 @@ export const firstDaysOfWeek = [
   "friday",
 ] as const;
 
-export type TimelineColumnType = "timeTracker" | "planner";
+export type TimelineColumnType = "timeTracker" | "planner" | "combined";
 export type TimelineColumns = Record<TimelineColumnType, boolean>;
 
 export interface DayPlannerSettings {
@@ -123,7 +123,7 @@ export const defaultSettings: DayPlannerSettings = {
   multiDayRange: "3-days",
   showActiveClocks: false,
   showTimelineInSidebar: true,
-  timelineColumns: { planner: true, timeTracker: false },
+  timelineColumns: { planner: true, timeTracker: false, combined: false },
   fitbitClientId: "",
   fitbitClientSecret: "",
   fitbitCodeVerifier: "",
