@@ -16,7 +16,7 @@
   import type { DayPlannerActivityApi } from "../../util/activity-totals";
   import type { Activity } from "../../util/props";
   import {
-    extractActivityGoals,
+    extractActivityPlanEntries,
     mergeActivityDurationsWithGoals,
   } from "../../util/weekly-activity-goals";
 
@@ -250,7 +250,10 @@
     }
 
     const weekNote = periodicNotes.getWeeklyNote(weekStart);
-    const goals = await getGoalsForWeek(weekNote);
+    const planEntries = await getPlanEntriesForWeek(weekNote);
+    const goals = planEntries
+      .filter((entry) => entry.kind === "goal")
+      .map((entry) => ({ activity: entry.activity, goal: entry.duration }));
     const { colors, isDailyAccentPluginActive } = getDayColors(weekStart);
     dayColors = colors;
     legendDays = getLegendDays(
@@ -293,34 +296,58 @@
         });
       });
 
-    otherActivityRows = withGoals
-      .filter((entry) => !entry.goal)
-      .filter((entry) => entry.duration.asMilliseconds() > 0)
-      .map(({ activity, activityKey, duration }) => ({
-        activity,
-        activityKey,
-        duration,
-      }))
-      .sort((a, b) => {
-        const durationDiff =
-          b.duration.asMilliseconds() - a.duration.asMilliseconds();
+    const estimateKeys = new Set(
+      planEntries
+        .filter((entry) => entry.kind === "estimate")
+        .map((entry) => normalizeActivityName(entry.activity)),
+    );
+    const otherRowsByActivity = new Map(
+      withGoals
+        .filter((entry) => !entry.goal)
+        .filter(
+          (entry) =>
+            entry.duration.asMilliseconds() > 0 ||
+            estimateKeys.has(entry.activityKey),
+        )
+        .map(({ activity, activityKey, duration }) => [
+          activityKey,
+          { activity, activityKey, duration },
+        ]),
+    );
 
-        if (durationDiff !== 0) {
-          return durationDiff;
-        }
+    for (const entry of planEntries) {
+      if (entry.kind !== "estimate") continue;
 
-        return a.activity.localeCompare(b.activity, undefined, {
-          sensitivity: "base",
+      const activityKey = normalizeActivityName(entry.activity);
+      if (!otherRowsByActivity.has(activityKey)) {
+        otherRowsByActivity.set(activityKey, {
+          activity: entry.activity,
+          activityKey,
+          duration: window.moment.duration(0),
         });
+      }
+    }
+
+    otherActivityRows = [...otherRowsByActivity.values()].sort((a, b) => {
+      const durationDiff =
+        b.duration.asMilliseconds() - a.duration.asMilliseconds();
+
+      if (durationDiff !== 0) {
+        return durationDiff;
+      }
+
+      return a.activity.localeCompare(b.activity, undefined, {
+        sensitivity: "base",
       });
+    });
   }
 
-  async function getGoalsForWeek(weekNote: TFile | null) {
+  async function getPlanEntriesForWeek(weekNote: TFile | null) {
     if (!weekNote) {
       return [];
     }
 
-    return extractActivityGoals(app, weekNote);
+    return extractActivityPlanEntries(app, weekNote);
   }
 
   function progressPercent(
@@ -360,7 +387,7 @@
     <div class="empty-state">
       Weekly notes support is required to show activity goals.
     </div>
-  {:else if rows.length === 0}
+  {:else if rows.length === 0 && otherActivityRows.length === 0}
     <div class="empty-state">
       No goals found for this week under the “Activity goals” heading.
     </div>

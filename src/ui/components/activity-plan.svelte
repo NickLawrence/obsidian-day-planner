@@ -37,22 +37,16 @@
   let { app, periodicNotes }: { app: App; periodicNotes: PeriodicNotes } =
     $props();
 
-  const defaultMaxHours = 40;
+  const defaultMaxHours = 15;
   const defaultIntervalMinutes = 60;
   const weeklyHours = 168;
   const defaultActivityPlanItems: ActivityPlanItem[] =
-    getActivityDefinitions().flatMap((definition) => {
-      if (!definition.plan) return [];
-
-      return [
-        {
-          name: definition.name,
-          defaultHours: definition.plan.defaultHours,
-          maxHours: definition.plan.maxHours,
-          intervalMinutes: definition.plan.intervalMinutes,
-        },
-      ];
-    });
+    getActivityDefinitions().map((definition) => ({
+      name: definition.name,
+      defaultHours: definition.plan?.defaultHours ?? 0,
+      maxHours: definition.plan?.maxHours,
+      intervalMinutes: definition.plan?.intervalMinutes,
+    }));
 
   const defaultHoursByActivity = Object.fromEntries(
     defaultActivityPlanItems.map(({ name, defaultHours }) => [
@@ -257,9 +251,10 @@
   onMount(() => {
     void refresh();
 
-    offMetadataChange = (
-      app.metadataCache as unknown as DataviewMetadataCache
-    )?.on("dataview:metadata-change", () => {
+    const metadataCache = app.metadataCache as unknown as
+      | DataviewMetadataCache
+      | undefined;
+    offMetadataChange = metadataCache?.on?.("dataview:metadata-change", () => {
       void refresh();
     });
 
@@ -274,9 +269,10 @@
     }
 
     if (offMetadataChange) {
-      (app.metadataCache as unknown as DataviewMetadataCache)?.offref(
-        offMetadataChange,
-      );
+      const metadataCache = app.metadataCache as unknown as
+        | DataviewMetadataCache
+        | undefined;
+      metadataCache?.offref?.(offMetadataChange);
     }
   });
 </script>

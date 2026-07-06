@@ -73,6 +73,24 @@ describe("extractActivityGoals", () => {
     expect(goals[1].goal.asMinutes()).toBeCloseTo(30);
   });
 
+  it("keeps zero-duration goals", () => {
+    const app = createDataviewApp([
+      {
+        fields: new Map<string, unknown>([
+          ["activity", "reading"],
+          ["goal", Duration.fromObject({ minutes: 0 })],
+        ]),
+        section: activityGoalsSection,
+      },
+    ]);
+
+    const goals = extractActivityGoals(app, weeklyFile);
+
+    expect(goals).toHaveLength(1);
+    expect(goals[0].activity).toBe("reading");
+    expect(goals[0].goal.asMinutes()).toBe(0);
+  });
+
   it("ignores estimates when extracting goals", () => {
     const app = createDataviewApp([
       {
@@ -123,6 +141,27 @@ describe("mergeActivityDurationsWithGoals", () => {
 });
 
 describe("activity plan entries", () => {
+  it("keeps zero-duration plan entries", () => {
+    const app = createDataviewApp([
+      {
+        fields: new Map<string, unknown>([
+          ["activity", "piano"],
+          ["estimate", Duration.fromObject({ minutes: 0 })],
+        ]),
+        section: activityGoalsSection,
+      },
+    ]);
+
+    const entries = extractActivityPlanEntries(app, weeklyFile);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      activity: "piano",
+      kind: "estimate",
+    });
+    expect(entries[0].duration.asMinutes()).toBe(0);
+  });
+
   it("extracts goals and estimates from Dataview list items", () => {
     const app = createDataviewApp([
       {

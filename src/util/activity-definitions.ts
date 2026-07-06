@@ -51,11 +51,8 @@ const activityGroups: ActivityGroupDefinition[] = [
   { name: "work", label: "Work", color: "#808080" },
   { name: "media", label: "Media", color: "#00bcd4" },
   { name: "bed", label: "Bed", color: "#0000b9" },
-  {
-    name: "exercise",
-    label: "Exercise",
-    color: "#2e7d32",
-  },
+  { name: "exercise", label: "Exercise", color: "#2e7d32" },
+  { name: "hobby", label: "Hobby", color: "#ffa500" },
   { name: "hygiene", label: "Hygiene", color: "#ffd600" },
   { name: "household", label: "Household", color: "#8b4513" },
   { name: "social", label: "Social", color: "#8e24aa" },
@@ -67,7 +64,7 @@ const activityDefinitions: ActivityDefinition[] = [
     name: "read",
     label: "Read",
     group: "media",
-    plan: { defaultHours: 5, maxHours: 15 },
+    plan: { defaultHours: 5 },
     emoji: "📖",
     attributes: {
       key: "read",
@@ -190,7 +187,7 @@ const activityDefinitions: ActivityDefinition[] = [
     name: "light work",
     label: "Light Work",
     group: "work",
-    plan: { defaultHours: 30 },
+    plan: { defaultHours: 30, maxHours: 60 },
     emoji: "🔧",
     attributes: {
       key: "light work",
@@ -210,7 +207,7 @@ const activityDefinitions: ActivityDefinition[] = [
     name: "deep work",
     label: "Deep Work",
     group: "work",
-    plan: { defaultHours: 10 },
+    plan: { defaultHours: 10, maxHours: 60 },
     emoji: "🛠️",
     attributes: {
       key: "deep work",
@@ -242,7 +239,7 @@ const activityDefinitions: ActivityDefinition[] = [
   {
     name: "juggle",
     label: "Juggle",
-    group: "exercise",
+    group: "hobby",
     emoji: "🤹",
     plan: { defaultHours: 3, intervalMinutes: 15 },
   },
@@ -263,9 +260,16 @@ const activityDefinitions: ActivityDefinition[] = [
   {
     name: "language",
     label: "Language",
-    group: "work",
+    group: "hobby",
     emoji: "🗣️",
     plan: { defaultHours: 3, intervalMinutes: 30 },
+  },
+  {
+    name: "craft",
+    label: "Craft",
+    group: "hobby",
+    emoji: "🪡",
+    plan: { defaultHours: 0, intervalMinutes: 30 },
   },
   {
     name: "housework",
@@ -376,6 +380,26 @@ const activityDefinitions: ActivityDefinition[] = [
         {
           key: "name",
           label: "Store",
+          type: "text",
+          required: true,
+          suggestHistory: false,
+        },
+      ],
+      end: [],
+    },
+  },
+  {
+    name: "tour",
+    label: "Tour",
+    group: "social",
+    emoji: "🖼️",
+    attributes: {
+      key: "tour",
+      mainKey: "name",
+      start: [
+        {
+          key: "name",
+          label: "Place",
           type: "text",
           required: true,
           suggestHistory: false,

@@ -147,7 +147,7 @@ function toMomentDuration(luxonDuration: unknown): MomentDuration | null {
   if (typeof asFn !== "function") return null;
 
   const ms = Number(asFn.call(luxonDuration, "milliseconds"));
-  if (!Number.isFinite(ms) || ms === 0) return null;
+  if (!Number.isFinite(ms) || ms < 0) return null;
 
   return window.moment.duration(ms);
 }
