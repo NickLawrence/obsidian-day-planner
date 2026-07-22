@@ -2,7 +2,10 @@ import { describe, expect, test } from "vitest";
 
 import {
   calculateDailyActivityDurations,
+  calculateDailyUnrecordedActivityDuration,
+  calculateUnrecordedActivityDurationForRange,
   calculateWeeklyActivityDurations,
+  calculateWeeklyUnrecordedActivityDuration,
   formatDuration,
   getWeekRangeFor,
 } from "../src/util/activity-log-summary";
@@ -10,12 +13,12 @@ import type { Activity } from "../src/util/props";
 
 describe("calculateWeeklyActivityDurations", () => {
   test("aggregates durations per activity within the iso week", () => {
-      const activities: Activity[] = [
-        {
-          taskIds: [],
-          activity: "activity: piano",
-          log: [
-            {
+    const activities: Activity[] = [
+      {
+        taskIds: [],
+        activity: "activity: piano",
+        log: [
+          {
             start: "2024-09-09T10:00:00Z",
             end: "2024-09-09T11:30:00Z",
           },
@@ -24,12 +27,12 @@ describe("calculateWeeklyActivityDurations", () => {
             end: "2024-09-16T01:00:00Z",
           },
         ],
-        },
-        {
-          taskIds: [],
-          activity: "activity: reading",
-          log: [
-            {
+      },
+      {
+        taskIds: [],
+        activity: "activity: reading",
+        log: [
+          {
             start: "2024-09-10T09:00:00Z",
             end: "2024-09-10T09:45:00Z",
           },
@@ -47,20 +50,24 @@ describe("calculateWeeklyActivityDurations", () => {
       "activity: reading",
     ]);
     expect(
-      totals.find((it) => it.activity === "activity: piano")?.duration.asMinutes(),
+      totals
+        .find((it) => it.activity === "activity: piano")
+        ?.duration.asMinutes(),
     ).toBe(150);
     expect(
-      totals.find((it) => it.activity === "activity: reading")?.duration.asMinutes(),
+      totals
+        .find((it) => it.activity === "activity: reading")
+        ?.duration.asMinutes(),
     ).toBe(45);
   });
 
   test("ignores entries outside the week and includes active clock time", () => {
-      const activities: Activity[] = [
-        {
-          taskIds: [],
-          activity: "activity: piano",
-          log: [
-            {
+    const activities: Activity[] = [
+      {
+        taskIds: [],
+        activity: "activity: piano",
+        log: [
+          {
             start: "2024-09-02T10:00:00Z",
             end: "2024-09-02T10:30:00Z",
           },
@@ -69,12 +76,12 @@ describe("calculateWeeklyActivityDurations", () => {
             end: "2024-09-09T00:30:00Z",
           },
         ],
-        },
-        {
-          taskIds: [],
-          activity: "activity: Reading",
-          log: [
-            {
+      },
+      {
+        taskIds: [],
+        activity: "activity: Reading",
+        log: [
+          {
             start: "2024-09-10T10:00:00Z",
             end: undefined,
           },
@@ -92,10 +99,14 @@ describe("calculateWeeklyActivityDurations", () => {
       "activity: Reading",
     ]);
     expect(
-      totals.find((it) => it.activity === "activity: piano")?.duration.asMinutes(),
+      totals
+        .find((it) => it.activity === "activity: piano")
+        ?.duration.asMinutes(),
     ).toBe(30);
     expect(
-      totals.find((it) => it.activity === "activity: Reading")?.duration.asMinutes(),
+      totals
+        .find((it) => it.activity === "activity: Reading")
+        ?.duration.asMinutes(),
     ).toBeGreaterThan(0);
   });
 });
@@ -111,12 +122,12 @@ describe("getWeekRangeFor", () => {
 
 describe("calculateDailyActivityDurations", () => {
   test("aggregates per-day durations and normalizes activity names", () => {
-      const activities: Activity[] = [
-        {
-          taskIds: [],
-          activity: "Piano ",
-          log: [
-            {
+    const activities: Activity[] = [
+      {
+        taskIds: [],
+        activity: "Piano ",
+        log: [
+          {
             start: "2024-09-10T08:00:00Z",
             end: "2024-09-10T08:45:00Z",
           },
@@ -125,22 +136,22 @@ describe("calculateDailyActivityDurations", () => {
             end: "2024-09-10T09:15:00Z",
           },
         ],
-        },
-        {
-          taskIds: [],
-          activity: "piano",
-          log: [
-            {
+      },
+      {
+        taskIds: [],
+        activity: "piano",
+        log: [
+          {
             start: "2024-09-10T10:00:00Z",
             end: "2024-09-10T10:10:00Z",
           },
         ],
-        },
-        {
-          taskIds: [],
-          activity: "Reading",
-          log: [
-            {
+      },
+      {
+        taskIds: [],
+        activity: "Reading",
+        log: [
+          {
             start: "2024-09-10T11:00:00Z",
             end: "2024-09-10T11:30:00Z",
           },
@@ -153,10 +164,7 @@ describe("calculateDailyActivityDurations", () => {
       window.moment("2024-09-10"),
     );
 
-    expect(totals.map((it) => it.activity)).toEqual([
-      "🎹 Piano",
-      "Reading",
-    ]);
+    expect(totals.map((it) => it.activity)).toEqual(["🎹 Piano", "Reading"]);
 
     expect(
       totals.find((it) => it.activity === "🎹 Piano")?.duration.asMinutes(),
@@ -167,9 +175,99 @@ describe("calculateDailyActivityDurations", () => {
   });
 });
 
+describe("unrecorded activity durations", () => {
+  test("calculates daily time not covered by any activity log", () => {
+    const activities: Activity[] = [
+      {
+        taskIds: [],
+        activity: "Piano",
+        log: [
+          {
+            start: "2024-09-10T01:00:00Z",
+            end: "2024-09-10T03:00:00Z",
+          },
+          {
+            start: "2024-09-10T02:00:00Z",
+            end: "2024-09-10T04:00:00Z",
+          },
+        ],
+      },
+      {
+        taskIds: [],
+        activity: "Reading",
+        log: [
+          {
+            start: "2024-09-09T23:00:00Z",
+            end: "2024-09-10T01:30:00Z",
+          },
+          {
+            start: "2024-09-10T23:00:00Z",
+            end: "2024-09-11T02:00:00Z",
+          },
+        ],
+      },
+    ];
+
+    const unrecorded = calculateDailyUnrecordedActivityDuration(
+      activities,
+      window.moment("2024-09-10"),
+    );
+
+    expect(unrecorded.asHours()).toBe(19);
+  });
+
+  test("calculates weekly time not covered by activity logs", () => {
+    const activities: Activity[] = [
+      {
+        taskIds: [],
+        activity: "Piano",
+        log: [
+          {
+            start: "2024-09-09T00:00:00Z",
+            end: "2024-09-10T00:00:00Z",
+          },
+          {
+            start: "2024-09-10T00:00:00Z",
+            end: "2024-09-11T12:00:00Z",
+          },
+        ],
+      },
+    ];
+
+    const unrecorded = calculateWeeklyUnrecordedActivityDuration(
+      activities,
+      window.moment("2024-09-12"),
+    );
+
+    expect(unrecorded.asHours()).toBe(108);
+  });
+
+  test("only subtracts an active log through the end of the range", () => {
+    const activities: Activity[] = [
+      {
+        taskIds: [],
+        activity: "Piano",
+        log: [{ start: "2024-09-10T09:00:00Z" }],
+      },
+    ];
+    const rangeStart = window.moment("2024-09-10T00:00:00Z");
+    const rangeEnd = window.moment("2024-09-10T12:00:00Z");
+
+    const unrecorded = calculateUnrecordedActivityDurationForRange(
+      activities,
+      rangeStart,
+      rangeEnd,
+    );
+
+    expect(unrecorded.asHours()).toBe(9);
+  });
+});
+
 describe("formatDuration", () => {
   test("formats durations in hours and minutes", () => {
-    expect(formatDuration(window.moment.duration(90, "minutes"))).toBe("1h 30m");
+    expect(formatDuration(window.moment.duration(90, "minutes"))).toBe(
+      "1h 30m",
+    );
     expect(formatDuration(window.moment.duration(60, "minutes"))).toBe("1h");
     expect(formatDuration(window.moment.duration(45, "minutes"))).toBe("45m");
   });

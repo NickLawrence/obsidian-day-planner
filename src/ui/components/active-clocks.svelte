@@ -2,10 +2,14 @@
   import { PlaneTakeoff, Clock3 } from "lucide-svelte";
 
   import { getObsidianContext } from "../../context/obsidian-context";
-  import { selectListProps } from "../../redux/dataview/dataview-slice";
   import { currentTimeSignal } from "../../global-store/current-time";
   import { settings } from "../../global-store/settings";
+  import { selectListProps } from "../../redux/dataview/dataview-slice";
   import type { LocalTask } from "../../task-types";
+  import {
+    calculateUnrecordedActivityDurationForRange,
+    formatDuration,
+  } from "../../util/activity-log-summary";
   import * as m from "../../util/moment";
   import { createActiveClockMenu } from "../active-clock-menu";
 
@@ -15,10 +19,31 @@
   import Properties from "./Properties.svelte";
   import Selectable from "./selectable.svelte";
 
-  const { useSelector, workspaceFacade, tasksWithActiveClockProps, sTaskEditor } =
-    getObsidianContext();
+  const {
+    useSelector,
+    workspaceFacade,
+    tasksWithActiveClockProps,
+    sTaskEditor,
+  } = getObsidianContext();
 
   const listProps = useSelector(selectListProps);
+
+  const unrecordedTimeToday = $derived.by(() => {
+    const now = window.moment(currentTimeSignal.current);
+    const activities = Object.values($listProps).flatMap((lineToProps) =>
+      Object.values(lineToProps).flatMap(({ parsed }) =>
+        (parsed.activities ?? []).filter((activity) => activity.log?.length),
+      ),
+    );
+
+    return formatDuration(
+      calculateUnrecordedActivityDurationForRange(
+        activities,
+        now.clone().startOf("day"),
+        now,
+      ),
+    );
+  });
 
   const elapsedSinceLastActivity = $derived.by(() => {
     if ($tasksWithActiveClockProps.length > 0) {
@@ -60,6 +85,10 @@
   });
 </script>
 
+<div class="unrecorded-time-today">
+  Unrecorded today: {unrecordedTimeToday}
+</div>
+
 <BlockList list={$tasksWithActiveClockProps}>
   {#snippet match(task: LocalTask)}
     <Selectable
@@ -81,7 +110,6 @@
         >
           {#snippet bottomDecoration()}
             <Properties>
-              
               <Pill
                 key={PlaneTakeoff}
                 value={task.startTime.format($settings.timestampFormat)}
@@ -107,6 +135,12 @@
 {/if}
 
 <style>
+  .unrecorded-time-today {
+    padding: var(--size-4-1) var(--size-4-2);
+    color: var(--text-muted);
+    font-size: var(--font-ui-small);
+  }
+
   .empty-active-clocks {
     padding: var(--size-4-2);
     color: var(--text-muted);
