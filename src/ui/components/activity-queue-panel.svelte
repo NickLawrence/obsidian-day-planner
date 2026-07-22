@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { Menu } from "obsidian";
+  import { Menu, TFile } from "obsidian";
   import type { STask } from "obsidian-dataview";
 
   import { getObsidianContext } from "../../context/obsidian-context";
+  import { type ActivitySelection } from "../../create-update-handler";
   import {
     selectDataviewTasks,
     selectListProps,
   } from "../../redux/dataview/dataview-slice";
-  import { type ActivitySelection } from "../../create-update-handler";
   import {
     getActivityAttributeFields,
     getActivityAttributeValues,
@@ -26,6 +26,7 @@
     activityName: string;
     initialValues: Record<string, string | number | undefined>;
     recency: number;
+    filePath?: string;
     needsFile?: boolean;
   };
 
@@ -230,6 +231,7 @@
             activityName,
             initialValues,
             recency: latest?.recency ?? Number.NEGATIVE_INFINITY,
+            filePath: resource.file.path,
           };
 
           if (resource.status === "in progress") {
@@ -320,20 +322,52 @@
       })),
   );
 
-  async function openTask(task: { path: string; line: number }) {
-    const file = app.metadataCache.getFirstLinkpathDest(task.path, task.path);
-    if (!file) return;
+  async function openFile(filePath: string, line?: number) {
+    const file = app.vault.getAbstractFileByPath(filePath);
+    if (!(file instanceof TFile)) return;
 
     await app.workspace.getLeaf("tab").openFile(file, {
-      eState: {
-        line: Math.max(task.line - 1, 0),
-      },
+      eState:
+        line === undefined
+          ? undefined
+          : {
+              line: Math.max(line - 1, 0),
+            },
     });
   }
 
-  function onContextMenu(event: MouseEvent, selection: ActivitySelection) {
+  async function openTask(task: { path: string; line: number }) {
+    await openFile(task.path, task.line);
+  }
+
+  function addOpenFileMenuItem(
+    menu: Menu,
+    filePath: string | undefined,
+    line?: number,
+  ) {
+    if (!filePath) return;
+
+    const file = app.vault.getAbstractFileByPath(filePath);
+    if (!(file instanceof TFile)) return;
+
+    menu.addItem((item) =>
+      item
+        .setTitle("Open file")
+        .setIcon("file-text")
+        .onClick(() => {
+          void openFile(file.path, line);
+        }),
+    );
+  }
+
+  function onContextMenu(
+    event: MouseEvent,
+    selection: ActivitySelection,
+    filePath?: string,
+  ) {
     event.preventDefault();
     const menu = new Menu();
+    addOpenFileMenuItem(menu, filePath);
     menu.addItem((item) =>
       item
         .setTitle("Start activity")
@@ -345,6 +379,16 @@
     menu.showAtMouseEvent(event);
   }
 
+  function onTaskContextMenu(
+    event: MouseEvent,
+    task: { path: string; line: number },
+  ) {
+    event.preventDefault();
+    const menu = new Menu();
+    addOpenFileMenuItem(menu, task.path, task.line);
+    menu.showAtMouseEvent(event);
+  }
+
   function getEntryCount(groups: Record<string, QueueSuggestion[]>) {
     return Object.values(groups).reduce(
       (total, entries) => total + entries.length,
@@ -353,8 +397,8 @@
   }
 
   $effect(() => {
-    $listProps;
-    $dataviewTasks;
+    void $listProps;
+    void $dataviewTasks;
     refresh();
   });
 </script>
@@ -376,13 +420,17 @@
             <div class="entry-list">
               {#each entries as entry (entry.key)}
                 <div
-                  class:needs-file={entry.needsFile}
                   class="entry"
+                  class:needs-file={entry.needsFile}
                   oncontextmenu={(event) =>
-                    onContextMenu(event, {
-                      activityName: entry.activityName,
-                      initialValues: entry.initialValues,
-                    })}
+                    onContextMenu(
+                      event,
+                      {
+                        activityName: entry.activityName,
+                        initialValues: entry.initialValues,
+                      },
+                      entry.filePath,
+                    )}
                 >
                   {entry.displayText}
                 </div>
@@ -412,10 +460,14 @@
                 <div
                   class="entry"
                   oncontextmenu={(event) =>
-                    onContextMenu(event, {
-                      activityName: entry.activityName,
-                      initialValues: entry.initialValues,
-                    })}
+                    onContextMenu(
+                      event,
+                      {
+                        activityName: entry.activityName,
+                        initialValues: entry.initialValues,
+                      },
+                      entry.filePath,
+                    )}
                 >
                   {entry.displayText}
                 </div>
@@ -437,7 +489,11 @@
       {:else}
         <div class="entry-list">
           {#each openTasks as task (`${task.path}:${task.line}`)}
-            <div class="entry" onclick={() => void openTask(task)}>
+            <div
+              class="entry"
+              onclick={() => void openTask(task)}
+              oncontextmenu={(event) => onTaskContextMenu(event, task)}
+            >
               {task.text}
             </div>
           {/each}
