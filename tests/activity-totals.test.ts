@@ -8,6 +8,7 @@ import {
   getAllActivitiesFromListProps,
   getActivityTotalsForRange,
 } from "../src/util/activity-totals";
+import { getActivityDefinition } from "../src/util/activity-definitions";
 import { readable } from "svelte/store";
 import type { Activity } from "../src/util/props";
 
@@ -109,5 +110,10 @@ describe("activity totals utilities", () => {
       start: "start-page",
       end: "end-page",
     });
+  });
+
+  test("activity color variants are defined on the activity", () => {
+    expect(getActivityDefinition("deep work")?.color).toBe("darker");
+    expect(getActivityDefinition("light work")?.color).toBeUndefined();
   });
 });

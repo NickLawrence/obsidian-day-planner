@@ -4,7 +4,11 @@
   import { currentTimeSignal } from "../../global-store/current-time";
   import { addHorizontalPlacing } from "../../overlap/overlap";
   import { isRemote, type Task, type WithTime } from "../../task-types";
-  import { getActivityGroup } from "../../util/activity-definitions";
+  import {
+    getActivityDefinition,
+    getActivityGroup,
+  } from "../../util/activity-definitions";
+  import { applyActivityColorVariant } from "../../util/color";
   import { doesOverlapWithRange } from "../../util/moment";
   import * as t from "../../util/task-utils";
 
@@ -45,7 +49,12 @@
       ? getActivityGroup(activityName)
       : undefined;
 
-    return activityGroup?.color ?? "var(--color-base-50)";
+    return activityGroup
+      ? applyActivityColorVariant(
+          activityGroup.color,
+          getActivityDefinition(activityName)?.color,
+        )
+      : "var(--color-base-50)";
   }
 
   const displayedBlocks = $derived.by(() => {
@@ -78,7 +87,8 @@
     {#each displayedBlocks as block}
       <div
         style:width="{block.durationMinutes * minuteWidthPx}px"
-        style:left="{block.startTime.clone().diff(rangeStart, `minutes`) * minuteWidthPx}px"
+        style:left="{block.startTime.clone().diff(rangeStart, `minutes`) *
+          minuteWidthPx}px"
         style:height="{block.placing.spanPercent}%"
         style:bottom="{block.placing.offsetPercent}%"
         style:background-color={getBlockColor(block)}

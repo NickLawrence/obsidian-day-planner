@@ -1,3 +1,5 @@
+import type { ActivityColorVariant } from "./color";
+
 export type ActivityAttributeField = {
   key: string;
   label: string;
@@ -37,6 +39,7 @@ export type ActivityDefinition = {
   name: string;
   label: string;
   group: ActivityGroupDefinition["name"];
+  color?: ActivityColorVariant;
   emoji?: string;
   attributes?: ActivityAttributesDefinition;
   plan?: ActivityPlanDefinition;
@@ -112,7 +115,15 @@ const activityDefinitions: ActivityDefinition[] = [
     attributes: {
       key: "game",
       mainKey: "name",
-      start: [{ key: "name", label: "Game", type: "text", required: true, resourceTag: "game" }],
+      start: [
+        {
+          key: "name",
+          label: "Game",
+          type: "text",
+          required: true,
+          resourceTag: "game",
+        },
+      ],
       end: [],
     },
   },
@@ -207,6 +218,7 @@ const activityDefinitions: ActivityDefinition[] = [
     name: "deep work",
     label: "Deep Work",
     group: "work",
+    color: "darker",
     plan: { defaultHours: 10, maxHours: 60 },
     emoji: "🛠️",
     attributes: {
@@ -256,6 +268,13 @@ const activityDefinitions: ActivityDefinition[] = [
     group: "exercise",
     emoji: "🧘",
     plan: { defaultHours: 2, intervalMinutes: 15 },
+  },
+  {
+    name: "bike",
+    label: "Bike",
+    group: "exercise",
+    emoji: "🚴",
+    plan: { defaultHours: 2, intervalMinutes: 30 },
   },
   {
     name: "language",

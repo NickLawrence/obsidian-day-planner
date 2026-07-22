@@ -42,7 +42,9 @@ function buildActivityFieldSchema(field: ActivityAttributeField) {
   return activityFieldSchemas[field.type]().optional();
 }
 
-function buildActivityAttributeSchema(attributes: ActivityAttributesDefinition) {
+function buildActivityAttributeSchema(
+  attributes: ActivityAttributesDefinition,
+) {
   const fields = [...attributes.start, ...attributes.end];
   const shape = Object.fromEntries(
     fields.map((field) => [field.key, buildActivityFieldSchema(field)]),
@@ -146,7 +148,11 @@ ${trimmedValue}`
 
     if (value && typeof value === "object" && !Array.isArray(value)) {
       const existing = result[key];
-      if (existing && typeof existing === "object" && !Array.isArray(existing)) {
+      if (
+        existing &&
+        typeof existing === "object" &&
+        !Array.isArray(existing)
+      ) {
         return {
           ...result,
           [key]: {
@@ -164,12 +170,9 @@ ${trimmedValue}`
   }, activity);
 }
 
-function findActivityByTaskId(
-  activities: Activity[],
-  taskId: string,
-) {
-  const existingIndex = activities.findIndex(
-    (activity) => activity.taskIds.includes(taskId),
+function findActivityByTaskId(activities: Activity[], taskId: string) {
+  const existingIndex = activities.findIndex((activity) =>
+    activity.taskIds.includes(taskId),
   );
 
   const existing = activities[existingIndex];
@@ -203,10 +206,7 @@ export function addOpenClock(
   task: { taskId: string; activityName: string },
 ): Props {
   const activities = getActivitiesCopy(props);
-  const { activity, index } = findActivityByTaskId(
-    activities,
-    task.taskId,
-  );
+  const { activity, index } = findActivityByTaskId(activities, task.taskId);
 
   if (activity.log?.some((entry) => !entry.end)) {
     throw new Error("There is already an open clock");
@@ -261,10 +261,7 @@ export function startActivityLog(
   };
 }
 
-export function addTaskToOpenActivity(
-  props: Props,
-  taskId: string,
-): Props {
+export function addTaskToOpenActivity(props: Props, taskId: string): Props {
   const activities = getActivitiesCopy(props);
   const openActivityIndex = activities.findIndex((activity) =>
     activity.log?.some((entry) => !entry.end),
@@ -324,7 +321,9 @@ export function appendNoteToActivity(
 export function cancelOpenClock(props: Props, taskId: string): Props {
   const activities = getActivitiesCopy(props);
   const activityWithOpenClockIndex = activities.findIndex((activity) => {
-    return activity.taskIds.includes(taskId) && activity.log?.some((it) => !it.end);
+    return (
+      activity.taskIds.includes(taskId) && activity.log?.some((it) => !it.end)
+    );
   });
 
   return cancelOpenClockByActivityIndex(props, activityWithOpenClockIndex);
@@ -400,10 +399,7 @@ export function clockOut(
     attributes,
   );
 
-  const updatedActivities = activities.with(
-    activityIndex,
-    updatedActivity,
-  );
+  const updatedActivities = activities.with(activityIndex, updatedActivity);
 
   return {
     ...props,

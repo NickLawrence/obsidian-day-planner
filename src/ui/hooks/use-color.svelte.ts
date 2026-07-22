@@ -3,8 +3,14 @@ import chroma from "chroma-js";
 import { getObsidianContext } from "../../context/obsidian-context";
 import { currentTimeSignal } from "../../global-store/current-time";
 import type { LocalTask, Task } from "../../task-types";
-import { getActivityGroup } from "../../util/activity-definitions";
-import { getTextColorWithEnoughContrast } from "../../util/color";
+import {
+  getActivityDefinition,
+  getActivityGroup,
+} from "../../util/activity-definitions";
+import {
+  applyActivityColorVariant,
+  getTextColorWithEnoughContrast,
+} from "../../util/color";
 import { getRelationToNow } from "../../util/moment";
 import * as t from "../../util/task-utils";
 import { getOneLineSummary } from "../../util/task-utils";
@@ -88,19 +94,31 @@ export function useColor({ task }: UseColorProps) {
     return activityName ? getActivityGroup(activityName) : undefined;
   });
 
-  const activityGroupColors = $derived.by(() => {
+  const activityColor = $derived.by(() => {
     if (!activityGroup) {
+      return undefined;
+    }
+
+    const variant = getActivityDefinition(
+      getClockActivityName(task) ?? "",
+    )?.color;
+
+    return applyActivityColorVariant(activityGroup.color, variant);
+  });
+
+  const activityGroupColors = $derived.by(() => {
+    if (!activityColor) {
       return undefined;
     }
 
     return {
       background: getOpaqueGroupColor(
-        activityGroup.color,
+        activityColor,
         groupBackgroundMix,
         isDarkMode.current,
       ),
       border: getOpaqueGroupColor(
-        activityGroup.color,
+        activityColor,
         groupBorderMix,
         isDarkMode.current,
       ),
