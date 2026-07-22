@@ -147,7 +147,7 @@ ${trimmedValue}`
     }
 
     if (value && typeof value === "object" && !Array.isArray(value)) {
-      const existing = result[key];
+      const existing = (result as Record<string, unknown>)[key];
       if (
         existing &&
         typeof existing === "object" &&
@@ -315,6 +315,63 @@ export function appendNoteToActivity(
   return {
     ...props,
     activities: updatedActivities,
+  };
+}
+
+export function updateActivityLogEntry(
+  props: Props,
+  activityIndex: number,
+  logEntryIndex: number,
+  updates: Partial<LogEntry>,
+): Props {
+  const activities = getActivitiesCopy(props);
+
+  if (activityIndex < 0 || activityIndex >= activities.length) {
+    throw new Error("There is no activity");
+  }
+
+  const activity = activities[activityIndex];
+  const log = activity.log;
+
+  if (!log) {
+    throw new Error("There is no log");
+  }
+
+  if (logEntryIndex < 0 || logEntryIndex >= log.length) {
+    throw new Error("There is no log entry");
+  }
+
+  const updatedActivities = activities.with(activityIndex, {
+    ...activity,
+    log: log.with(logEntryIndex, {
+      ...log[logEntryIndex],
+      ...updates,
+    }),
+  });
+
+  return {
+    ...props,
+    activities: updatedActivities,
+  };
+}
+
+export function updateActivityDetails(
+  props: Props,
+  activityIndex: number,
+  updates: Record<string, unknown>,
+): Props {
+  const activities = getActivitiesCopy(props);
+
+  if (activityIndex < 0 || activityIndex >= activities.length) {
+    throw new Error("There is no activity");
+  }
+
+  return {
+    ...props,
+    activities: activities.with(
+      activityIndex,
+      mergeActivityDetails(activities[activityIndex], updates),
+    ),
   };
 }
 

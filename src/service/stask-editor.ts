@@ -11,10 +11,7 @@ import {
   textToMarkdownWithIndentation,
 } from "../util/dataview";
 import { getId } from "../util/id";
-import {
-  getFirstLine,
-  removeListTokens,
-} from "../util/markdown";
+import { getFirstLine, removeListTokens } from "../util/markdown";
 import {
   addOpenClock,
   addTaskToOpenActivity,
@@ -23,8 +20,11 @@ import {
   cancelOpenClockByActivityIndex,
   clockOut,
   createProp,
+  type Activity,
   type Props,
   taskActivityType,
+  updateActivityDetails,
+  updateActivityLogEntry,
 } from "../util/props";
 import {
   activityNotesField,
@@ -53,24 +53,23 @@ export class STaskEditor {
     );
   });
 
-
-
   addTaskToCurrentActivity = withNotice(async (task: LocalTask) => {
     isNotVoid(task.location, "Cannot update task without location");
 
+    const { location } = task;
     const sTask = this.dataviewFacade.getTaskAtLine({
-      path: task.location.path,
-      line: task.location.position.start.line,
+      path: location.path,
+      line: location.position.start.line,
     });
 
     isNotVoid(sTask, "No task found for selected time block");
 
     const taskId = await this.ensureTaskId(sTask);
 
-    await this.vaultFacade.editFile(task.location.path, (contents) =>
+    await this.vaultFacade.editFile(location.path, (contents) =>
       upsertActivitiesBlock({
         fileText: contents,
-        filePath: task.location.path,
+        filePath: location.path,
         updateFn: (props) => addTaskToOpenActivity(props, taskId),
       }),
     );
@@ -89,33 +88,119 @@ export class STaskEditor {
     );
   });
 
-  addNoteToClockActivity = withNotice(async (
-    task: LocalTask & { clockActivity?: Props["activities"][number] },
-  ) => {
-    const values = await askForActivityAttributes(this.app, {
-      title: "Add note to activity",
-      fields: [activityNotesField],
-    });
+  addNoteToClockActivity = withNotice(
+    async (task: LocalTask & { clockActivity?: Activity }) => {
+      const values = await askForActivityAttributes(this.app, {
+        title: "Add note to activity",
+        fields: [activityNotesField],
+      });
 
-    const note = values?.notes;
+      const note = values?.notes;
 
-    if (typeof note !== "string" || note.trim().length === 0) {
-      return;
-    }
+      if (typeof note !== "string" || note.trim().length === 0) {
+        return;
+      }
 
-    await this.updateClockPropsForLocalTask(task, (props, context) => {
-      const activityIndexByClock = this.findActivityIndexForClockActivity(
-        props,
-        context.clockActivity,
-      );
-      const activityIndex =
-        activityIndexByClock === -1
-          ? this.findOpenActivityByName(props, context.activityName)
-          : activityIndexByClock;
+      await this.updateClockPropsForLocalTask(task, (props, context) => {
+        const activityIndexByClock = this.findActivityIndexForClockActivity(
+          props,
+          context.clockActivity,
+        );
+        const activityIndex =
+          activityIndexByClock === -1
+            ? this.findOpenActivityByName(props, context.activityName)
+            : activityIndexByClock;
 
-      return appendNoteToActivity(props, activityIndex, note);
-    });
-  });
+        return appendNoteToActivity(props, activityIndex, note);
+      });
+    },
+  );
+
+  changeClockActivityStartTime = withNotice(
+    async (task: LocalTask & { clockActivity?: Activity }) => {
+      const logEntry = this.getClockActivityLogEntry(task);
+      const values = await askForActivityAttributes(this.app, {
+        title: "Change start time",
+        fields: [
+          { key: "start", label: "Start time", type: "text", required: true },
+        ],
+        initialValues: { start: logEntry?.start },
+      });
+      const start = values?.start;
+
+      if (typeof start !== "string") {
+        return;
+      }
+
+      this.validateClockTimestamp(start, "Start time");
+
+      await this.updateClockPropsForLocalTask(task, (props, context) => {
+        const { activityIndex, logEntryIndex } = this.findClockActivityLogEntry(
+          props,
+          context.clockActivity,
+        );
+
+        return updateActivityLogEntry(props, activityIndex, logEntryIndex, {
+          start,
+        });
+      });
+    },
+  );
+
+  changeClockActivityEndTime = withNotice(
+    async (task: LocalTask & { clockActivity?: Activity }) => {
+      const logEntry = this.getClockActivityLogEntry(task);
+      const values = await askForActivityAttributes(this.app, {
+        title: "Change end time",
+        fields: [
+          { key: "end", label: "End time", type: "text", required: true },
+        ],
+        initialValues: { end: logEntry?.end },
+      });
+      const end = values?.end;
+
+      if (typeof end !== "string") {
+        return;
+      }
+
+      this.validateClockTimestamp(end, "End time");
+
+      await this.updateClockPropsForLocalTask(task, (props, context) => {
+        const { activityIndex, logEntryIndex } = this.findClockActivityLogEntry(
+          props,
+          context.clockActivity,
+        );
+
+        return updateActivityLogEntry(props, activityIndex, logEntryIndex, {
+          end,
+        });
+      });
+    },
+  );
+
+  changeClockActivityRating = withNotice(
+    async (task: LocalTask & { clockActivity?: Activity }) => {
+      const values = await askForActivityAttributes(this.app, {
+        title: "Change rating",
+        fields: [qualityRatingField],
+        initialValues: { quality: task.clockActivity?.quality },
+      });
+      const quality = values?.quality;
+
+      if (typeof quality !== "number") {
+        return;
+      }
+
+      await this.updateClockPropsForLocalTask(task, (props, context) => {
+        const activityIndex = this.findClockActivityLogEntry(
+          props,
+          context.clockActivity,
+        ).activityIndex;
+
+        return updateActivityDetails(props, activityIndex, { quality });
+      });
+    },
+  );
 
   addNoteToFirstActiveClock = withNotice(async () => {
     const openActivities = this.getOpenActivities();
@@ -140,7 +225,8 @@ export class STaskEditor {
       upsertActivitiesBlock({
         fileText: contents,
         filePath: target.path,
-        updateFn: (props) => appendNoteToActivity(props, target.activityIndex, note),
+        updateFn: (props) =>
+          appendNoteToActivity(props, target.activityIndex, note),
       }),
     );
   });
@@ -190,38 +276,38 @@ export class STaskEditor {
     );
   });
 
-  clockOutTask = withNotice(async (
-    task: LocalTask & { clockActivity?: Props["activities"][number] },
-  ) => {
-    const activityName =
-      task.clockActivity?.activity ?? this.getActivityName(task.text);
-    const attributeUpdates = await this.getClockOutAttributeUpdates({
-      activityName,
-      taskId: task.taskId,
-    });
+  clockOutTask = withNotice(
+    async (task: LocalTask & { clockActivity?: Activity }) => {
+      const activityName =
+        task.clockActivity?.activity ?? this.getActivityName(task.text);
+      const attributeUpdates = await this.getClockOutAttributeUpdates({
+        activityName,
+        taskId: task.taskId,
+      });
 
-    if (attributeUpdates === null) {
-      return;
-    }
+      if (attributeUpdates === null) {
+        return;
+      }
 
-    await this.updateClockPropsForLocalTask(task, (props, context) => {
-      const activityIndexByClock = this.findActivityIndexForClockActivity(
-        props,
-        context.clockActivity,
-      );
-      const activityIndexByTaskId =
-        activityIndexByClock === -1
-          ? this.findOpenTaskActivity(props, context.taskId)
-          : activityIndexByClock;
+      await this.updateClockPropsForLocalTask(task, (props, context) => {
+        const activityIndexByClock = this.findActivityIndexForClockActivity(
+          props,
+          context.clockActivity,
+        );
+        const activityIndexByTaskId =
+          activityIndexByClock === -1
+            ? this.findOpenTaskActivity(props, context.taskId)
+            : activityIndexByClock;
 
-      const activityIndex =
-        activityIndexByTaskId === -1
-          ? this.findOpenActivityByName(props, context.activityName)
-          : activityIndexByTaskId;
+        const activityIndex =
+          activityIndexByTaskId === -1
+            ? this.findOpenActivityByName(props, context.activityName)
+            : activityIndexByTaskId;
 
-      return clockOut(props, activityIndex, attributeUpdates);
-    });
-  });
+        return clockOut(props, activityIndex, attributeUpdates);
+      });
+    },
+  );
 
   cancelClockForTask = withNotice(async (task: LocalTask) => {
     const shouldCancel = await askForConfirmation({
@@ -253,7 +339,6 @@ export class STaskEditor {
       return cancelOpenClockByActivityIndex(props, activityIndex);
     });
   });
-
 
   private getOpenActivities() {
     const listProps = this.getState().dataview.listProps;
@@ -303,9 +388,64 @@ export class STaskEditor {
     );
   }
 
+  private getClockActivityLogEntry(
+    task: LocalTask & { clockActivity?: Activity },
+  ) {
+    const logEntry = task.clockActivity?.log?.[0];
+
+    isNotVoid(logEntry, "Cannot find selected activity log entry");
+
+    return logEntry;
+  }
+
+  private findClockActivityLogEntry(props: Props, clockActivity?: Activity) {
+    const selectedLogEntry = clockActivity?.log?.[0];
+
+    isNotVoid(selectedLogEntry, "Cannot find selected activity log entry");
+
+    const activityIndex = (props.activities ?? []).findIndex((activity) => {
+      if (activity.activity !== clockActivity?.activity) {
+        return false;
+      }
+
+      const clockTaskId = clockActivity?.taskIds?.[0];
+      if (clockTaskId && !activity.taskIds.includes(clockTaskId)) {
+        return false;
+      }
+
+      return activity.log?.some(
+        (entry) =>
+          entry.start === selectedLogEntry.start &&
+          entry.end === selectedLogEntry.end,
+      );
+    });
+
+    if (activityIndex === -1) {
+      throw new Error("Cannot find selected activity");
+    }
+
+    const logEntryIndex = props.activities?.[activityIndex]?.log?.findIndex(
+      (entry) =>
+        entry.start === selectedLogEntry.start &&
+        entry.end === selectedLogEntry.end,
+    );
+
+    if (typeof logEntryIndex !== "number" || logEntryIndex === -1) {
+      throw new Error("Cannot find selected activity log entry");
+    }
+
+    return { activityIndex, logEntryIndex };
+  }
+
+  private validateClockTimestamp(value: string, label: string) {
+    if (!window.moment(value, window.moment.ISO_8601, true).isValid()) {
+      throw new Error(`${label} must be a valid timestamp`);
+    }
+  }
+
   private findActivityIndexForClockActivity(
     props: Props,
-    clockActivity?: Props["activities"][number],
+    clockActivity?: Activity,
   ) {
     const openStart = clockActivity?.log?.find((entry) => !entry.end)?.start;
 
@@ -372,13 +512,13 @@ export class STaskEditor {
   }
 
   private async updateClockPropsForLocalTask(
-    task: LocalTask & { clockActivity?: Props["activities"][number] },
+    task: LocalTask & { clockActivity?: Activity },
     updateFn: (
       props: Props,
       context: {
         taskId?: string;
         activityName: string;
-        clockActivity?: Props["activities"][number];
+        clockActivity?: Activity;
       },
     ) => Props,
   ) {

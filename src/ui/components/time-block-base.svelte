@@ -12,10 +12,12 @@
     children: Snippet;
     task: Task;
     use?: ActionArray;
+    oncontextmenu?: (event: MouseEvent) => void;
     onpointerup?: (event: PointerEvent) => void;
   }
 
-  const { onpointerup, children, task, use = [] }: Props = $props();
+  const { oncontextmenu, onpointerup, children, task, use = [] }: Props =
+    $props();
 
   const { isDarkMode, settingsSignal } = getObsidianContext();
 
@@ -26,7 +28,7 @@
   } = $derived(useColor({ task }));
 </script>
 
-<div class="padding">
+<div class="padding" {oncontextmenu} {onpointerup}>
   <div
     style:--text-faint={faint}
     style:--text-muted={muted}
@@ -44,7 +46,6 @@
       task.truncated?.includes("right") && "truncated-right",
       task.truncated?.includes("bottom") && "truncated-bottom",
     ]}
-    {onpointerup}
     use:useActions={use}
   >
     {@render children()}

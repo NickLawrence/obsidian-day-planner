@@ -162,7 +162,7 @@ export function useTasks(props: {
               tasksById: $tasksById,
               defaultDurationMinutes,
             }),
-            clockActivity: activity,
+            clockActivity: { ...activity, log: [{ start }] },
           },
         }))
         .filter(
@@ -210,21 +210,23 @@ export function useTasks(props: {
                 true,
               );
 
-              return splitMultiday(parsedStart, parsedEnd);
-            })
-            .map((clockMoments) => ({
-              activity,
-              clockMoments,
-            }));
+              return splitMultiday(parsedStart, parsedEnd).map(
+                (clockMoments) => ({
+                  activity,
+                  clockMoments,
+                  logEntry: { start, end },
+                }),
+              );
+            });
         })
-        .map(({ activity, clockMoments }) => ({
+        .map(({ activity, clockMoments, logEntry }) => ({
           ...createClockTaskFromActivity({
             activity,
             clockMoments,
             defaultDurationMinutes,
             tasksById: $tasksById,
           }),
-          clockActivity: activity,
+          clockActivity: { ...activity, log: [logEntry] },
         })),
   );
 

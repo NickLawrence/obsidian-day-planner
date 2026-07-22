@@ -24,6 +24,7 @@
   import { createGestures } from "../actions/gestures";
 
   import Column from "./column.svelte";
+  import ActivityTimeBlock from "./activity-time-block.svelte";
   import LocalTimeBlock from "./local-time-block.svelte";
   import Needle from "./needle.svelte";
   import PositionedTimeBlock from "./positioned-time-block.svelte";
@@ -214,10 +215,10 @@
       {/each}
     </div>
 
-    <div class="tasks absolute-stretch-x">
+    <div class="tasks activity-tasks absolute-stretch-x">
       {#each $displayedTasksWithClocksForTimeline as task (`clock:${getRenderKey(task)}`)}
         <PositionedTimeBlock {task}>
-          <LocalTimeBlock {task} />
+          <ActivityTimeBlock {task} />
         </PositionedTimeBlock>
       {/each}
     </div>
@@ -247,10 +248,10 @@
       <Needle autoScrollBlocked={isUnderCursor} showBall={false} />
     {/if}
 
-    <div class="tasks absolute-stretch-x">
+    <div class="tasks activity-tasks absolute-stretch-x">
       {#each $displayedTasksWithClocksForTimeline as task (getRenderKey(task))}
         <PositionedTimeBlock {task}>
-          <LocalTimeBlock {task} />
+          <ActivityTimeBlock {task} />
         </PositionedTimeBlock>
       {/each}
     </div>
@@ -271,5 +272,9 @@
   .tracker-tasks {
     opacity: 0.78;
     margin-inline-start: calc(var(--size-4-2) + var(--size-4-8));
+  }
+
+  .activity-tasks {
+    z-index: 1;
   }
 </style>
