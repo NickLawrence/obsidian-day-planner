@@ -6,10 +6,8 @@
   import { settings } from "../../global-store/settings";
   import { selectListProps } from "../../redux/dataview/dataview-slice";
   import type { LocalTask } from "../../task-types";
-  import {
-    calculateUnrecordedActivityDurationForRange,
-    formatDuration,
-  } from "../../util/activity-log-summary";
+  import { calculateUnrecordedActivityDurationForRange } from "../../util/activity-log-summary";
+  import { formatDuration } from "../../util/duration";
   import * as m from "../../util/moment";
   import { createActiveClockMenu } from "../active-clock-menu";
 
