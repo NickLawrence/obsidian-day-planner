@@ -9,10 +9,10 @@
   } from "../../util/activity-definitions";
   import {
     calculateWeeklyActivityDurations,
-    formatDuration,
     getWeekRangeFor,
     type ActivityDuration,
   } from "../../util/activity-log-summary";
+  import { formatDuration } from "../../util/duration";
   import type { DayPlannerActivityApi } from "../../util/activity-totals";
   import type { Activity } from "../../util/props";
   import {

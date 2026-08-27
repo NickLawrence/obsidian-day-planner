@@ -8,10 +8,10 @@
   import {
     calculateDailyActivityDurations,
     calculateWeeklyActivityDurations,
-    formatDuration,
     getWeekRangeFor,
     type ActivityDuration,
   } from "../../../util/activity-log-summary";
+  import { formatDuration } from "../../../util/duration";
   import { getAllActivitiesFromListProps } from "../../../util/activity-totals";
   import {
     extractActivityGoals,
