@@ -97,22 +97,6 @@
       });
   });
 
-  const displayedPlannerTasksForCombined = $derived.by(() =>
-    $displayedTasksForTimeline.withTime.filter((task) => {
-      if (day.isBefore($currentTime, "day")) {
-        return true;
-      }
-
-      const taskEnd = task.startTime.clone().add(task.durationMinutes, "minutes");
-
-      if (day.isSame($currentTime, "day")) {
-        return !taskEnd.isAfter($currentTime);
-      }
-
-      return false;
-    }),
-  );
-
   const displayedUpcomingPlannerTasksOnlyForTracker = $derived.by(() => {
     const displayedClockTaskKeys = new Set(
       $displayedTasksWithClocksForTimeline.map(getRenderKey),
@@ -206,14 +190,6 @@
     {#if $isToday(day)}
       <Needle autoScrollBlocked={isUnderCursor} />
     {/if}
-
-    <div class="tasks absolute-stretch-x">
-      {#each displayedPlannerTasksForCombined as task (getRenderKey(task))}
-        <PositionedTimeBlock {task}>
-          <UnscheduledTimeBlock {task} />
-        </PositionedTimeBlock>
-      {/each}
-    </div>
 
     <div class="tasks activity-tasks absolute-stretch-x">
       {#each $displayedTasksWithClocksForTimeline as task (`clock:${getRenderKey(task)}`)}

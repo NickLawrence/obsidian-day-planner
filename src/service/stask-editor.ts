@@ -106,10 +106,17 @@ export class STaskEditor {
           props,
           context.clockActivity,
         );
-        const activityIndex =
+        const activityIndexBySelectedLog =
           activityIndexByClock === -1
-            ? this.findOpenActivityByName(props, context.activityName)
+            ? this.findActivityIndexForSelectedClockActivity(
+                props,
+                context.clockActivity,
+              )
             : activityIndexByClock;
+        const activityIndex =
+          activityIndexBySelectedLog === -1
+            ? this.findOpenActivityByName(props, context.activityName)
+            : activityIndexBySelectedLog;
 
         return appendNoteToActivity(props, activityIndex, note);
       });
@@ -465,6 +472,34 @@ export class STaskEditor {
 
       return activity.log?.some(
         (entry) => !entry.end && entry.start === openStart,
+      );
+    });
+  }
+
+  private findActivityIndexForSelectedClockActivity(
+    props: Props,
+    clockActivity?: Activity,
+  ) {
+    const selectedLogEntry = clockActivity?.log?.[0];
+
+    if (!selectedLogEntry) {
+      return -1;
+    }
+
+    return (props.activities ?? []).findIndex((activity) => {
+      if (activity.activity !== clockActivity?.activity) {
+        return false;
+      }
+
+      const clockTaskId = clockActivity?.taskIds?.[0];
+      if (clockTaskId && !activity.taskIds.includes(clockTaskId)) {
+        return false;
+      }
+
+      return activity.log?.some(
+        (entry) =>
+          entry.start === selectedLogEntry.start &&
+          entry.end === selectedLogEntry.end,
       );
     });
   }
