@@ -4,6 +4,7 @@
 
   import { getObsidianContext } from "../../context/obsidian-context";
   import type { LocalTask } from "../../task-types";
+  import { formatDuration } from "../../util/duration";
   import { hoverPreview } from "../actions/hover-preview";
   import type { HTMLActionArray } from "../actions/use-actions";
 
@@ -29,6 +30,7 @@
     notes?: string;
     quality?: number;
     resourcePath?: string;
+    log?: Array<{ end?: string }>;
   };
 
   const {
@@ -58,6 +60,16 @@
 
     const emojiIndex = Math.min(10, Math.max(0, Math.round(quality)));
     return `${quality} ${qualityEmojiByScore[emojiIndex]}`;
+  });
+
+  const completedActivityDuration = $derived.by(() => {
+    if (!task.clockActivity?.log?.[0]?.end || task.durationMinutes <= 0) {
+      return undefined;
+    }
+
+    return formatDuration(
+      window.moment.duration(task.durationMinutes, "minutes"),
+    );
   });
 
   function stopResourceButtonEvent(event: MouseEvent | PointerEvent) {
@@ -105,6 +117,11 @@
     <RenderedMarkdown {task} />
   {/if}
   {@render bottomDecoration?.()}
+  {#if completedActivityDuration}
+    <span class="activity-duration">
+      {completedActivityDuration}
+    </span>
+  {/if}
   {#if task.clockActivity?.resourcePath}
     <button
       class="activity-resource-link"
@@ -190,6 +207,25 @@
     word-break: break-word;
     overflow-wrap: anywhere;
     white-space: normal;
+  }
+
+  .activity-duration {
+    position: absolute;
+    z-index: 1;
+    bottom: -1px;
+    left: -1px;
+
+    padding: 0 4px;
+
+    font-size: var(--font-ui-smaller);
+    line-height: 1.2;
+    color: var(--text-faint);
+
+    background: var(--time-block-bg-color);
+    border: 1px solid var(--text-faint);
+    border-radius: var(--radius-s);
+    border-top-left-radius: 0;
+    border-bottom-right-radius: 0;
   }
 
   .activity-resource-link {
