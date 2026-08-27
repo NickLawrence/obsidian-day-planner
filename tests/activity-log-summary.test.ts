@@ -6,9 +6,9 @@ import {
   calculateUnrecordedActivityDurationForRange,
   calculateWeeklyActivityDurations,
   calculateWeeklyUnrecordedActivityDuration,
-  formatDuration,
   getWeekRangeFor,
 } from "../src/util/activity-log-summary";
+import { formatDuration } from "../src/util/duration";
 import type { Activity } from "../src/util/props";
 
 describe("calculateWeeklyActivityDurations", () => {
