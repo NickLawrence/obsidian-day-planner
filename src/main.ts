@@ -81,6 +81,7 @@ import type { RemoteTask } from "./task-types";
 import { createGetTasksApi } from "./tasks-plugin";
 import type { ObsidianContext, OnUpdateFn, PointerDateTime } from "./types";
 import { askForActivityAttributes } from "./ui/activity-attributes-modal";
+import { renderActivityDashboardCodeBlock } from "./ui/activity-dashboard-code-block";
 import { renderActivityGoalsCodeBlock } from "./ui/activity-goals-code-block";
 import { renderActivityPlanCodeBlock } from "./ui/activity-plan-code-block";
 import { askForConfirmation } from "./ui/confirmation-modal";
@@ -268,6 +269,18 @@ export default class DayPlanner extends Plugin {
         activityApi: this.api,
       });
     });
+
+    this.registerMarkdownCodeBlockProcessor(
+      "activitydashboard",
+      (_, el, ctx) => {
+        renderActivityDashboardCodeBlock({
+          app: this.app,
+          el,
+          ctx,
+          activityApi: this.api,
+        });
+      },
+    );
 
     this.registerMarkdownCodeBlockProcessor("activityplan", (_, el, ctx) => {
       renderActivityPlanCodeBlock({
