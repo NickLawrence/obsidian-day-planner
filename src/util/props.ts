@@ -170,30 +170,6 @@ ${trimmedValue}`
   }, activity);
 }
 
-function findActivityByTaskId(activities: Activity[], taskId: string) {
-  const existingIndex = activities.findIndex((activity) =>
-    activity.taskIds.includes(taskId),
-  );
-
-  const existing = activities[existingIndex];
-
-  if (existing) {
-    return {
-      index: existingIndex,
-      activity: existing,
-    };
-  }
-
-  return {
-    index: activities.length,
-    activity: {
-      activity: taskActivityType,
-      taskIds: [taskId],
-      log: [],
-    },
-  };
-}
-
 export function createPropsWithOpenClock(props: {
   taskId: string;
   activityName: string;
@@ -206,32 +182,15 @@ export function addOpenClock(
   task: { taskId: string; activityName: string },
 ): Props {
   const activities = getActivitiesCopy(props);
-  const { activity, index } = findActivityByTaskId(activities, task.taskId);
-
-  if (activity.log?.some((entry) => !entry.end)) {
-    throw new Error("There is already an open clock");
-  }
-
-  const updatedActivity: Activity = {
-    ...activity,
+  const activity: Activity = {
     activity: taskActivityType,
-    taskIds: activity.taskIds.length > 0 ? activity.taskIds : [task.taskId],
-    log: [
-      ...(activity.log ?? []),
-      {
-        start: window.moment().format(clockFormat),
-      },
-    ],
+    taskIds: [task.taskId],
+    log: [{ start: window.moment().format(clockFormat) }],
   };
-
-  const updatedActivities =
-    index < activities.length
-      ? activities.with(index, updatedActivity)
-      : activities.concat(updatedActivity);
 
   return {
     ...props,
-    activities: updatedActivities,
+    activities: activities.concat(activity),
   };
 }
 
@@ -373,17 +332,6 @@ export function updateActivityDetails(
       mergeActivityDetails(activities[activityIndex], updates),
     ),
   };
-}
-
-export function cancelOpenClock(props: Props, taskId: string): Props {
-  const activities = getActivitiesCopy(props);
-  const activityWithOpenClockIndex = activities.findIndex((activity) => {
-    return (
-      activity.taskIds.includes(taskId) && activity.log?.some((it) => !it.end)
-    );
-  });
-
-  return cancelOpenClockByActivityIndex(props, activityWithOpenClockIndex);
 }
 
 export function cancelOpenClockByActivityIndex(

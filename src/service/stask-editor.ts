@@ -2,7 +2,7 @@ import { type App } from "obsidian";
 import { isNotVoid } from "typed-assert";
 import type { STask } from "obsidian-dataview";
 
-import { selectListPropsForPath } from "../redux/dataview/dataview-slice";
+import { selectListPropsForLocation } from "../redux/dataview/dataview-slice";
 import type { AppStore } from "../redux/store";
 import type { LocalTask } from "../task-types";
 import { upsertActivitiesBlock } from "../util/activities-file";
@@ -16,7 +16,6 @@ import {
   addOpenClock,
   addTaskToOpenActivity,
   appendNoteToActivity,
-  cancelOpenClock,
   cancelOpenClockByActivityIndex,
   clockOut,
   createProp,
@@ -240,11 +239,9 @@ export class STaskEditor {
   clockOutUnderCursor = withNotice(async () => {
     const { sTask } = this.getSTaskUnderCursorFromLastView();
 
-    const taskId = await this.ensureTaskId(sTask);
     const activityName = this.getActivityName(sTask.text);
     const attributeUpdates = await this.getClockOutAttributeUpdates({
       activityName,
-      taskId,
     });
 
     if (attributeUpdates === null) {
@@ -256,7 +253,10 @@ export class STaskEditor {
         fileText: contents,
         filePath: sTask.path,
         updateFn: (props) => {
-          const activityIndex = this.findOpenTaskActivity(props, taskId);
+          const activityIndex = this.findOpenActivityByName(
+            props,
+            taskActivityType,
+          );
 
           return clockOut(props, activityIndex, attributeUpdates);
         },
@@ -278,8 +278,16 @@ export class STaskEditor {
 
     const { sTask } = this.getSTaskUnderCursorFromLastView();
 
-    await this.updateClockPropsForTask(sTask, (props, context) =>
-      cancelOpenClock(props, context.taskId),
+    await this.vaultFacade.editFile(sTask.path, (contents) =>
+      upsertActivitiesBlock({
+        fileText: contents,
+        filePath: sTask.path,
+        updateFn: (props) =>
+          cancelOpenClockByActivityIndex(
+            props,
+            this.findOpenActivityByName(props, taskActivityType),
+          ),
+      }),
     );
   });
 
@@ -289,7 +297,6 @@ export class STaskEditor {
         task.clockActivity?.activity ?? this.getActivityName(task.text);
       const attributeUpdates = await this.getClockOutAttributeUpdates({
         activityName,
-        taskId: task.taskId,
       });
 
       if (attributeUpdates === null) {
@@ -301,15 +308,10 @@ export class STaskEditor {
           props,
           context.clockActivity,
         );
-        const activityIndexByTaskId =
-          activityIndexByClock === -1
-            ? this.findOpenTaskActivity(props, context.taskId)
-            : activityIndexByClock;
-
         const activityIndex =
-          activityIndexByTaskId === -1
+          activityIndexByClock === -1
             ? this.findOpenActivityByName(props, context.activityName)
-            : activityIndexByTaskId;
+            : activityIndexByClock;
 
         return clockOut(props, activityIndex, attributeUpdates);
       });
@@ -333,15 +335,10 @@ export class STaskEditor {
         props,
         context.clockActivity,
       );
-      const activityIndexByTaskId =
-        activityIndexByClock === -1
-          ? this.findOpenTaskActivity(props, context.taskId)
-          : activityIndexByClock;
-
       const activityIndex =
-        activityIndexByTaskId === -1
+        activityIndexByClock === -1
           ? this.findOpenActivityByName(props, context.activityName)
-          : activityIndexByTaskId;
+          : activityIndexByClock;
 
       return cancelOpenClockByActivityIndex(props, activityIndex);
     });
@@ -378,19 +375,15 @@ export class STaskEditor {
   };
 
   hasOpenClockForTask(sTask: STask) {
-    const taskId = extractPlannerTaskId(getFirstLine(sTask.text));
+    const listProps = selectListPropsForLocation(
+      this.getState(),
+      sTask.path,
+      sTask.line,
+    );
 
-    if (!taskId) {
-      return false;
-    }
-
-    const listProps = selectListPropsForPath(this.getState(), sTask.path) || {};
-
-    return Object.values(listProps).some(({ parsed }) =>
-      parsed.activities?.some(
-        (activity) =>
-          activity.taskIds.includes(taskId) &&
-          activity.log?.some((entry) => !entry.end),
+    return Boolean(
+      listProps?.parsed.activities?.some((activity) =>
+        activity.log?.some((entry) => !entry.end),
       ),
     );
   }
@@ -412,11 +405,6 @@ export class STaskEditor {
 
     const activityIndex = (props.activities ?? []).findIndex((activity) => {
       if (activity.activity !== clockActivity?.activity) {
-        return false;
-      }
-
-      const clockTaskId = clockActivity?.taskIds?.[0];
-      if (clockTaskId && !activity.taskIds.includes(clockTaskId)) {
         return false;
       }
 
@@ -461,11 +449,6 @@ export class STaskEditor {
     }
 
     return (props.activities ?? []).findIndex((activity) => {
-      const clockTaskId = clockActivity?.taskIds?.[0];
-      if (clockTaskId && !activity.taskIds.includes(clockTaskId)) {
-        return false;
-      }
-
       if (activity.activity !== clockActivity?.activity) {
         return false;
       }
@@ -491,30 +474,12 @@ export class STaskEditor {
         return false;
       }
 
-      const clockTaskId = clockActivity?.taskIds?.[0];
-      if (clockTaskId && !activity.taskIds.includes(clockTaskId)) {
-        return false;
-      }
-
       return activity.log?.some(
         (entry) =>
           entry.start === selectedLogEntry.start &&
           entry.end === selectedLogEntry.end,
       );
     });
-  }
-
-  private findOpenTaskActivity(props: Props, taskId?: string) {
-    if (!taskId) {
-      return -1;
-    }
-
-    return (props.activities ?? []).findIndex(
-      (activity) =>
-        activity.taskIds.includes(taskId) &&
-        activity.activity === taskActivityType &&
-        activity.log?.some((entry) => !entry.end),
-    );
   }
 
   private findOpenActivityByName(props: Props, activityName: string) {
@@ -551,13 +516,12 @@ export class STaskEditor {
     updateFn: (
       props: Props,
       context: {
-        taskId?: string;
         activityName: string;
         clockActivity?: Activity;
       },
     ) => Props,
   ) {
-    const { clockActivity, location, taskId } = task;
+    const { clockActivity, location } = task;
 
     isNotVoid(location, "Cannot update clock for a task without location");
 
@@ -567,8 +531,7 @@ export class STaskEditor {
       upsertActivitiesBlock({
         fileText: contents,
         filePath: location.path,
-        updateFn: (props) =>
-          updateFn(props, { taskId, activityName, clockActivity }),
+        updateFn: (props) => updateFn(props, { activityName, clockActivity }),
       }),
     );
   }
@@ -581,11 +544,8 @@ export class STaskEditor {
       .trim();
   }
 
-  private async getClockOutAttributeUpdates(props: {
-    activityName: string;
-    taskId?: string;
-  }) {
-    const { activityName, taskId } = props;
+  private async getClockOutAttributeUpdates(props: { activityName: string }) {
+    const { activityName } = props;
 
     const endFields = getActivityAttributeFields(activityName, "end");
     const fields = [...endFields, qualityRatingField, activityNotesField];
@@ -605,7 +565,9 @@ export class STaskEditor {
 
     const qualityValue = values.quality;
     const notesValue = values.notes;
-    const { quality, notes, ...attributeValues } = values;
+    const attributeValues = { ...values };
+    delete attributeValues.quality;
+    delete attributeValues.notes;
     const attributeUpdates = buildActivityAttributeUpdate(
       activityName,
       attributeValues,

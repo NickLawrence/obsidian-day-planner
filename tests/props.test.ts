@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
+  addOpenClock,
   cancelOpenClockByActivityIndex,
   clockOut,
   toMarkdown,
@@ -41,6 +42,43 @@ describe("clockOut", () => {
     expect(result.activities?.[0].notes).toBe(
       "Already had notes\nAdded on clock out",
     );
+  });
+});
+
+describe("addOpenClock", () => {
+  test("creates a new activity when another activity references the same task", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
+
+    const result = addOpenClock(
+      {
+        activities: [
+          {
+            activity: "task",
+            taskIds: ["shared-task"],
+            log: [
+              {
+                start: "2026-01-01T10:00:00Z",
+                end: "2026-01-01T11:00:00Z",
+              },
+            ],
+          },
+        ],
+      },
+      { taskId: "shared-task", activityName: "Task" },
+    );
+
+    expect(result.activities).toHaveLength(2);
+    expect(result.activities?.[0].log).toEqual([
+      {
+        start: "2026-01-01T10:00:00Z",
+        end: "2026-01-01T11:00:00Z",
+      },
+    ]);
+    expect(result.activities?.[1]).toMatchObject({
+      activity: "task",
+      taskIds: ["shared-task"],
+    });
   });
 });
 

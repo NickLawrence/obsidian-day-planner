@@ -36,6 +36,7 @@
   const {
     task,
     bottomDecoration,
+    showDuration = true,
     isActive = false,
     use = [],
     oncontextmenu,
@@ -44,6 +45,7 @@
     isActive?: boolean;
     task: LocalTask & { clockActivity?: ClockActivityDisplay };
     bottomDecoration?: Snippet;
+    showDuration?: boolean;
     use?: HTMLActionArray;
     oncontextmenu?: (event: MouseEvent) => void;
     onpointerup?: (event: PointerEvent) => void;
@@ -117,7 +119,7 @@
     <RenderedMarkdown {task} />
   {/if}
   {@render bottomDecoration?.()}
-  {#if completedActivityDuration}
+  {#if showDuration && completedActivityDuration}
     <span class="activity-duration">
       {completedActivityDuration}
     </span>
