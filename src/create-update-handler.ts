@@ -15,7 +15,6 @@ import type { OnUpdateFn } from "./types";
 import { type ConfirmationModalProps } from "./ui/confirmation-modal";
 import { EditMode } from "./ui/hooks/use-edit/types";
 import { SingleSuggestModal } from "./ui/SingleSuggestModal";
-import { applyScopedUpdates } from "./util/markdown";
 import {
   getActivityAttributeFields,
   getActivityAttributeValues,
@@ -23,6 +22,7 @@ import {
   getActivitySuggestions,
   normalizeActivityName,
 } from "./util/activity-definitions";
+import { applyScopedUpdates } from "./util/markdown";
 import type { Activity } from "./util/props";
 
 type ActivityNameSuggestion = {
@@ -120,7 +120,7 @@ function getRecentMainKeyValues(activityName: string, activities: Activity[]) {
     uniqueValues.add(value);
     values.push(value);
 
-    if (values.length === 5) {
+    if (values.length === (definition.startSuggestionLimit ?? 5)) {
       break;
     }
   }
@@ -149,7 +149,8 @@ function getSuggestedRangeStartValues(
   }
 
   const history = getActivitiesByRecency(activities).filter(
-    (activity) => normalizeActivityName(activity.activity) === normalizedActivityName,
+    (activity) =>
+      normalizeActivityName(activity.activity) === normalizedActivityName,
   );
 
   const updates: Record<string, string | number | undefined> = {
@@ -206,17 +207,19 @@ export function getActivitySuggestionsWithHistory(activities: Activity[]) {
           [mainKey]: value,
         },
       );
-      const startRangeKey =
-        getActivityDefinition(definition.name)?.attributes?.ranges?.[0]?.start;
-      const startRangeValue =
-        startRangeKey ? initialValues[startRangeKey] : undefined;
+      const startRangeKey = getActivityDefinition(definition.name)?.attributes
+        ?.ranges?.[0]?.start;
+      const startRangeValue = startRangeKey
+        ? initialValues[startRangeKey]
+        : undefined;
       const startRangeField = startRangeKey
         ? getActivityAttributeFields(definition.name, "start").find(
             ({ key }) => key === startRangeKey,
           )
         : undefined;
       const rangeSuffix =
-        typeof startRangeValue === "number" || typeof startRangeValue === "string"
+        typeof startRangeValue === "number" ||
+        typeof startRangeValue === "string"
           ? ` - ${startRangeField?.label ?? startRangeKey}: ${startRangeValue}`
           : "";
 

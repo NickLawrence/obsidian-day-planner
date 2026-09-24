@@ -84,6 +84,7 @@ import { askForActivityAttributes } from "./ui/activity-attributes-modal";
 import { renderActivityDashboardCodeBlock } from "./ui/activity-dashboard-code-block";
 import { renderActivityGoalsCodeBlock } from "./ui/activity-goals-code-block";
 import { renderActivityPlanCodeBlock } from "./ui/activity-plan-code-block";
+import { ActivityQueueView } from "./ui/activity-queue-view";
 import { askForConfirmation } from "./ui/confirmation-modal";
 import { createEditorMenuCallback } from "./ui/editor-menu";
 import { useDateRanges } from "./ui/hooks/use-date-ranges";
@@ -92,7 +93,6 @@ import { mountStatusBarWidget } from "./ui/hooks/use-status-bar-widget";
 import { useTasks } from "./ui/hooks/use-tasks";
 import { useVisibleDays } from "./ui/hooks/use-visible-days";
 import { LogSummaryView } from "./ui/log-summary";
-import { ActivityQueueView } from "./ui/activity-queue-view";
 import MonthlyView from "./ui/monthly-view";
 import MultiDayView from "./ui/multi-day-view";
 import { DayPlannerReleaseNotesView } from "./ui/release-notes";
@@ -105,7 +105,7 @@ import {
   getActivityAttributeFields,
   getActivityLabel,
 } from "./util/activity-definitions";
-import { getAvailableResourceNamesByFieldKey } from "./util/activity-resources";
+import { getActivityFieldOptions } from "./util/activity-resources";
 import {
   createDayPlannerActivityApi,
   type DayPlannerActivityApi,
@@ -349,9 +349,11 @@ export default class DayPlanner extends Plugin {
         title: `Start ${getActivityLabel(trimmedName)}`,
         fields: startFields,
         initialValues: activitySelection?.initialValues,
-        fieldOptions: getAvailableResourceNamesByFieldKey(
+        fieldOptions: getActivityFieldOptions(
           this.app,
+          trimmedName,
           startFields,
+          this.api.getAllActivities(),
         ),
       });
 
@@ -407,7 +409,9 @@ export default class DayPlanner extends Plugin {
   };
 
   initActivityQueueLeaf = async () => {
-    const [existing] = this.app.workspace.getLeavesOfType(viewTypeActivityQueue);
+    const [existing] = this.app.workspace.getLeavesOfType(
+      viewTypeActivityQueue,
+    );
     if (existing) {
       this.app.workspace.revealLeaf(existing);
       return;

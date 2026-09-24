@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ActivityAttributeField } from "../src/util/activity-definitions";
 import {
+  getActivityFieldOptions,
   getActivityResourcePath,
   getAvailableResourceNamesForField,
   getResourceFilesForField,
@@ -163,5 +164,44 @@ describe("getActivityResourcePath", () => {
         sourcePath: "Daily/2026-05-15.md",
       }),
     ).toBeUndefined();
+  });
+});
+
+describe("getActivityFieldOptions", () => {
+  it("combines resource files with previous main-key values", () => {
+    const app = createApp([
+      {
+        path: "Books/Dune.md",
+        metadata: { frontmatter: { tags: ["book"], status: "Backlog" } },
+      },
+    ]);
+    const activities = [
+      { activity: "read", taskIds: [], log: [], read: { book: "Dune" } },
+      { activity: "read", taskIds: [], log: [], read: { book: "The Hobbit" } },
+    ];
+
+    expect(
+      getActivityFieldOptions(app as never, "read", [bookField], activities),
+    ).toEqual({ book: ["Dune", "The Hobbit"] });
+  });
+
+  it("adds previous main-key values when there are no resource files", () => {
+    const nameField: ActivityAttributeField = {
+      key: "name",
+      label: "Show",
+      type: "text",
+    };
+    const activities = [
+      { activity: "tv", taskIds: [], log: [], tv: { name: "Severance" } },
+    ];
+
+    expect(
+      getActivityFieldOptions(
+        createApp([]) as never,
+        "tv",
+        [nameField],
+        activities,
+      ),
+    ).toEqual({ name: ["Severance"] });
   });
 });

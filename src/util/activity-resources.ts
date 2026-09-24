@@ -4,7 +4,10 @@ import {
   type ActivityAttributeField,
   getActivityAttributeFields,
   getActivityAttributeValues,
+  getActivityDefinition,
+  normalizeActivityName,
 } from "./activity-definitions";
+import type { Activity } from "./props";
 
 const completeStatus = "complete";
 
@@ -139,6 +142,45 @@ export function getAvailableResourceNamesByFieldKey(
       ])
       .filter(([, resourceNames]) => resourceNames.length > 0),
   );
+}
+
+export function getActivityFieldOptions(
+  app: App,
+  activityName: string,
+  fields: ActivityAttributeField[],
+  activities: Activity[],
+): Record<string, string[]> {
+  const options = getAvailableResourceNamesByFieldKey(app, fields);
+  const mainKey = getActivityDefinition(activityName)?.attributes?.mainKey;
+
+  if (!mainKey) {
+    return options;
+  }
+
+  const historicalValues = activities.flatMap((activity) => {
+    if (
+      normalizeActivityName(activity.activity) !==
+      normalizeActivityName(activityName)
+    ) {
+      return [];
+    }
+
+    const value = getActivityAttributeValues(activityName, activity)[mainKey];
+
+    if (typeof value !== "string" && typeof value !== "number") {
+      return [];
+    }
+
+    const suggestion = String(value).trim();
+
+    return suggestion ? [suggestion] : [];
+  });
+
+  options[mainKey] = [
+    ...new Set([...(options[mainKey] ?? []), ...historicalValues]),
+  ];
+
+  return options;
 }
 
 export function getActivityResourcePath(props: {

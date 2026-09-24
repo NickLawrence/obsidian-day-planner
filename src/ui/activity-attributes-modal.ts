@@ -32,22 +32,41 @@ class ActivityAttributesModal extends Modal {
     contentEl.addClass("day-planner-activity-attributes-modal");
     contentEl.createEl("h2", { text: title });
 
-    fields.forEach((field) => {
-      const row = contentEl.createDiv({
+    const fieldsEl = contentEl.createDiv({
+      cls: "day-planner-activity-attributes-modal__fields",
+    });
+
+    fields.forEach((field, index) => {
+      const row = fieldsEl.createDiv({
         cls: "day-planner-activity-attributes-modal__row",
       });
 
-      row.createEl("label", {
+      const inputId = `day-planner-activity-attribute-${index}`;
+      const label = row.createEl("label", {
         text: field.label,
         cls: "day-planner-activity-attributes-modal__label",
+        attr: { for: inputId },
       });
+
+      if (field.required) {
+        label.createSpan({
+          text: " *",
+          cls: "day-planner-activity-attributes-modal__required",
+          attr: { "aria-hidden": "true" },
+        });
+      }
 
       const input =
         field.type === "textarea"
-          ? row.createEl("textarea", { attr: { rows: "6", cols: "60" } })
+          ? row.createEl("textarea", { attr: { id: inputId, rows: "6", cols: "60" } })
           : row.createEl("input", {
               type: field.type === "number" ? "number" : "text",
+              attr: { id: inputId },
             });
+
+      input.name = field.key;
+      input.required = field.required ?? false;
+      input.addClass("day-planner-activity-attributes-modal__input");
 
       if (
         field.type === "text" &&
@@ -89,8 +108,10 @@ class ActivityAttributesModal extends Modal {
       .createEl("button", { text: "Cancel" })
       .addEventListener("click", () => this.cancel());
     actions
-      .createEl("button", { text: "Save" })
+      .createEl("button", { text: "Save", cls: "mod-cta" })
       .addEventListener("click", () => this.submit());
+
+    this.inputs.get(fields[0]?.key)?.focus();
   }
 
   onClose() {

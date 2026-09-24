@@ -38,6 +38,7 @@ export type ActivityGroupDefinition = {
 export type ActivityDefinition = {
   name: string;
   label: string;
+  startSuggestionLimit?: number;
   group: ActivityGroupDefinition["name"];
   color?: ActivityColorVariant;
   emoji?: string;
@@ -171,6 +172,7 @@ const activityDefinitions: ActivityDefinition[] = [
   {
     name: "tv",
     label: "TV",
+    startSuggestionLimit: 10,
     group: "media",
     color: "lighter",
     emoji: "📺",
@@ -327,7 +329,12 @@ const activityDefinitions: ActivityDefinition[] = [
     plan: { defaultHours: 5, intervalMinutes: 30 },
   },
   { name: "brew", label: "Brew", group: "household", emoji: "🍺"},
-  { name: "eat", label: "Eat", group: "household", emoji: "🍽️" },
+  {
+    name: "eat",
+    label: "Eat",
+    group: "household",
+    emoji: "🍽️",
+  },
   {
     name: "hygiene",
     label: "Hygiene",
@@ -395,7 +402,12 @@ const activityDefinitions: ActivityDefinition[] = [
       end: [],
     },
   },
-  { name: "social", label: "Social", group: "social", emoji: "👯" },
+  {
+    name: "social",
+    label: "Social",
+    group: "social",
+    emoji: "👯",
+  },
   {
     name: "bed",
     label: "Bed",
@@ -403,7 +415,12 @@ const activityDefinitions: ActivityDefinition[] = [
     emoji: "🛏️",
     plan: { defaultHours: 56, maxHours: 70 },
   },
-  { name: "ride", label: "Ride", group: "transit", emoji: "🚗" },
+  {
+    name: "ride",
+    label: "Ride",
+    group: "transit",
+    emoji: "🚗",
+  },
   {
     name: "transit",
     label: "Transit",

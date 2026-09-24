@@ -199,6 +199,65 @@ body {
   gap: var(--size-4-2);
 }
 
+.day-planner-activity-attributes-modal {
+  width: min(100%, 560px);
+
+  h2 {
+    margin-block: 0 var(--size-4-5);
+  }
+
+  &__fields {
+    display: grid;
+    gap: var(--size-4-3);
+  }
+
+  &__row {
+    display: grid;
+    grid-template-columns: minmax(7rem, 0.4fr) minmax(12rem, 1fr);
+    gap: var(--size-4-4);
+    align-items: center;
+  }
+
+  &__label {
+    font-size: var(--font-ui-small);
+    font-weight: var(--font-semibold);
+    color: var(--text-muted);
+  }
+
+  &__required {
+    color: var(--text-error);
+  }
+
+  &__input {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+  }
+
+  textarea#{&}__input {
+    min-height: 6rem;
+    resize: vertical;
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--size-4-2);
+
+    margin-top: var(--size-4-5);
+    padding-top: var(--size-4-4);
+
+    border-top: 1px solid var(--background-modifier-border);
+  }
+
+  @media (max-width: 480px) {
+    &__row {
+      grid-template-columns: 1fr;
+      gap: var(--size-2-2);
+    }
+  }
+}
+
 .overlayscrollbars-svelte {
   width: 100%;
   height: 100%;

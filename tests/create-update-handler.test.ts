@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import { getActivitySuggestionsWithHistory } from "../src/create-update-handler";
 import type { Activity } from "../src/util/props";
 
-function createActivity(activity: string, details: Record<string, unknown>): Activity {
+function createActivity(
+  activity: string,
+  details: Record<string, unknown>,
+): Activity {
   return {
     activity,
     taskIds: [],
@@ -53,7 +56,8 @@ describe("getActivitySuggestionsWithHistory", () => {
     ]);
 
     const readSuggestion = suggestions.find(
-      ({ displayText }) => displayText === "📖 Read - War and Peace - Start page: 105",
+      ({ displayText }) =>
+        displayText === "📖 Read - War and Peace - Start page: 105",
     );
 
     expect(readSuggestion?.initialValues).toEqual({
@@ -65,11 +69,21 @@ describe("getActivitySuggestionsWithHistory", () => {
   it("uses the most recent range end value when suggesting next start", () => {
     const suggestions = getActivitySuggestionsWithHistory([
       createActivity("read", {
-        log: [{ start: "2025-01-03T08:00:00.000Z", end: "2025-01-03T09:00:00.000Z" }],
+        log: [
+          {
+            start: "2025-01-03T08:00:00.000Z",
+            end: "2025-01-03T09:00:00.000Z",
+          },
+        ],
         read: { book: "War and Peace", "start-page": 200, "end-page": 220 },
       }),
       createActivity("read", {
-        log: [{ start: "2025-01-01T08:00:00.000Z", end: "2025-01-01T09:00:00.000Z" }],
+        log: [
+          {
+            start: "2025-01-01T08:00:00.000Z",
+            end: "2025-01-01T09:00:00.000Z",
+          },
+        ],
         read: { book: "War and Peace", "start-page": 90, "end-page": 104 },
       }),
     ]);
@@ -85,4 +99,29 @@ describe("getActivitySuggestionsWithHistory", () => {
     });
   });
 
+  it("uses each activity's configured suggestion limit", () => {
+    const tvActivities = Array.from({ length: 11 }, (_, index) =>
+      createActivity("tv", { tv: { name: `Show ${index}` } }),
+    );
+    const gameActivities = Array.from({ length: 6 }, (_, index) =>
+      createActivity("game", { game: { name: `Game ${index}` } }),
+    );
+    const suggestions = getActivitySuggestionsWithHistory([
+      ...tvActivities,
+      ...gameActivities,
+    ]);
+
+    expect(
+      suggestions.filter(
+        ({ activityName, initialValues }) =>
+          activityName === "tv" && initialValues,
+      ),
+    ).toHaveLength(10);
+    expect(
+      suggestions.filter(
+        ({ activityName, initialValues }) =>
+          activityName === "game" && initialValues,
+      ),
+    ).toHaveLength(5);
+  });
 });
