@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { App, EventRef } from "obsidian";
+  import { setTooltip } from "obsidian";
   import { onDestroy, onMount } from "svelte";
 
   import { buildActivityDashboard } from "../../util/activity-dashboard";
@@ -22,7 +23,17 @@
   const dashboard = $derived(
     definition
       ? buildActivityDashboard(activities, definition)
-      : { rows: [], groups: [] },
+      : { rows: [], groups: [], weeks: [] },
+  );
+  const monthGroups = $derived(
+    dashboard.weeks.reduce<
+      Array<{ month: string; start: number; count: number }>
+    >((groups, week, index) => {
+      const previous = groups.at(-1);
+      if (previous?.month === week.month) previous.count += 1;
+      else groups.push({ month: week.month, start: index + 1, count: 1 });
+      return groups;
+    }, []),
   );
 
   function refresh() {
@@ -31,6 +42,15 @@
 
   function displayTime(minutes: number) {
     return formatDuration(window.moment.duration(minutes, "minutes"));
+  }
+
+  function weeklyTooltip(node: HTMLElement, text: string) {
+    setTooltip(node, text);
+    return {
+      update(text: string) {
+        setTooltip(node, text);
+      },
+    };
   }
 
   function selectActivity(activity: ActivityDefinition) {
@@ -74,6 +94,30 @@
   </nav>
 
   {#if definition}
+    <div
+      class="activity-heatmap"
+      aria-label={`${definition.label} time by week`}
+    >
+      <div class="month-labels" aria-hidden="true">
+        {#each monthGroups as group}
+          <span style={`grid-column: ${group.start} / span ${group.count}`}
+            >{group.month}</span
+          >
+        {/each}
+      </div>
+      <div class="week-bars">
+        {#each dashboard.weeks as week}
+          <div
+            style={`--week-intensity: ${week.intensity}`}
+            class="week-bar"
+            class:empty={week.minutes === 0}
+            aria-label={`${week.start} through ${week.end}: ${displayTime(week.minutes)}`}
+            use:weeklyTooltip={`${week.start}–${week.end}: ${displayTime(week.minutes)}`}
+          ></div>
+        {/each}
+      </div>
+    </div>
+
     <section>
       <h3>{definition.emoji ?? ""} {definition.label} — Activity Logs</h3>
       {#if dashboard.rows.length === 0}
@@ -184,6 +228,49 @@
     color: var(--text-on-accent);
     background: var(--interactive-accent);
     border-color: var(--interactive-accent);
+  }
+
+  .activity-heatmap {
+    overflow-x: auto;
+    padding: var(--size-2-2) 0 var(--size-4-2);
+  }
+
+  .month-labels,
+  .week-bars {
+    display: grid;
+    grid-template-columns: repeat(52, minmax(4px, 1fr));
+    gap: 2px;
+    min-width: 31rem;
+  }
+
+  .month-labels {
+    margin-bottom: var(--size-2-2);
+    font-size: var(--font-ui-smaller);
+    color: var(--text-muted);
+  }
+
+  .month-labels span {
+    overflow: hidden;
+    text-align: center;
+  }
+
+  .week-bar {
+    cursor: default;
+
+    height: 3rem;
+
+    opacity: calc(0.18 + var(--week-intensity) * 0.82);
+    background: var(--interactive-accent);
+    border-radius: 2px;
+  }
+
+  .week-bar.empty {
+    opacity: 0.08;
+  }
+
+  .week-bar:hover {
+    outline: 1px solid var(--text-normal);
+    outline-offset: 1px;
   }
 
   h3 {

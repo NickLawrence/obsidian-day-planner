@@ -44,7 +44,7 @@ class ActivityAttributesModal extends Modal {
 
       const input =
         field.type === "textarea"
-          ? row.createEl("textarea")
+          ? row.createEl("textarea", { attr: { rows: "6", cols: "60" } })
           : row.createEl("input", {
               type: field.type === "number" ? "number" : "text",
             });

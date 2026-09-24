@@ -110,6 +110,7 @@ const activityDefinitions: ActivityDefinition[] = [
     name: "game",
     label: "Game",
     group: "media",
+    color: "darker",
     plan: { defaultHours: 15, maxHours: 40 },
     emoji: "🎮",
     attributes: {
@@ -126,6 +127,26 @@ const activityDefinitions: ActivityDefinition[] = [
       ],
       end: [],
     },
+  },
+  {
+    name: "board game",
+    label: "Board Game",
+    group: "media",
+    emoji: "♟️",
+    attributes: {
+      key: "board game",
+      mainKey: "name",
+      start: [
+        {
+          key: "name",
+          label: "Game",
+          type: "text",
+          required: true,
+          resourceTag: "boardgame"
+        }
+      ],
+      end: [],
+    }
   },
   {
     name: "movie",
@@ -151,6 +172,7 @@ const activityDefinitions: ActivityDefinition[] = [
     name: "tv",
     label: "TV",
     group: "media",
+    color: "lighter",
     emoji: "📺",
     attributes: {
       key: "tv",
@@ -304,6 +326,7 @@ const activityDefinitions: ActivityDefinition[] = [
     emoji: "🍳",
     plan: { defaultHours: 5, intervalMinutes: 30 },
   },
+  { name: "brew", label: "Brew", group: "household", emoji: "🍺"},
   { name: "eat", label: "Eat", group: "household", emoji: "🍽️" },
   {
     name: "hygiene",

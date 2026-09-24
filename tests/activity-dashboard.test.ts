@@ -62,5 +62,26 @@ describe("buildActivityDashboard", () => {
         latest: "2026-08-26",
       },
     ]);
+    expect(dashboard.weeks).toHaveLength(52);
+    expect(
+      dashboard.weeks.find(({ start }) => start === "2026-08-24"),
+    ).toMatchObject({
+      month: "Aug",
+      minutes: 120,
+      intensity: 1,
+    });
+  });
+
+  it("labels a week with the month containing at least four of its days", () => {
+    const dashboard = buildActivityDashboard([], readDefinition, 2026);
+
+    expect(dashboard.weeks[0]).toMatchObject({
+      start: "2025-12-29",
+      end: "2026-01-04",
+      month: "Jan",
+      minutes: 0,
+      intensity: 0,
+    });
+    expect(dashboard.weeks).toHaveLength(52);
   });
 });

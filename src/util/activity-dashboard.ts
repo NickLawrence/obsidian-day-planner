@@ -24,6 +24,45 @@ export type ActivityDashboardGroup = {
   latest: string;
 };
 
+export type ActivityDashboardWeek = {
+  start: string;
+  end: string;
+  month: string;
+  minutes: number;
+  intensity: number;
+};
+
+function buildWeeks(rows: ActivityDashboardRow[], year: number) {
+  // January 4 is always in the first ISO week assigned to a calendar year.
+  const firstWeek = window.moment(`${year}-01-04`).startOf("isoWeek");
+  const minutesByWeek = new Map<string, number>();
+
+  for (const row of rows) {
+    const week = window.moment(row.day).startOf("isoWeek").format("YYYY-MM-DD");
+    minutesByWeek.set(week, (minutesByWeek.get(week) ?? 0) + row.minutes);
+  }
+
+  const weeks = Array.from({ length: 52 }, (_, index) => {
+    const start = firstWeek.clone().add(index, "weeks");
+    const minutes = minutesByWeek.get(start.format("YYYY-MM-DD")) ?? 0;
+
+    return {
+      start: start.format("YYYY-MM-DD"),
+      end: start.clone().add(6, "days").format("YYYY-MM-DD"),
+      // A week's Thursday determines its month, giving that month at least four days.
+      month: start.clone().add(3, "days").format("MMM"),
+      minutes,
+      intensity: 0,
+    };
+  });
+  const maximum = Math.max(0, ...weeks.map(({ minutes }) => minutes));
+
+  return weeks.map((week) => ({
+    ...week,
+    intensity: maximum === 0 ? 0 : week.minutes / maximum,
+  }));
+}
+
 function parseClock(timestamp?: string) {
   if (!timestamp) return null;
 
@@ -37,6 +76,7 @@ function parseClock(timestamp?: string) {
 export function buildActivityDashboard(
   activities: Activity[],
   definition: ActivityDefinition,
+  year = window.moment().year(),
 ) {
   const attributes = definition.attributes;
   const startFields = attributes?.start ?? [];
@@ -115,6 +155,7 @@ export function buildActivityDashboard(
   }
 
   return {
+    weeks: buildWeeks(rows, year),
     rows: rows.sort((a, b) => b.day.localeCompare(a.day)),
     groups: [...groups.values()].sort((a, b) => b.minutes - a.minutes),
   };
