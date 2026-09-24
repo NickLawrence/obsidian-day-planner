@@ -6,12 +6,15 @@
   import { createTimeBlockMenu } from "../time-block-menu";
 
   import LocalTimeBlock from "./local-time-block.svelte";
+  import Selectable from "./selectable.svelte";
 
   const { task }: { task: LocalTask & { clockActivity?: Activity } } = $props();
 
   const { workspaceFacade, sTaskEditor } = getObsidianContext();
 
-  function openActivityContextMenu(event: MouseEvent) {
+  function openActivityContextMenu(
+    event: MouseEvent | PointerEvent | TouchEvent,
+  ) {
     if (!task.clockActivity) {
       return;
     }
@@ -22,21 +25,27 @@
   }
 </script>
 
-<LocalTimeBlock
-  oncontextmenu={openActivityContextMenu}
-  showDuration={false}
-  {task}
->
-  {#snippet bottomDecoration()}
-    {#if task.clockActivity?.log?.[0]?.end}
-      <span class="activity-duration">
-        {formatDuration(
-          window.moment.duration(task.durationMinutes, "minutes"),
-        )}
-      </span>
-    {/if}
+<Selectable onSecondarySelect={openActivityContextMenu}>
+  {#snippet children({ use, onpointerup, state })}
+    <LocalTimeBlock
+      isActive={state === "secondary"}
+      {onpointerup}
+      showDuration={false}
+      {task}
+      {use}
+    >
+      {#snippet bottomDecoration()}
+        {#if task.clockActivity?.log?.[0]?.end}
+          <span class="activity-duration">
+            {formatDuration(
+              window.moment.duration(task.durationMinutes, "minutes"),
+            )}
+          </span>
+        {/if}
+      {/snippet}
+    </LocalTimeBlock>
   {/snippet}
-</LocalTimeBlock>
+</Selectable>
 
 <style>
   .activity-duration {

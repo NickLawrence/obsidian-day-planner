@@ -1,11 +1,12 @@
 import { Menu } from "obsidian";
 import { isNotVoid } from "typed-assert";
 
+import type { STaskEditor } from "../service/stask-editor";
 import type { LocalTask } from "../task-types";
+import { getActivityLabel } from "../util/activity-definitions";
 import type { Activity } from "../util/props";
 
 import type { WorkspaceFacade } from "src/service/workspace-facade";
-import type { STaskEditor } from "../service/stask-editor";
 
 export function createTimeBlockMenu(props: {
   event: MouseEvent | TouchEvent;
@@ -30,6 +31,14 @@ export function createTimeBlockMenu(props: {
   const isActivity = Boolean(task.clockActivity);
   const isCompletedActivity = Boolean(task.clockActivity?.log?.[0]?.end);
   const isActiveActivity = isActivity && !isCompletedActivity;
+
+  const activity = task.clockActivity;
+  if (activity) {
+    menu.addItem((item) => {
+      item.setTitle(getActivityLabel(activity.activity)).setDisabled(true);
+    });
+    menu.addSeparator();
+  }
 
   if (isActiveActivity) {
     menu.addItem((item) => {
