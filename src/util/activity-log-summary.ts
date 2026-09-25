@@ -1,6 +1,8 @@
 import type { Duration, Moment } from "moment";
 
 import {
+  getActivityAttributeValues,
+  getActivityDefinition,
   getActivityLabel,
   normalizeActivityName,
 } from "./activity-definitions";
@@ -10,6 +12,11 @@ export type ActivityDuration = {
   activity: string;
   activityKey: string;
   duration: Duration;
+};
+
+export type ActivityDisplayDuration = ActivityDuration & {
+  emoji?: string;
+  mainKeyValue?: string | number;
 };
 
 export function getWeekRangeFor(date: Moment) {
@@ -202,6 +209,73 @@ export function calculateDailyActivityDurations(
   const dayEnd = dayStart.clone().add(1, "day");
 
   return calculateActivityDurationsForRange(activities, dayStart, dayEnd);
+}
+
+/**
+ * Produces calendar-friendly daily rows. Activities with a configured main key
+ * are split by that value, while activities without one retain their normal
+ * activity label.
+ */
+export function calculateDailyActivityDisplayDurations(
+  activities: Activity[],
+  day: Moment,
+): ActivityDisplayDuration[] {
+  const groups = new Map<
+    string,
+    {
+      activities: Activity[];
+      label: string;
+      activityKey: string;
+      emoji?: string;
+      mainKeyValue?: string | number;
+    }
+  >();
+
+  activities.forEach((activity) => {
+    const activityKey = normalizeActivityName(activity.activity);
+    const definition = getActivityDefinition(activity.activity);
+    const mainKey = definition?.attributes?.mainKey;
+    const rawValue = mainKey
+      ? getActivityAttributeValues(activity.activity, activity)[mainKey]
+      : undefined;
+    const mainKeyValue =
+      typeof rawValue === "string" && rawValue.trim()
+        ? rawValue.trim()
+        : typeof rawValue === "number"
+          ? rawValue
+          : undefined;
+    const groupKey = `${activityKey}\u0000${mainKeyValue ?? ""}`;
+    const existing = groups.get(groupKey);
+
+    if (existing) {
+      existing.activities.push(activity);
+    } else {
+      groups.set(groupKey, {
+        activities: [activity],
+        label:
+          typeof mainKeyValue !== "undefined"
+            ? String(mainKeyValue)
+            : getActivityLabel(activity.activity),
+        activityKey,
+        emoji: definition?.emoji,
+        mainKeyValue,
+      });
+    }
+  });
+
+  return [...groups.values()]
+    .flatMap((group) =>
+      calculateDailyActivityDurations(group.activities, day).map((total) => ({
+        ...total,
+        activity: group.label,
+        activityKey: group.activityKey,
+        emoji: group.emoji,
+        mainKeyValue: group.mainKeyValue,
+      })),
+    )
+    .sort((a, b) =>
+      a.activity.localeCompare(b.activity, undefined, { sensitivity: "base" }),
+    );
 }
 
 export function calculateWeeklyUnrecordedActivityDuration(

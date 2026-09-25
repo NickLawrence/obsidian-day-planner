@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   calculateDailyActivityDurations,
+  calculateDailyActivityDisplayDurations,
   calculateDailyUnrecordedActivityDuration,
   calculateUnrecordedActivityDurationForRange,
   calculateWeeklyActivityDurations,
@@ -10,6 +11,58 @@ import {
 } from "../src/util/activity-log-summary";
 import { formatDuration } from "../src/util/duration";
 import type { Activity } from "../src/util/props";
+
+describe("calculateDailyActivityDisplayDurations", () => {
+  test("splits an activity by its main key and aggregates matching values", () => {
+    const activities: Activity[] = [
+      {
+        taskIds: [],
+        activity: "movie",
+        movie: { name: "Arrival" },
+        log: [{ start: "2024-09-09T10:00:00Z", end: "2024-09-09T11:00:00Z" }],
+      } as Activity & { movie: { name: string } },
+      {
+        taskIds: [],
+        activity: "movie",
+        movie: { name: "Arrival" },
+        log: [{ start: "2024-09-09T11:00:00Z", end: "2024-09-09T11:30:00Z" }],
+      } as Activity & { movie: { name: string } },
+      {
+        taskIds: [],
+        activity: "movie",
+        movie: { name: "Moonlight" },
+        log: [{ start: "2024-09-09T12:00:00Z", end: "2024-09-09T14:00:00Z" }],
+      } as Activity & { movie: { name: string } },
+    ];
+
+    const totals = calculateDailyActivityDisplayDurations(
+      activities,
+      window.moment("2024-09-09"),
+    );
+
+    expect(
+      totals.map(({ activity, emoji, mainKeyValue, duration }) => ({
+        activity,
+        emoji,
+        mainKeyValue,
+        minutes: duration.asMinutes(),
+      })),
+    ).toEqual([
+      {
+        activity: "Arrival",
+        emoji: "📺",
+        mainKeyValue: "Arrival",
+        minutes: 90,
+      },
+      {
+        activity: "Moonlight",
+        emoji: "📺",
+        mainKeyValue: "Moonlight",
+        minutes: 120,
+      },
+    ]);
+  });
+});
 
 describe("calculateWeeklyActivityDurations", () => {
   test("aggregates durations per activity within the iso week", () => {
