@@ -5,6 +5,7 @@
 
   import { buildActivityDashboard } from "../../util/activity-dashboard";
   import type { ActivityDefinition } from "../../util/activity-definitions";
+  import { getInProgressMainKeys } from "../../util/activity-progress";
   import type { DayPlannerActivityApi } from "../../util/activity-totals";
   import { formatDuration } from "../../util/duration";
 
@@ -24,6 +25,9 @@
     definition
       ? buildActivityDashboard(activities, definition)
       : { rows: [], groups: [], weeks: [] },
+  );
+  const inProgress = $derived(
+    definition ? getInProgressMainKeys(app, activities, definition) : [],
   );
   const monthGroups = $derived(
     dashboard.weeks.reduce<
@@ -94,6 +98,50 @@
   </nav>
 
   {#if definition}
+    <section class="in-progress">
+      <h3>▶️ In Progress</h3>
+      {#if inProgress.length === 0}
+        <p class="empty">None</p>
+      {:else}
+        <div class="progress-list">
+          {#each inProgress as item (item.value)}
+            <article>
+              <div class="progress-heading">
+                <strong>{item.value}</strong>
+                {#if item.percent !== undefined}
+                  <span>{item.percent.toFixed(0)}%</span>
+                {:else}
+                  <span>{displayTime(item.minutes)} spent</span>
+                {/if}
+              </div>
+              {#if item.percent !== undefined}
+                <progress max="100" value={item.percent}
+                  >{item.percent.toFixed(0)}%</progress
+                >
+                <div class="progress-details">
+                  <span>{item.current} / {item.maximum} {item.rangeKey}</span>
+                  <span>{displayTime(item.minutes)} spent</span>
+                  {#if item.minutesPerUnit !== undefined}
+                    <span
+                      >{item.minutesPerUnit.toFixed(1)} min/{item.rangeKey?.replace(
+                        /s$/,
+                        "",
+                      )}</span
+                    >
+                  {/if}
+                  {#if item.estimatedMinutesRemaining !== undefined}
+                    <span
+                      >About {displayTime(item.estimatedMinutesRemaining)} remaining</span
+                    >
+                  {/if}
+                </div>
+              {/if}
+            </article>
+          {/each}
+        </div>
+      {/if}
+    </section>
+
     <div
       class="activity-heatmap"
       aria-label={`${definition.label} time by week`}
@@ -233,6 +281,37 @@
   .activity-heatmap {
     overflow-x: auto;
     padding: var(--size-2-2) 0 var(--size-4-2);
+  }
+
+  .progress-list {
+    display: grid;
+    gap: var(--size-4-2);
+  }
+
+  .progress-list article {
+    padding: var(--size-4-2);
+    background: var(--background-secondary);
+    border-radius: var(--radius-s);
+  }
+
+  .progress-heading,
+  .progress-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--size-2-2) var(--size-4-3);
+    justify-content: space-between;
+  }
+
+  .progress-list progress {
+    width: 100%;
+    margin: var(--size-2-2) 0;
+    accent-color: var(--interactive-accent);
+  }
+
+  .progress-details {
+    justify-content: flex-start;
+    font-size: var(--font-ui-smaller);
+    color: var(--text-muted);
   }
 
   .month-labels,

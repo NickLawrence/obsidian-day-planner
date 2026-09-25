@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildActivityDashboard } from "../src/util/activity-dashboard";
 import type { ActivityDefinition } from "../src/util/activity-definitions";
+import { calculateActivityMainKeyProgress } from "../src/util/activity-progress";
 import type { Activity } from "../src/util/props";
 
 const readDefinition: ActivityDefinition = {
@@ -83,5 +84,58 @@ describe("buildActivityDashboard", () => {
       intensity: 0,
     });
     expect(dashboard.weeks).toHaveLength(52);
+  });
+});
+
+describe("calculateActivityMainKeyProgress", () => {
+  it("calculates completion, pace, and estimated remaining time", () => {
+    const progress = calculateActivityMainKeyProgress({
+      activities: [
+        {
+          activity: "Read",
+          read: { book: "Dune", "start-page": 1, "end-page": 60 },
+          log: [{ start: "2026-08-25 10:00:00", end: "2026-08-25 11:00:00" }],
+        },
+        {
+          activity: "Read",
+          read: { book: "Dune", "start-page": 61, "end-page": 100 },
+          log: [{ start: "2026-08-26 10:00:00", end: "2026-08-26 11:00:00" }],
+        },
+      ] as unknown as Activity[],
+      definition: readDefinition,
+      value: "Dune",
+      rangeMaximums: { pages: 400 },
+    });
+
+    expect(progress).toMatchObject({
+      minutes: 120,
+      rangeKey: "pages",
+      current: 100,
+      maximum: 400,
+      percent: 25,
+      minutesPerUnit: 1.2,
+      estimatedMinutesRemaining: 360,
+    });
+  });
+
+  it("returns time spent when no range maximum is available", () => {
+    expect(
+      calculateActivityMainKeyProgress({
+        activities: [
+          {
+            activity: "Read",
+            read: { book: "Dune", "start-page": 1, "end-page": 10 },
+            log: [
+              {
+                start: "2026-08-25 10:00:00",
+                end: "2026-08-25 10:30:00",
+              },
+            ],
+          },
+        ] as unknown as Activity[],
+        definition: readDefinition,
+        value: "Dune",
+      }),
+    ).toEqual({ value: "Dune", minutes: 30 });
   });
 });

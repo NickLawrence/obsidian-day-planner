@@ -94,6 +94,7 @@ export function getResourceFilesForField(
         file,
         name: getFileDisplayName(file),
         aliases: getFrontmatterAliases(metadata?.frontmatter),
+        frontmatter: metadata?.frontmatter ?? {},
         status: normalizeStatus(metadata?.frontmatter?.status),
         hasResourceTag:
           frontmatterHasTag(metadata?.frontmatter, resourceTag) ||
