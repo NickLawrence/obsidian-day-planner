@@ -49,10 +49,12 @@
   }
 
   function weeklyTooltip(node: HTMLElement, text: string) {
-    setTooltip(node, text);
+    // Obsidian's setTooltip skips falsy delays, so set zero explicitly.
+    node.setAttribute("data-tooltip-delay", "0");
+    setTooltip(node, text, { delay: 0 });
     return {
       update(text: string) {
-        setTooltip(node, text);
+        setTooltip(node, text, { delay: 0 });
       },
     };
   }
@@ -142,10 +144,7 @@
       {/if}
     </section>
 
-    <div
-      class="activity-heatmap"
-      aria-label={`${definition.label} time by week`}
-    >
+    <div class="activity-heatmap">
       <div class="month-labels" aria-hidden="true">
         {#each monthGroups as group}
           <span style={`grid-column: ${group.start} / span ${group.count}`}
