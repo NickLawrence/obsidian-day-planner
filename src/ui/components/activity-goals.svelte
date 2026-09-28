@@ -50,6 +50,7 @@
   } = $props();
 
   let rows = $state<GoalProgressRow[]>([]);
+  let totalRow = $state<GoalProgressRow | null>(null);
   let otherActivityRows = $state<OtherActivityRow[]>([]);
   let weekLabel = $state("");
   let weekProgressPercent = $state(0);
@@ -245,6 +246,7 @@
 
     if (!isWeeklyNotesEnabled) {
       rows = [];
+      totalRow = null;
       otherActivityRows = [];
       return;
     }
@@ -295,6 +297,31 @@
           sensitivity: "base",
         });
       });
+
+    totalRow =
+      rows.length > 0
+        ? {
+            activity: "Total",
+            activityKey: "total",
+            duration: window.moment.duration(
+              rows.reduce(
+                (total, row) => total + row.duration.asMilliseconds(),
+                0,
+              ),
+            ),
+            goal: window.moment.duration(
+              rows.reduce((total, row) => total + row.goal.asMilliseconds(), 0),
+            ),
+            dailyDurationsMs: rows.reduce(
+              (totalsByDay, row) =>
+                totalsByDay.map(
+                  (total, dayIndex) =>
+                    total + (row.dailyDurationsMs[dayIndex] ?? 0),
+                ),
+              Array(7).fill(0) as number[],
+            ),
+          }
+        : null;
 
     const estimateKeys = new Set(
       planEntries
@@ -430,6 +457,43 @@
           </div>
         </div>
       {/each}
+
+      {#if totalRow}
+        <div
+          style={`--progress:${progressPercent(totalRow.duration, totalRow.goal)}%;--week-progress:${weekProgressPercent}%;--half-hour-step:${tickStepPercent(totalRow.goal, 30)};--hour-step:${tickStepPercent(totalRow.goal, 60)};`}
+          class="goal-card total-card"
+        >
+          <div class="emoji-box total-emoji-box" aria-hidden="true">
+            <div class="emoji">∑</div>
+          </div>
+
+          <div class="goal-body">
+            <div class="goal-top-row">
+              <div class="name">Total</div>
+              <div
+                class="value"
+                class:complete={isComplete(totalRow.duration, totalRow.goal)}
+              >
+                {formatDuration(totalRow.duration)} / {formatDuration(
+                  totalRow.goal,
+                )}
+              </div>
+            </div>
+
+            <div class="goal-track" aria-hidden="true">
+              <div class="goal-fill-bg"></div>
+              <div class="goal-ticks"></div>
+              {#each getProgressSegments(totalRow) as segment, index (`total-${index}`)}
+                <div
+                  style={`--segment-left:${segment.left}%;--segment-width:${segment.width}%;--segment-color:${segment.color};`}
+                  class="goal-day-segment"
+                ></div>
+              {/each}
+              <div class="week-progress-marker" title="Week progress"></div>
+            </div>
+          </div>
+        </div>
+      {/if}
     </div>
 
     {#if otherActivityRows.length > 0}
@@ -531,6 +595,24 @@
     );
     border-radius: var(--radius-m);
     box-shadow: inset 0 0 0 1px color-mix(in srgb, black 36%, transparent);
+  }
+
+  .total-card {
+    margin-top: var(--size-2-2);
+    border-color: color-mix(
+      in srgb,
+      var(--interactive-accent) 35%,
+      var(--background-modifier-border)
+    );
+  }
+
+  .total-emoji-box {
+    color: var(--text-normal);
+    background: color-mix(
+      in srgb,
+      var(--interactive-accent) 20%,
+      var(--background-modifier-border)
+    );
   }
 
   .emoji {
