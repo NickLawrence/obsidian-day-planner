@@ -273,6 +273,8 @@
 
 <style>
   :global(.planner-multi-day-scroller) {
+    /* Keep activity overlays and the current-time marker below the toolbar. */
+    isolation: isolate;
     overflow: auto;
     flex: 1 0 0;
   }
@@ -331,6 +333,7 @@
 
   .controls-sidebar {
     position: absolute;
+    z-index: 1;
     top: 0;
     right: var(--scrollbar-width);
 

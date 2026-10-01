@@ -9,6 +9,7 @@
   } from "../../util/activity-definitions";
   import {
     calculateWeeklyActivityDurations,
+    calculateWeeklyUnrecordedActivityDuration,
     getWeekRangeFor,
     type ActivityDuration,
   } from "../../util/activity-log-summary";
@@ -49,6 +50,7 @@
   let rows = $state<GoalProgressRow[]>([]);
   let totalRow = $state<GoalProgressRow | null>(null);
   let otherActivityRows = $state<OtherActivityRow[]>([]);
+  let unrecordedTime = $state(window.moment.duration(0));
   let weekLabel = $state("");
   let weekProgressPercent = $state(0);
   let dayColors = $state<DayColorInfo[]>([]);
@@ -250,6 +252,10 @@
     );
 
     const totals = calculateWeeklyActivityDurations(allActivities, now);
+    unrecordedTime = calculateWeeklyUnrecordedActivityDuration(
+      allActivities,
+      now,
+    );
     const withGoals = mergeActivityDurationsWithGoals(totals, goals);
 
     rows = withGoals
@@ -379,7 +385,7 @@
     <div class="subtitle">{weekLabel}</div>
   </div>
 
-  {#if rows.length === 0 && otherActivityRows.length === 0}
+  {#if rows.length === 0 && otherActivityRows.length === 0 && unrecordedTime.asMilliseconds() === 0}
     <div class="empty-state">
       No goals found for this week under the “Activity goals” heading.
     </div>
@@ -461,23 +467,30 @@
       {/if}
     </div>
 
-    {#if otherActivityRows.length > 0}
-      <div class="other-activities" aria-label="Other weekly activities">
-        {#each otherActivityRows as activity (activity.activityKey)}
-          {@const definition = getActivityDefinition(activity.activityKey)}
-          {@const emoji = definition?.emoji ?? "•"}
-          {@const label = definition?.label ?? sanitizeLabel(activity.activity)}
-          <div class="other-activity-card" title={label}>
-            <span class="other-activity-emoji" aria-hidden="true">{emoji}</span>
-            <span class="other-activity-label">{label}</span>
-            <span class="other-activity-duration"
-              >{formatDuration(activity.duration)}</span
-            >
-          </div>
-        {/each}
+    <div class="other-activities" aria-label="Other weekly activities">
+      {#each otherActivityRows as activity (activity.activityKey)}
+        {@const definition = getActivityDefinition(activity.activityKey)}
+        {@const emoji = definition?.emoji ?? "•"}
+        {@const label = definition?.label ?? sanitizeLabel(activity.activity)}
+        <div class="other-activity-card" title={label}>
+          <span class="other-activity-emoji" aria-hidden="true">{emoji}</span>
+          <span class="other-activity-label">{label}</span>
+          <span class="other-activity-duration"
+            >{formatDuration(activity.duration)}</span
+          >
+        </div>
+      {/each}
+      <div
+        class="other-activity-card"
+        title="Time in the week not covered by any activity log"
+      >
+        <span class="other-activity-emoji" aria-hidden="true">◷</span>
+        <span class="other-activity-label">Unrecorded time</span>
+        <span class="other-activity-duration"
+          >{formatDuration(unrecordedTime)}</span
+        >
       </div>
-    {/if}
-
+    </div>
     <div class="legend" aria-label="Weekly day color legend">
       {#each legendDays as day}
         <div class="legend-item">

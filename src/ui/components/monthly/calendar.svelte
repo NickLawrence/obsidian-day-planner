@@ -10,6 +10,7 @@
   import {
     calculateDailyActivityDisplayDurations,
     calculateWeeklyActivityDurations,
+    calculateWeeklyUnrecordedActivityDuration,
     getWeekRangeFor,
     type ActivityDuration,
     type ActivityDisplayDuration,
@@ -76,18 +77,7 @@
       .format("ddd"),
   );
 
-  const activities = derived(
-    [listProps, displayedActivitiesStore],
-    ([$listProps, $displayedActivities]) => {
-      const allActivities = getAllActivitiesFromListProps($listProps);
-      if (typeof $displayedActivities === "undefined") return allActivities;
-
-      const allowed = new Set($displayedActivities.map(normalizeActivityName));
-      return allActivities.filter((activity: Activity) =>
-        allowed.has(normalizeActivityName(activity.activity)),
-      );
-    },
-  );
+  const activities = derived(listProps, getAllActivitiesFromListProps);
 
   const monthLabel = derived(currentMonth, ($month) =>
     $month.format("MMMM YYYY"),
@@ -120,11 +110,23 @@
   const activityIndex = derived(activities, createActivityRangeIndex);
 
   const calendarTotals = derived(
-    [weeks, activityIndex, currentMonth],
-    ([$weeks, $activityIndex, $month]) =>
+    [weeks, activityIndex, currentMonth, displayedActivitiesStore],
+    ([$weeks, $activityIndex, $month, $displayedActivities]) =>
       $weeks.map((weekStart) => {
         const { end: weekEnd } = getWeekRangeFor(weekStart);
-        const weekActivities = $activityIndex(weekStart, weekEnd);
+        const allWeekActivities = $activityIndex(weekStart, weekEnd);
+        const unrecordedTime = calculateWeeklyUnrecordedActivityDuration(
+          allWeekActivities,
+          weekStart,
+        );
+        const allowed = $displayedActivities
+          ? new Set($displayedActivities.map(normalizeActivityName))
+          : undefined;
+        const weekActivities = allowed
+          ? allWeekActivities.filter((activity: Activity) =>
+              allowed.has(normalizeActivityName(activity.activity)),
+            )
+          : allWeekActivities;
         const weekTotals = calculateWeeklyActivityDurations(
           weekActivities,
           weekStart,
@@ -142,7 +144,7 @@
             ),
           };
         });
-        return { weekStart, weekEnd, weekTotals, days };
+        return { weekStart, weekEnd, weekTotals, days, unrecordedTime };
       }),
   );
 
@@ -441,6 +443,15 @@
                 {/if}
               </div>
             {/each}
+          </div>
+          <div
+            class="summary-row unrecorded-time"
+            title="Time in the week not covered by any activity log"
+          >
+            <span class="summary-name">Unrecorded time</span>
+            <span class="summary-duration"
+              >{formatDuration(week.unrecordedTime)}</span
+            >
           </div>
         </div>
       {/if}
@@ -754,6 +765,11 @@
 
   .summary-row.placeholder {
     color: var(--text-faint);
+  }
+
+  .unrecorded-time {
+    padding-top: var(--size-2-2);
+    border-top: 1px solid var(--background-modifier-border);
   }
 
   .summary-activity {

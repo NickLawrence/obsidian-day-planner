@@ -283,11 +283,13 @@ export function calculateWeeklyUnrecordedActivityDuration(
   dateInWeek: Moment,
 ): Duration {
   const { start: weekStart, end: weekEnd } = getWeekRangeFor(dateInWeek);
+  const elapsedEnd = window.moment.min(weekEnd, window.moment());
+  if (!elapsedEnd.isAfter(weekStart)) return window.moment.duration(0);
 
   return calculateUnrecordedActivityDurationForRange(
     activities,
     weekStart,
-    weekEnd,
+    elapsedEnd,
   );
 }
 
