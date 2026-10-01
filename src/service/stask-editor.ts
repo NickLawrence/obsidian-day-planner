@@ -1,11 +1,18 @@
 import { type App } from "obsidian";
-import { isNotVoid } from "typed-assert";
 import type { STask } from "obsidian-dataview";
+import { isNotVoid } from "typed-assert";
 
-import { selectListPropsForLocation } from "../redux/dataview/dataview-slice";
-import type { AppStore } from "../redux/store";
+import { propRegexp } from "../regexp";
 import type { LocalTask } from "../task-types";
-import { upsertActivitiesBlock } from "../util/activities-file";
+import { askForActivityAttributes } from "../ui/activity-attributes-modal";
+import { askForConfirmation } from "../ui/confirmation-modal";
+import {
+  activityNotesField,
+  buildActivityAttributeUpdate,
+  getActivityAttributeFields,
+  getActivityLabel,
+  qualityRatingField,
+} from "../util/activity-definitions";
 import {
   replaceSTaskText,
   textToMarkdownWithIndentation,
@@ -21,25 +28,16 @@ import {
   createProp,
   type Activity,
   type Props,
-  taskActivityType,
+  propsSchema,
   updateActivityDetails,
   updateActivityLogEntry,
 } from "../util/props";
-import {
-  activityNotesField,
-  buildActivityAttributeUpdate,
-  getActivityAttributeFields,
-  getActivityLabel,
-  qualityRatingField,
-} from "../util/activity-definitions";
-import { askForActivityAttributes } from "../ui/activity-attributes-modal";
-import { askForConfirmation } from "../ui/confirmation-modal";
-import { propRegexp } from "../regexp";
 import { extractPlannerTaskId, plannerTaskIdKey } from "../util/task-id";
 import { appendText, removeTimestampFromStart } from "../util/task-utils";
 import { withNotice } from "../util/with-notice";
 
 import { DataviewFacade } from "./dataview-facade";
+import type { PlannerData } from "./planner-data";
 import type { VaultFacade } from "./vault-facade";
 import { WorkspaceFacade } from "./workspace-facade";
 
@@ -65,12 +63,8 @@ export class STaskEditor {
 
     const taskId = await this.ensureTaskId(sTask);
 
-    await this.vaultFacade.editFile(location.path, (contents) =>
-      upsertActivitiesBlock({
-        fileText: contents,
-        filePath: location.path,
-        updateFn: (props) => addTaskToOpenActivity(props, taskId),
-      }),
+    await this.updateFirstOpenActivity((props) =>
+      addTaskToOpenActivity(props, taskId),
     );
   });
 
@@ -78,12 +72,8 @@ export class STaskEditor {
     const { sTask } = this.getSTaskUnderCursorFromLastView();
     const taskId = await this.ensureTaskId(sTask);
 
-    await this.vaultFacade.editFile(sTask.path, (contents) =>
-      upsertActivitiesBlock({
-        fileText: contents,
-        filePath: sTask.path,
-        updateFn: (props) => addTaskToOpenActivity(props, taskId),
-      }),
+    await this.updateFirstOpenActivity((props) =>
+      addTaskToOpenActivity(props, taskId),
     );
   });
 
@@ -227,13 +217,8 @@ export class STaskEditor {
       return;
     }
 
-    await this.vaultFacade.editFile(target.path, (contents) =>
-      upsertActivitiesBlock({
-        fileText: contents,
-        filePath: target.path,
-        updateFn: (props) =>
-          appendNoteToActivity(props, target.activityIndex, note),
-      }),
+    await this.updatePlannerFile(target.path, (props) =>
+      appendNoteToActivity(props, target.activityIndex, note),
     );
   });
   clockOutUnderCursor = withNotice(async () => {
@@ -248,19 +233,13 @@ export class STaskEditor {
       return;
     }
 
-    await this.vaultFacade.editFile(sTask.path, (contents) =>
-      upsertActivitiesBlock({
-        fileText: contents,
-        filePath: sTask.path,
-        updateFn: (props) => {
-          const activityIndex = this.findOpenActivityByName(
-            props,
-            taskActivityType,
-          );
-
-          return clockOut(props, activityIndex, attributeUpdates);
-        },
-      }),
+    const taskId = await this.ensureTaskId(sTask);
+    await this.updateActivityForTask(taskId, (props) =>
+      clockOut(
+        props,
+        this.findOpenActivityForTask(props, taskId),
+        attributeUpdates,
+      ),
     );
   });
 
@@ -278,16 +257,12 @@ export class STaskEditor {
 
     const { sTask } = this.getSTaskUnderCursorFromLastView();
 
-    await this.vaultFacade.editFile(sTask.path, (contents) =>
-      upsertActivitiesBlock({
-        fileText: contents,
-        filePath: sTask.path,
-        updateFn: (props) =>
-          cancelOpenClockByActivityIndex(
-            props,
-            this.findOpenActivityByName(props, taskActivityType),
-          ),
-      }),
+    const taskId = await this.ensureTaskId(sTask);
+    await this.updateActivityForTask(taskId, (props) =>
+      cancelOpenClockByActivityIndex(
+        props,
+        this.findOpenActivityForTask(props, taskId),
+      ),
     );
   });
 
@@ -345,23 +320,15 @@ export class STaskEditor {
   });
 
   private getOpenActivities() {
-    const listProps = this.getState().dataview.listProps;
-
-    return Object.entries(listProps).flatMap(([path, lineToProps]) =>
-      Object.values(lineToProps).flatMap(({ parsed }) =>
-        (parsed.activities ?? [])
-          .map((activity, activityIndex) => ({ path, activity, activityIndex }))
-          .filter(({ activity }) => activity.log?.some((entry) => !entry.end)),
-      ),
-    );
+    return this.plannerData.getOpenActivities();
   }
 
   constructor(
-    private readonly getState: AppStore["getState"],
     private readonly app: App,
     private readonly workspaceFacade: WorkspaceFacade,
     private readonly vaultFacade: VaultFacade,
     private readonly dataviewFacade: DataviewFacade,
+    private readonly plannerData: PlannerData,
   ) {}
 
   getSTaskUnderCursorFromLastView = () => {
@@ -375,16 +342,12 @@ export class STaskEditor {
   };
 
   hasOpenClockForTask(sTask: STask) {
-    const listProps = selectListPropsForLocation(
-      this.getState(),
-      sTask.path,
-      sTask.line,
-    );
-
+    const taskId = extractPlannerTaskId(sTask.text);
     return Boolean(
-      listProps?.parsed.activities?.some((activity) =>
-        activity.log?.some((entry) => !entry.end),
-      ),
+      taskId &&
+        this.plannerData
+          .getOpenActivities()
+          .some(({ activity }) => activity.taskIds.includes(taskId)),
     );
   }
 
@@ -500,13 +463,11 @@ export class STaskEditor {
     const taskId = await this.ensureTaskId(sTask);
     const activityName = this.getActivityName(sTask.text);
 
-    await this.vaultFacade.editFile(sTask.path, (contents) =>
-      upsertActivitiesBlock({
-        fileText: contents,
-        filePath: sTask.path,
-        updateFn: (props) => updateFn(props, { taskId, activityName }),
-      }),
-    );
+    const updated = propsSchema
+      .parse(updateFn({}, { taskId, activityName }))
+      .activities?.at(-1);
+    isNotVoid(updated);
+    await this.plannerData.addActivity(updated);
 
     return taskId;
   }
@@ -527,12 +488,66 @@ export class STaskEditor {
 
     const activityName = this.getActivityName(task.text);
 
-    await this.vaultFacade.editFile(location.path, (contents) =>
-      upsertActivitiesBlock({
-        fileText: contents,
-        filePath: location.path,
-        updateFn: (props) => updateFn(props, { activityName, clockActivity }),
-      }),
+    const target = this.findStoredActivity(clockActivity, activityName);
+    isNotVoid(target, "Cannot find activity in planner data");
+    await this.updatePlannerFile(target.path, (props) =>
+      updateFn(props, { activityName, clockActivity }),
+    );
+  }
+
+  private async updatePlannerFile(
+    path: string,
+    updateFn: (props: Props) => Props,
+  ) {
+    await this.plannerData.updateActivities(
+      path,
+      (activities) =>
+        propsSchema.parse(updateFn({ activities })).activities ?? [],
+    );
+  }
+
+  private async updateFirstOpenActivity(updateFn: (props: Props) => Props) {
+    const target = this.getOpenActivities()[0];
+    isNotVoid(target, "There is no open clock");
+    await this.updatePlannerFile(target.path, updateFn);
+  }
+
+  private async updateActivityForTask(
+    taskId: string,
+    updateFn: (props: Props) => Props,
+  ) {
+    const target = this.getOpenActivities().find(({ activity }) =>
+      activity.taskIds.includes(taskId),
+    );
+    isNotVoid(target, "There is no open clock for this task");
+    await this.updatePlannerFile(target.path, updateFn);
+  }
+
+  private findStoredActivity(
+    clockActivity: Activity | undefined,
+    activityName: string,
+  ) {
+    return this.plannerData
+      .getActivitiesWithLocations()
+      .find(({ activity }) =>
+        clockActivity
+          ? this.findActivityIndexForClockActivity(
+              { activities: [activity] },
+              clockActivity,
+            ) === 0 ||
+            this.findActivityIndexForSelectedClockActivity(
+              { activities: [activity] },
+              clockActivity,
+            ) === 0
+          : activity.activity === activityName,
+      );
+  }
+
+  private findOpenActivityForTask(props: Props, taskId: string) {
+    return (props.activities ?? []).findIndex(
+      (activity) =>
+        activity.taskIds?.includes(taskId) &&
+        activity.log?.some((entry) => !entry.end),
     );
   }
 

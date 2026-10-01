@@ -4,10 +4,10 @@ import type { STask } from "obsidian-dataview";
 
 import { createAppSlice } from "../create-app-slice";
 
-import type { Props } from "src/util/props";
+import type { ParsedProps } from "src/util/props";
 
 export type ListPropsParseResult = {
-  parsed: Props;
+  parsed: ParsedProps;
   position: Pos;
 };
 
@@ -52,6 +52,11 @@ export const dataviewSlice = createAppSlice({
         state.listProps[path] = lineToListProps || {};
       },
     ),
+    activitiesLoaded: create.reducer(
+      (state, action: PayloadAction<PathToListProps>) => {
+        state.listProps = action.payload;
+      },
+    ),
   }),
   selectors: {
     selectDataviewTasks: (state) => state.dataviewTasks,
@@ -63,8 +68,12 @@ export const dataviewSlice = createAppSlice({
   },
 });
 
-export const { dataviewChange, dataviewTasksUpdated, listPropsParsed } =
-  dataviewSlice.actions;
+export const {
+  activitiesLoaded,
+  dataviewChange,
+  dataviewTasksUpdated,
+  listPropsParsed,
+} = dataviewSlice.actions;
 
 export const {
   selectDataviewTasks,

@@ -1,19 +1,14 @@
 <script lang="ts">
-  import type { App } from "obsidian";
   import { onDestroy, onMount } from "svelte";
 
-  import type { PeriodicNotes } from "../../service/periodic-notes";
+  import type { PlannerData } from "../../service/planner-data";
   import {
     getActivityDefinition,
     getActivityDefinitions,
     normalizeActivityName,
   } from "../../util/activity-definitions";
   import { getWeekRangeFor } from "../../util/activity-log-summary";
-  import {
-    extractActivityPlanEntries,
-    upsertActivityPlanEntryInMarkdown,
-    type ActivityPlanEntryKind,
-  } from "../../util/weekly-activity-goals";
+  import { type ActivityPlanEntryKind } from "../../util/weekly-activity-goals";
 
   type ActivityPlanItem = {
     name: string;
@@ -26,16 +21,9 @@
     activity: string;
     hours: number;
     kind: ActivityPlanEntryKind;
-    sourceLine?: number;
   };
 
-  type DataviewMetadataCache = {
-    on?: (name: "dataview:metadata-change", callback: () => void) => unknown;
-    offref?: (ref: unknown) => void;
-  };
-
-  let { app, periodicNotes }: { app: App; periodicNotes: PeriodicNotes } =
-    $props();
+  let { plannerData }: { plannerData: PlannerData } = $props();
 
   const defaultMaxHours = 15;
   const defaultIntervalMinutes = 60;
@@ -64,12 +52,11 @@
       ]),
     ),
   );
-  let isWeeklyNotesEnabled = $state(true);
   let weekLabel = $state("");
   let statusMessage = $state("");
 
   let refreshTimer: ReturnType<typeof setInterval> | undefined;
-  let offMetadataChange: unknown;
+  let stopPlannerListener: (() => void) | undefined;
 
   let totalHours = $derived(
     activityPlanItems.reduce((total, item) => {
@@ -104,7 +91,11 @@
   }
 
   function mergePlanEntries(
-    entries: ReturnType<typeof extractActivityPlanEntries>,
+    entries: Array<{
+      activity: string;
+      duration: import("moment").Duration;
+      kind: ActivityPlanEntryKind;
+    }>,
   ) {
     const nextPlanByActivity: Record<string, ActivityPlanState> = {
       ...Object.fromEntries(
@@ -125,7 +116,6 @@
         activity: entry.activity,
         hours: entry.duration.asHours(),
         kind: entry.kind,
-        sourceLine: entry.sourceLine,
       };
 
       if (!seenItems.has(key)) {
@@ -143,7 +133,6 @@
   }
 
   async function refresh() {
-    isWeeklyNotesEnabled = periodicNotes.hasWeeklyNotesSupport();
     const now = window.moment();
     const { start: weekStart, end: weekEnd } = getWeekRangeFor(now);
     weekLabel = `${weekStart.format("MMM D")} – ${weekEnd
@@ -151,54 +140,26 @@
       .subtract(1, "day")
       .format("MMM D")}`;
 
-    if (!isWeeklyNotesEnabled) {
-      statusMessage =
-        "Weekly notes support is required to edit activity plans.";
-      return;
-    }
-
-    const weekNote = periodicNotes.getWeeklyNote(weekStart);
-    if (!weekNote) {
-      statusMessage = "No weekly note exists yet; edits will create one.";
-      mergePlanEntries([]);
-      return;
-    }
-
-    mergePlanEntries(extractActivityPlanEntries(app, weekNote));
+    mergePlanEntries(
+      (await plannerData.readPlanEntries(weekStart)).map((entry) => ({
+        ...entry,
+        duration: window.moment.duration(entry.duration, "minutes"),
+      })),
+    );
     statusMessage = "";
   }
 
   async function saveActivity(key: string) {
-    if (!isWeeklyNotesEnabled) return;
-
     const state = planByActivity[key];
     if (!state) return;
 
     const { start: weekStart } = getWeekRangeFor(window.moment());
-    const weekNote = await periodicNotes.createWeeklyNoteIfNeeded(weekStart);
-
-    if (!weekNote) {
-      statusMessage = "Unable to create the weekly note.";
-      return;
-    }
-
-    const markdown = await app.vault.read(weekNote);
-    const result = upsertActivityPlanEntryInMarkdown(markdown, {
+    await plannerData.upsertPlanEntry(weekStart, {
       activity: state.activity,
       kind: state.kind,
-      duration: window.moment.duration(state.hours, "hours"),
-      sourceLine: state.sourceLine,
+      duration: state.hours * 60,
     });
-
-    await app.vault.modify(weekNote, result.markdown);
-    planByActivity = {
-      ...planByActivity,
-      [key]: {
-        ...state,
-        sourceLine: result.lineIndex,
-      },
-    };
-    statusMessage = "Saved to this week’s Activity Goals.";
+    statusMessage = "Saved to this week’s planner goals.";
   }
 
   function setActivityHours(name: string, value: string) {
@@ -251,12 +212,7 @@
   onMount(() => {
     void refresh();
 
-    const metadataCache = app.metadataCache as unknown as
-      | DataviewMetadataCache
-      | undefined;
-    offMetadataChange = metadataCache?.on?.("dataview:metadata-change", () => {
-      void refresh();
-    });
+    stopPlannerListener = plannerData.onChange(() => void refresh());
 
     refreshTimer = setInterval(() => {
       void refresh();
@@ -268,12 +224,7 @@
       clearInterval(refreshTimer);
     }
 
-    if (offMetadataChange) {
-      const metadataCache = app.metadataCache as unknown as
-        | DataviewMetadataCache
-        | undefined;
-      metadataCache?.offref?.(offMetadataChange);
-    }
+    stopPlannerListener?.();
   });
 </script>
 

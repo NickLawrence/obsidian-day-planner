@@ -2,6 +2,8 @@ import { App, Modal, Notice } from "obsidian";
 
 import type { ActivityAttributeField } from "../util/activity-definitions";
 
+import { askForConfirmation } from "./confirmation-modal";
+
 type ActivityAttributesModalProps = {
   title: string;
   fields: ActivityAttributeField[];
@@ -12,6 +14,16 @@ type ActivityAttributesModalProps = {
 };
 
 class ActivityAttributesModal extends Modal {
+  private settled = false;
+  private confirmingDiscard = false;
+  private readonly initialInputValues = new Map<string, string>();
+  private readonly preventOutsideDismiss = (event: Event) => {
+    if (event.target instanceof Node && !this.modalEl.contains(event.target)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  };
+
   private readonly inputs = new Map<
     string,
     HTMLInputElement | HTMLTextAreaElement
@@ -22,6 +34,17 @@ class ActivityAttributesModal extends Modal {
     private readonly props: ActivityAttributesModalProps,
   ) {
     super(app);
+    // Capture backdrop events before Obsidian's dismissal handlers receive them.
+    for (const type of [
+      "pointerdown",
+      "mousedown",
+      "mouseup",
+      "click",
+      "touchstart",
+      "touchend",
+    ]) {
+      this.containerEl.addEventListener(type, this.preventOutsideDismiss, true);
+    }
   }
 
   onOpen() {
@@ -58,7 +81,9 @@ class ActivityAttributesModal extends Modal {
 
       const input =
         field.type === "textarea"
-          ? row.createEl("textarea", { attr: { id: inputId, rows: "6", cols: "60" } })
+          ? row.createEl("textarea", {
+              attr: { id: inputId, rows: "6", cols: "60" },
+            })
           : row.createEl("input", {
               type: field.type === "number" ? "number" : "text",
               attr: { id: inputId },
@@ -98,6 +123,7 @@ class ActivityAttributesModal extends Modal {
       }
 
       this.inputs.set(field.key, input);
+      this.initialInputValues.set(field.key, input.value);
     });
 
     const actions = contentEl.createDiv({
@@ -115,15 +141,55 @@ class ActivityAttributesModal extends Modal {
   }
 
   onClose() {
+    for (const type of [
+      "pointerdown",
+      "mousedown",
+      "mouseup",
+      "click",
+      "touchstart",
+      "touchend",
+    ]) {
+      this.containerEl.removeEventListener(
+        type,
+        this.preventOutsideDismiss,
+        true,
+      );
+    }
+    if (!this.settled) {
+      this.settled = true;
+      this.props.onCancel();
+    }
     this.contentEl.empty();
   }
 
-  private cancel() {
-    this.props.onCancel();
-    this.close();
+  close() {
+    void this.cancel();
+  }
+
+  private async cancel() {
+    if (this.settled || this.confirmingDiscard) return;
+    const hasChanges = [...this.inputs].some(
+      ([key, input]) => input.value !== this.initialInputValues.get(key),
+    );
+    if (hasChanges) {
+      this.confirmingDiscard = true;
+      try {
+        const discard = await askForConfirmation({
+          app: this.app,
+          title: "Discard changes?",
+          text: "Your unsaved activity details will be lost.",
+          cta: "Discard changes",
+        });
+        if (!discard || this.settled) return;
+      } finally {
+        this.confirmingDiscard = false;
+      }
+    }
+    super.close();
   }
 
   private submit() {
+    if (this.settled || this.confirmingDiscard) return;
     const values: Record<string, string | number | undefined> = {};
 
     for (const field of this.props.fields) {
@@ -170,8 +236,9 @@ class ActivityAttributesModal extends Modal {
       values[field.key] = rawValue;
     }
 
+    this.settled = true;
     this.props.onSubmit(values);
-    this.close();
+    super.close();
   }
 }
 

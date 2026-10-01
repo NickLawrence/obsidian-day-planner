@@ -10,14 +10,14 @@ import {
   shortScheduledPropRegExp,
 } from "../regexp";
 
-import { getIndentationForListParagraph } from "./dataview";
-import { createCodeBlock, createIndentation, indent } from "./markdown";
-import { appendText } from "./task-utils";
 import {
   type ActivityAttributeField,
   type ActivityAttributesDefinition,
   getActivityDefinitions,
 } from "./activity-definitions";
+import { getIndentationForListParagraph } from "./dataview";
+import { createCodeBlock, createIndentation, indent } from "./markdown";
+import { appendText } from "./task-utils";
 
 export const taskActivityType = "task";
 
@@ -79,6 +79,10 @@ const activitySchema = z
     ...activityAttributeSchemas,
   })
   .passthrough()
+  .refine((activity) => Boolean(activity.log?.length), {
+    message: "Activities must contain at least one log entry with a start time",
+    path: ["log"],
+  })
   .transform(({ taskIds, ...rest }) => ({
     ...rest,
     taskIds: taskIds ?? [],
@@ -92,7 +96,10 @@ export const propsSchema = z.looseObject({
   activities: activitiesSchema.optional(),
 });
 
-export type Props = z.infer<typeof propsSchema>;
+export type ParsedProps = z.infer<typeof propsSchema>;
+export type Props = Omit<z.input<typeof propsSchema>, "activities"> & {
+  activities?: Array<Omit<Activity, "taskIds"> & { taskIds?: string[] }>;
+};
 
 export function isWithOpenClock(props?: Props) {
   return Boolean(
@@ -353,15 +360,19 @@ export function cancelOpenClockByActivityIndex(
 
   const openClockIndex = log.findIndex((it) => !it.end);
 
+  if (openClockIndex === -1) {
+    throw new Error("There is no open clock");
+  }
+
   const updatedActivity: Activity = {
     ...activityWithOpenClock,
     log: log.toSpliced(openClockIndex, 1),
   };
 
-  const updatedActivities = activities.with(
-    activityWithOpenClockIndex,
-    updatedActivity,
-  );
+  const updatedActivities =
+    !updatedActivity.log?.some((entry) => entry.start && entry.end)
+      ? activities.toSpliced(activityWithOpenClockIndex, 1)
+      : activities.with(activityWithOpenClockIndex, updatedActivity);
 
   return {
     ...props,

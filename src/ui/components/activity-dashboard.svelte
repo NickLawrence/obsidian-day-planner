@@ -3,20 +3,29 @@
   import { setTooltip } from "obsidian";
   import { onDestroy, onMount } from "svelte";
 
+  import type { PlannerData } from "../../service/planner-data";
   import { buildActivityDashboard } from "../../util/activity-dashboard";
   import type { ActivityDefinition } from "../../util/activity-definitions";
   import { getInProgressMainKeys } from "../../util/activity-progress";
   import type { DayPlannerActivityApi } from "../../util/activity-totals";
   import { formatDuration } from "../../util/duration";
+  import WeeklyActivityHeatmap from "./weekly-activity-heatmap.svelte";
 
-  let { app, activityApi }: { app: App; activityApi: DayPlannerActivityApi } =
-    $props();
+  let {
+    app,
+    activityApi,
+    plannerData,
+  }: {
+    app: App;
+    activityApi: DayPlannerActivityApi;
+    plannerData: PlannerData;
+  } = $props();
 
   const definitions = activityApi.getActivityDefinitions();
   let selectedName = $state(definitions[0]?.name ?? "");
   let activities = $state(activityApi.getAllActivities());
   let refreshTimer: ReturnType<typeof setInterval> | undefined;
-  let metadataChangeRef: EventRef | undefined;
+  let stopPlannerListener: (() => void) | undefined;
 
   const definition = $derived(
     definitions.find(({ name }) => name === selectedName),
@@ -29,16 +38,6 @@
   const inProgress = $derived(
     definition ? getInProgressMainKeys(app, activities, definition) : [],
   );
-  const monthGroups = $derived(
-    dashboard.weeks.reduce<
-      Array<{ month: string; start: number; count: number }>
-    >((groups, week, index) => {
-      const previous = groups.at(-1);
-      if (previous?.month === week.month) previous.count += 1;
-      else groups.push({ month: week.month, start: index + 1, count: 1 });
-      return groups;
-    }, []),
-  );
 
   function refresh() {
     activities = activityApi.getAllActivities();
@@ -46,15 +45,6 @@
 
   function displayTime(minutes: number) {
     return formatDuration(window.moment.duration(minutes, "minutes"));
-  }
-
-  function weeklyTooltip(node: HTMLElement, text: string) {
-    setTooltip(node, text);
-    return {
-      update(text: string) {
-        setTooltip(node, text);
-      },
-    };
   }
 
   function selectActivity(activity: ActivityDefinition) {
@@ -72,12 +62,12 @@
     if (firstWithLogs) selectedName = firstWithLogs.name;
 
     refreshTimer = setInterval(refresh, 2_000);
-    metadataChangeRef = app.metadataCache.on("changed", refresh);
+    stopPlannerListener = plannerData.onChange(refresh);
   });
 
   onDestroy(() => {
     if (refreshTimer) clearInterval(refreshTimer);
-    if (metadataChangeRef) app.metadataCache.offref(metadataChangeRef);
+    stopPlannerListener?.();
   });
 </script>
 
@@ -142,29 +132,7 @@
       {/if}
     </section>
 
-    <div
-      class="activity-heatmap"
-      aria-label={`${definition.label} time by week`}
-    >
-      <div class="month-labels" aria-hidden="true">
-        {#each monthGroups as group}
-          <span style={`grid-column: ${group.start} / span ${group.count}`}
-            >{group.month}</span
-          >
-        {/each}
-      </div>
-      <div class="week-bars">
-        {#each dashboard.weeks as week}
-          <div
-            style={`--week-intensity: ${week.intensity}`}
-            class="week-bar"
-            class:empty={week.minutes === 0}
-            aria-label={`${week.start} through ${week.end}: ${displayTime(week.minutes)}`}
-            use:weeklyTooltip={`${week.start}–${week.end}: ${displayTime(week.minutes)}`}
-          ></div>
-        {/each}
-      </div>
-    </div>
+    <WeeklyActivityHeatmap label={definition.label} weeks={dashboard.weeks} />
 
     <section>
       <h3>{definition.emoji ?? ""} {definition.label} — Activity Logs</h3>
@@ -278,11 +246,6 @@
     border-color: var(--interactive-accent);
   }
 
-  .activity-heatmap {
-    overflow-x: auto;
-    padding: var(--size-2-2) 0 var(--size-4-2);
-  }
-
   .progress-list {
     display: grid;
     gap: var(--size-4-2);
@@ -312,44 +275,6 @@
     justify-content: flex-start;
     font-size: var(--font-ui-smaller);
     color: var(--text-muted);
-  }
-
-  .month-labels,
-  .week-bars {
-    display: grid;
-    grid-template-columns: repeat(52, minmax(4px, 1fr));
-    gap: 2px;
-    min-width: 31rem;
-  }
-
-  .month-labels {
-    margin-bottom: var(--size-2-2);
-    font-size: var(--font-ui-smaller);
-    color: var(--text-muted);
-  }
-
-  .month-labels span {
-    overflow: hidden;
-    text-align: center;
-  }
-
-  .week-bar {
-    cursor: default;
-
-    height: 3rem;
-
-    opacity: calc(0.18 + var(--week-intensity) * 0.82);
-    background: var(--interactive-accent);
-    border-radius: 2px;
-  }
-
-  .week-bar.empty {
-    opacity: 0.08;
-  }
-
-  .week-bar:hover {
-    outline: 1px solid var(--text-normal);
-    outline-offset: 1px;
   }
 
   h3 {

@@ -2,9 +2,9 @@ import {
   MarkdownView,
   Notice,
   Plugin,
+  TFile,
   WorkspaceLeaf,
   type MarkdownFileInfo,
-  type TFile,
 } from "obsidian";
 import { getAPI } from "obsidian-dataview";
 import {
@@ -48,6 +48,7 @@ import {
 import {
   dataviewChange,
   dataviewTasksUpdated,
+  activitiesLoaded,
   type PathToListProps,
 } from "./redux/dataview/dataview-slice";
 import { editCanceled, visibleDaysUpdated } from "./redux/global-slice";
@@ -69,6 +70,7 @@ import {
 } from "./service/fitbit";
 import { ListPropsParser } from "./service/list-props-parser";
 import { PeriodicNotes } from "./service/periodic-notes";
+import { PlannerData } from "./service/planner-data";
 import { STaskEditor } from "./service/stask-editor";
 import { VaultFacade } from "./service/vault-facade";
 import { WorkspaceFacade } from "./service/workspace-facade";
@@ -99,7 +101,6 @@ import { DayPlannerReleaseNotesView } from "./ui/release-notes";
 import { DayPlannerSettingsTab } from "./ui/settings-tab";
 import TimelineView from "./ui/timeline-view";
 import { createUndoNotice } from "./ui/undo-notice";
-import { upsertActivitiesBlock } from "./util/activities-file";
 import {
   buildActivityAttributeUpdate,
   getActivityAttributeFields,
@@ -114,7 +115,7 @@ import { createEnvironmentHooks } from "./util/create-environment-hooks";
 import { createRenderMarkdown } from "./util/create-render-markdown";
 import { createShowPreview } from "./util/create-show-preview";
 import { notifyAboutStartedTasks } from "./util/notify-about-started-tasks";
-import { startActivityLog } from "./util/props";
+import { propsSchema, startActivityLog } from "./util/props";
 
 export default class DayPlanner extends Plugin {
   settings!: () => DayPlannerSettings;
@@ -125,6 +126,7 @@ export default class DayPlanner extends Plugin {
   private sTaskEditor!: STaskEditor;
   private vaultFacade!: VaultFacade;
   private transactionWriter!: TransactionWriter;
+  private plannerData!: PlannerData;
   public api!: DayPlannerActivityApi;
 
   beginFitbitLink = async () => {
@@ -184,6 +186,7 @@ export default class DayPlanner extends Plugin {
     );
 
     this.periodicNotes = new PeriodicNotes();
+    this.plannerData = new PlannerData(this.app.vault);
     this.vaultFacade = new VaultFacade(this.app.vault, getTasksApi);
     this.transactionWriter = new TransactionWriter(this.vaultFacade);
     this.workspaceFacade = new WorkspaceFacade(
@@ -202,7 +205,6 @@ export default class DayPlanner extends Plugin {
     };
 
     const {
-      getState,
       dispatch,
       useSelector,
       listenerMiddleware,
@@ -223,14 +225,50 @@ export default class DayPlanner extends Plugin {
       },
     });
 
+    const refreshActivities = () =>
+      dispatch(activitiesLoaded(this.plannerData.asListProps()));
+    refreshActivities();
+    this.register(this.plannerData.onChange(refreshActivities));
+    let plannerDataReady = false;
+    const reloadPlannerData = (file: TFile) => {
+      if (plannerDataReady && this.plannerData.isDataPath(file.path)) {
+        void this.plannerData.loadActivities().catch((error) => {
+          console.error("Failed to reload planner activity data", error);
+          new Notice(
+            "Failed to reload planner activity data; see console for details.",
+          );
+        });
+      }
+    };
+    this.registerEvent(
+      this.app.vault.on("modify", (file) => {
+        if (file instanceof TFile) reloadPlannerData(file);
+      }),
+    );
+    this.registerEvent(
+      this.app.vault.on("create", (file) => {
+        if (file instanceof TFile) reloadPlannerData(file);
+      }),
+    );
+    this.registerEvent(
+      this.app.vault.on("delete", (file) => {
+        if (file instanceof TFile) reloadPlannerData(file);
+      }),
+    );
+    this.registerEvent(
+      this.app.vault.on("rename", (file) => {
+        if (file instanceof TFile) reloadPlannerData(file);
+      }),
+    );
+
     this.api = createDayPlannerActivityApi(listProps);
 
     this.sTaskEditor = new STaskEditor(
-      getState,
       this.app,
       this.workspaceFacade,
       this.vaultFacade,
       this.dataviewFacade,
+      this.plannerData,
     );
 
     this.register(() => {
@@ -266,6 +304,7 @@ export default class DayPlanner extends Plugin {
         el,
         ctx,
         periodicNotes: this.periodicNotes,
+        plannerData: this.plannerData,
         activityApi: this.api,
       });
     });
@@ -278,6 +317,7 @@ export default class DayPlanner extends Plugin {
           el,
           ctx,
           activityApi: this.api,
+          plannerData: this.plannerData,
         });
       },
     );
@@ -288,7 +328,23 @@ export default class DayPlanner extends Plugin {
         el,
         ctx,
         periodicNotes: this.periodicNotes,
+        plannerData: this.plannerData,
       });
+    });
+
+    // Vault folders may not be available
+    // during onload. Do not await layout readiness here: plugin loading must
+    // finish before Obsidian can signal that the layout is ready.
+    this.app.workspace.onLayoutReady(async () => {
+      try {
+        await this.plannerData.loadActivities();
+        plannerDataReady = true;
+      } catch (error) {
+        console.error("Failed to initialize planner data", error);
+        new Notice(
+          "Failed to initialize planner data; see console for details.",
+        );
+      }
     });
 
     await this.handleNewPluginVersion();
@@ -313,7 +369,7 @@ export default class DayPlanner extends Plugin {
     this.addRibbonIcon("table-2", "Open Multi-Day View", this.initWeeklyLeaf);
     this.addRibbonIcon(
       "calendar-clock",
-      "Open Monthly Calendar",
+      "Open Planner Dashboard",
       this.initMonthlyLeaf,
     );
     this.addRibbonIcon(
@@ -364,18 +420,11 @@ export default class DayPlanner extends Plugin {
       attributeUpdates = buildActivityAttributeUpdate(trimmedName, values);
     }
 
-    const dailyNote = await this.periodicNotes.createDailyNoteIfNeeded(
-      window.moment(),
-    );
-
-    await this.vaultFacade.editFile(dailyNote.path, (contents) =>
-      upsertActivitiesBlock({
-        fileText: contents,
-        filePath: dailyNote.path,
-        updateFn: (props) =>
-          startActivityLog(props, trimmedName, attributeUpdates),
-      }),
-    );
+    const activity = propsSchema.parse(
+      startActivityLog({}, trimmedName, attributeUpdates),
+    ).activities?.[0];
+    isNotVoid(activity);
+    await this.plannerData.addActivity(activity);
 
     new Notice(`Started activity "${trimmedName}"`);
     return { started: true };
@@ -496,7 +545,7 @@ export default class DayPlanner extends Plugin {
 
     this.addCommand({
       id: "show-monthly-calendar",
-      name: "Show monthly calendar",
+      name: "Show planner dashboard",
       callback: this.initMonthlyLeaf,
     });
 
@@ -843,6 +892,7 @@ export default class DayPlanner extends Plugin {
     const defaultObsidianContext: ObsidianContext = {
       app: this.app,
       periodicNotes: this.periodicNotes,
+      plannerData: this.plannerData,
       sTaskEditor: this.sTaskEditor,
       workspaceFacade: this.workspaceFacade,
       initWeeklyView: this.initWeeklyLeaf,

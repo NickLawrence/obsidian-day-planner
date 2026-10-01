@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Moment } from "moment";
-  import type { App, EventRef } from "obsidian";
+  import type { App } from "obsidian";
   import { onMount, onDestroy } from "svelte";
   import { derived, writable } from "svelte/store";
 
@@ -14,11 +14,11 @@
     type ActivityDuration,
     type ActivityDisplayDuration,
   } from "../../../util/activity-log-summary";
+  import { createActivityRangeIndex } from "../../../util/activity-range-index";
   import { getAllActivitiesFromListProps } from "../../../util/activity-totals";
   import { formatDuration } from "../../../util/duration";
   import type { Activity } from "../../../util/props";
   import {
-    extractActivityGoals,
     mergeActivityDurationsWithGoals,
     type ActivityGoal,
   } from "../../../util/weekly-activity-goals";
@@ -33,9 +33,6 @@
   };
 
   type CalendarApp = App & {
-    metadataCache: App["metadataCache"] & {
-      on: (event: string, callback: () => void) => EventRef;
-    };
     plugins?: {
       getPlugin?: (id: string) => { api?: DailyAccentApi } | undefined;
     };
@@ -45,37 +42,23 @@
     app: obsidianApp,
     useSelector,
     workspaceFacade,
-    periodicNotes,
+    plannerData,
   } = getObsidianContext();
 
   function getApp() {
     return obsidianApp as CalendarApp;
   }
 
-  let offIndexReady: EventRef | undefined;
-  let offMetadataChange: EventRef | undefined;
+  let stopPlannerListener: (() => void) | undefined;
 
   onMount(() => {
-    const app = getApp();
-
-    offIndexReady = app?.metadataCache?.on("dataview:index-ready", () => {
-      // rerun once the index is ready
-      void loadGoalsForWeeks($weeks);
+    stopPlannerListener = plannerData.onChange(() => {
+      if (showWeeklyGoals) void loadGoalsForWeeks($weeks);
     });
-
-    offMetadataChange = app?.metadataCache?.on(
-      "dataview:metadata-change",
-      () => {
-        // rerun when DV updates metadata for any file
-        void loadGoalsForWeeks($weeks);
-      },
-    );
   });
 
   onDestroy(() => {
-    const app = getApp();
-    if (offIndexReady) app?.metadataCache?.offref(offIndexReady);
-    if (offMetadataChange) app?.metadataCache?.offref(offMetadataChange);
+    stopPlannerListener?.();
   });
 
   const listProps = useSelector(selectListProps);
@@ -134,17 +117,41 @@
     return accentInfo?.css;
   }
 
-  const calendar = derived(
-    [weeks, activities, currentMonth, weeklyGoals, displayedActivitiesStore],
-    ([$weeks, $activities, $month, $weeklyGoals, $displayedActivities]) =>
+  const activityIndex = derived(activities, createActivityRangeIndex);
+
+  const calendarTotals = derived(
+    [weeks, activityIndex, currentMonth],
+    ([$weeks, $activityIndex, $month]) =>
       $weeks.map((weekStart) => {
         const { end: weekEnd } = getWeekRangeFor(weekStart);
+        const weekActivities = $activityIndex(weekStart, weekEnd);
         const weekTotals = calculateWeeklyActivityDurations(
-          $activities,
+          weekActivities,
           weekStart,
         );
+        const days = Array.from({ length: 7 }).map((_, index) => {
+          const date = weekStart.clone().add(index, "day");
+          return {
+            date,
+            accentColor: getDailyAccentColor(date),
+            inCurrentMonth: date.isSame($month, "month"),
+            isToday: date.isSame(window.moment(), "day"),
+            totals: calculateDailyActivityDisplayDurations(
+              weekActivities,
+              date,
+            ),
+          };
+        });
+        return { weekStart, weekEnd, weekTotals, days };
+      }),
+  );
+
+  const calendar = derived(
+    [calendarTotals, weeklyGoals, displayedActivitiesStore],
+    ([$calendarTotals, $weeklyGoals, $displayedActivities]) =>
+      $calendarTotals.map((week) => {
         const goalsForWeek = (
-          $weeklyGoals.get(weekStart.valueOf()) ?? ([] as ActivityGoal[])
+          $weeklyGoals.get(week.weekStart.valueOf()) ?? ([] as ActivityGoal[])
         ).filter(
           (goal) =>
             typeof $displayedActivities === "undefined" ||
@@ -157,7 +164,7 @@
 
         // Merge weekly totals with goals first (ensures activityKey matches ActivityDuration keys)
         const weekTotalsWithGoals = mergeActivityDurationsWithGoals(
-          weekTotals,
+          week.weekTotals,
           goalsForWeek,
         );
 
@@ -169,24 +176,10 @@
             .filter((it): it is string => Boolean(it)),
         );
 
-        const days = Array.from({ length: 7 }).map((_, index) => {
-          const date = weekStart.clone().add(index, "day");
-
-          return {
-            date,
-            accentColor: getDailyAccentColor(date),
-            inCurrentMonth: date.isSame($month, "month"),
-            isToday: date.isSame(window.moment(), "day"),
-            totals: calculateDailyActivityDisplayDurations($activities, date),
-          };
-        });
-
         return {
-          weekStart,
-          weekEnd,
+          ...week,
           goalActivityKeys,
           weekTotals: weekTotalsWithGoals,
-          days,
         };
       }),
   );
@@ -312,26 +305,18 @@
   async function loadGoalsForWeeks(weeksToLoad: ReturnType<typeof buildWeeks>) {
     const thisRunId = ++weeklyGoalsRunId;
 
-    if (!periodicNotes.hasWeeklyNotesSupport()) {
-      weeklyGoals.set(new Map());
-      return;
-    }
-
-    const app = getApp();
-    if (!app) {
-      weeklyGoals.set(new Map());
-      return;
-    }
-
     const goals = await Promise.all(
       weeksToLoad.map(async (weekStart) => {
-        const weeklyNote = periodicNotes.getWeeklyNote(weekStart);
-        if (!weeklyNote) return null;
-
         try {
+          const entries = await plannerData.readPlanEntries(weekStart);
           return {
             key: weekStart.valueOf(),
-            goals: await extractActivityGoals(app, weeklyNote),
+            goals: entries
+              .filter((entry) => entry.kind === "goal")
+              .map((entry) => ({
+                activity: entry.activity,
+                goal: window.moment.duration(entry.duration, "minutes"),
+              })),
           };
         } catch (error) {
           console.error("Failed to read weekly note", error);
@@ -359,11 +344,8 @@
 
   async function openWeeklyNote(weekStart: Moment) {
     try {
-      const weeklyNote =
-        await periodicNotes.createWeeklyNoteIfNeeded(weekStart);
-      if (weeklyNote) {
-        await workspaceFacade.openFileInEditor(weeklyNote);
-      }
+      const goalsFile = await plannerData.createOrOpenGoalsFile(weekStart);
+      await workspaceFacade.openFileInEditor(goalsFile);
     } catch (error) {
       console.error("Failed to create weekly note", error);
     }

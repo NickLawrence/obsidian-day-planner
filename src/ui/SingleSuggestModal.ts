@@ -5,7 +5,9 @@ export type BaseSuggestion = {
   displayText?: string;
 };
 
-export class SingleSuggestModal<Suggestion extends BaseSuggestion> extends SuggestModal<Suggestion> {
+export class SingleSuggestModal<
+  Suggestion extends BaseSuggestion,
+> extends SuggestModal<Suggestion> {
   constructor(
     private readonly props: {
       app: App;
@@ -28,7 +30,7 @@ export class SingleSuggestModal<Suggestion extends BaseSuggestion> extends Sugge
       return this.props.getSuggestions(query);
     }
 
-    return [{ text: query }];
+    return [{ text: query } as Suggestion];
   }
 
   renderSuggestion(item: Suggestion, el: HTMLElement) {

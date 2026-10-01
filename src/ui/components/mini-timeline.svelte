@@ -52,7 +52,7 @@
     return activityGroup
       ? applyActivityColorVariant(
           activityGroup.color,
-          getActivityDefinition(activityName)?.color,
+          activityName ? getActivityDefinition(activityName)?.color : undefined,
         )
       : "var(--color-base-50)";
   }

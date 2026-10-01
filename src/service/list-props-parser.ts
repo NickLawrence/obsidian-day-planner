@@ -7,7 +7,12 @@ import {
 
 import { codeFence } from "../constants";
 import type { LineToListProps } from "../redux/dataview/dataview-slice";
-import { type LogEntry, type Props, propsSchema } from "../util/props";
+import {
+  type LogEntry,
+  type ParsedProps,
+  type Props,
+  propsSchema,
+} from "../util/props";
 
 export class ListPropsParser {
   constructor(
@@ -109,7 +114,7 @@ export class ListPropsParser {
           )
           .join("\n");
 
-        let validated: Props;
+        let validated: ParsedProps;
 
         try {
           const parsedYaml = parseYaml(trimmedTextInsideCodeBlock);

@@ -4,7 +4,7 @@ import { mount, type SvelteComponent, unmount } from "svelte";
 import { viewTypeMonthlyCalendar } from "../constants";
 import type { ComponentContext } from "../types";
 
-import MonthlyCalendar from "./components/monthly/monthly-calendar.svelte";
+import PlannerDashboard from "./components/monthly/planner-dashboard.svelte";
 
 export default class MonthlyView extends ItemView {
   navigation = true;
@@ -22,7 +22,7 @@ export default class MonthlyView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Monthly Calendar";
+    return "Planner Dashboard";
   }
 
   getIcon() {
@@ -33,7 +33,7 @@ export default class MonthlyView extends ItemView {
     const contentEl = this.containerEl.children[1];
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.calendarComponent = mount(MonthlyCalendar as any, {
+    this.calendarComponent = mount(PlannerDashboard as any, {
       target: contentEl,
       context: this.componentContext,
     });
