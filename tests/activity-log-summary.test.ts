@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
   calculateDailyActivityDurations,
@@ -229,6 +229,59 @@ describe("calculateDailyActivityDurations", () => {
 });
 
 describe("unrecorded activity durations", () => {
+  afterEach(() => vi.useRealTimers());
+
+  test("counts only elapsed time in the current week, clipping logs at now", () => {
+    vi.useFakeTimers();
+    const weekStart = window.moment("2026-09-28").startOf("isoWeek");
+    const now = weekStart.clone().add(60, "hours");
+    vi.setSystemTime(now.toDate());
+    const activities: Activity[] = [
+      {
+        activity: "work",
+        taskIds: [],
+        log: [
+          {
+            start: weekStart.clone().add(2, "hours").toISOString(),
+            end: weekStart.clone().add(4, "hours").toISOString(),
+          },
+          { start: now.clone().subtract(1, "hour").toISOString() },
+          {
+            start: now.clone().subtract(2, "hours").toISOString(),
+            end: now.clone().add(2, "hours").toISOString(),
+          },
+          {
+            start: now.clone().add(3, "hours").toISOString(),
+            end: now.clone().add(4, "hours").toISOString(),
+          },
+        ],
+      },
+    ];
+    expect(
+      calculateWeeklyUnrecordedActivityDuration(activities, now).asHours(),
+    ).toBe(56);
+    expect(calculateWeeklyUnrecordedActivityDuration([], now).asHours()).toBe(
+      60,
+    );
+    expect(
+      calculateWeeklyUnrecordedActivityDuration(
+        [],
+        now.clone().add(1, "week"),
+      ).asHours(),
+    ).toBe(0);
+    const previousWeek = weekStart.clone().subtract(1, "week");
+    expect(
+      calculateWeeklyUnrecordedActivityDuration(
+        [],
+        previousWeek,
+      ).asMilliseconds(),
+    ).toBe(weekStart.diff(previousWeek));
+    vi.setSystemTime(weekStart.toDate());
+    expect(
+      calculateWeeklyUnrecordedActivityDuration([], weekStart).asHours(),
+    ).toBe(0);
+  });
+
   test("calculates daily time not covered by any activity log", () => {
     const activities: Activity[] = [
       {

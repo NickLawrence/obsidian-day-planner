@@ -9,14 +9,14 @@ export interface ConfirmationModalProps {
 class ConfirmationModal extends Modal {
   constructor(
     app: App,
-    props: ConfirmationModalProps & {
+    private readonly props: ConfirmationModalProps & {
       onAccept: (event: MouseEvent) => Promise<void>;
-      onCancel: (event: MouseEvent) => void;
+      onCancel: () => void;
     },
   ) {
     super(app);
 
-    const { cta, onAccept, text, title, onCancel } = props;
+    const { cta, onAccept, text, title } = props;
 
     this.contentEl.createEl("h2", { text: title });
     this.contentEl.createEl("p", { text });
@@ -24,8 +24,7 @@ class ConfirmationModal extends Modal {
     this.contentEl.createDiv("day-planner-modal-buttons", (buttonsEl) => {
       buttonsEl
         .createEl("button", { text: "Cancel" })
-        .addEventListener("click", (e) => {
-          onCancel(e);
+        .addEventListener("click", () => {
           this.close();
         });
 
@@ -40,6 +39,12 @@ class ConfirmationModal extends Modal {
           this.close();
         });
     });
+  }
+
+  onClose() {
+    // Escape and backdrop dismissal must also resolve the pending question.
+    // Resolving false after an accepted confirmation has no effect.
+    this.props.onCancel();
   }
 }
 

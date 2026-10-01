@@ -106,7 +106,66 @@ describe("toMarkdown", () => {
 });
 
 describe("cancelOpenClockByActivityIndex", () => {
-  test("removes an open clock by index without needing task ids", () => {
+  test("removes the activity if only unfinished clocks remain", () => {
+    const result = cancelOpenClockByActivityIndex(
+      {
+        activities: [
+          {
+            activity: "work",
+            log: [
+              { start: "2026-01-01T10:00:00Z" },
+              { start: "2026-01-01T12:00:00Z" },
+            ],
+          },
+        ],
+      },
+      0,
+    );
+    expect(result.activities).toEqual([]);
+  });
+
+  test("preserves completed clocks and activity details", () => {
+    const completed = {
+      start: "2026-01-01T10:00:00Z",
+      end: "2026-01-01T11:00:00Z",
+    };
+    const result = cancelOpenClockByActivityIndex(
+      {
+        activities: [
+          {
+            activity: "reading",
+            notes: "Keep me",
+            log: [completed, { start: "2026-01-01T12:00:00Z" }],
+          },
+        ],
+      },
+      0,
+    );
+    expect(result.activities?.[0]).toMatchObject({
+      notes: "Keep me",
+      log: [completed],
+    });
+  });
+
+  test("does not cancel a completed clock", () => {
+    expect(() =>
+      cancelOpenClockByActivityIndex(
+        {
+          activities: [
+            {
+              activity: "work",
+              log: [
+                { start: "2026-01-01T10:00:00Z", end: "2026-01-01T11:00:00Z" },
+              ],
+            },
+          ],
+        },
+        0,
+      ),
+    ).toThrow("There is no open clock");
+  });
+
+  test("removes an activity when canceling its only clock", () => {
     const result = cancelOpenClockByActivityIndex(
       {
         activities: [
@@ -127,6 +186,7 @@ describe("cancelOpenClockByActivityIndex", () => {
       1,
     );
 
-    expect(result.activities?.[1].log).toEqual([]);
+    expect(result.activities).toHaveLength(1);
+    expect(result.activities?.[0].activity).toBe("work");
   });
 });

@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Moment } from "moment";
-  import type { App, EventRef } from "obsidian";
+  import type { App } from "obsidian";
   import { onMount, onDestroy } from "svelte";
   import { derived, writable } from "svelte/store";
 
@@ -10,15 +10,16 @@
   import {
     calculateDailyActivityDisplayDurations,
     calculateWeeklyActivityDurations,
+    calculateWeeklyUnrecordedActivityDuration,
     getWeekRangeFor,
     type ActivityDuration,
     type ActivityDisplayDuration,
   } from "../../../util/activity-log-summary";
+  import { createActivityRangeIndex } from "../../../util/activity-range-index";
   import { getAllActivitiesFromListProps } from "../../../util/activity-totals";
   import { formatDuration } from "../../../util/duration";
   import type { Activity } from "../../../util/props";
   import {
-    extractActivityGoals,
     mergeActivityDurationsWithGoals,
     type ActivityGoal,
   } from "../../../util/weekly-activity-goals";
@@ -33,9 +34,6 @@
   };
 
   type CalendarApp = App & {
-    metadataCache: App["metadataCache"] & {
-      on: (event: string, callback: () => void) => EventRef;
-    };
     plugins?: {
       getPlugin?: (id: string) => { api?: DailyAccentApi } | undefined;
     };
@@ -45,37 +43,23 @@
     app: obsidianApp,
     useSelector,
     workspaceFacade,
-    periodicNotes,
+    plannerData,
   } = getObsidianContext();
 
   function getApp() {
     return obsidianApp as CalendarApp;
   }
 
-  let offIndexReady: EventRef | undefined;
-  let offMetadataChange: EventRef | undefined;
+  let stopPlannerListener: (() => void) | undefined;
 
   onMount(() => {
-    const app = getApp();
-
-    offIndexReady = app?.metadataCache?.on("dataview:index-ready", () => {
-      // rerun once the index is ready
-      void loadGoalsForWeeks($weeks);
+    stopPlannerListener = plannerData.onChange(() => {
+      if (showWeeklyGoals) void loadGoalsForWeeks($weeks);
     });
-
-    offMetadataChange = app?.metadataCache?.on(
-      "dataview:metadata-change",
-      () => {
-        // rerun when DV updates metadata for any file
-        void loadGoalsForWeeks($weeks);
-      },
-    );
   });
 
   onDestroy(() => {
-    const app = getApp();
-    if (offIndexReady) app?.metadataCache?.offref(offIndexReady);
-    if (offMetadataChange) app?.metadataCache?.offref(offMetadataChange);
+    stopPlannerListener?.();
   });
 
   const listProps = useSelector(selectListProps);
@@ -93,18 +77,7 @@
       .format("ddd"),
   );
 
-  const activities = derived(
-    [listProps, displayedActivitiesStore],
-    ([$listProps, $displayedActivities]) => {
-      const allActivities = getAllActivitiesFromListProps($listProps);
-      if (typeof $displayedActivities === "undefined") return allActivities;
-
-      const allowed = new Set($displayedActivities.map(normalizeActivityName));
-      return allActivities.filter((activity: Activity) =>
-        allowed.has(normalizeActivityName(activity.activity)),
-      );
-    },
-  );
+  const activities = derived(listProps, getAllActivitiesFromListProps);
 
   const monthLabel = derived(currentMonth, ($month) =>
     $month.format("MMMM YYYY"),
@@ -134,17 +107,53 @@
     return accentInfo?.css;
   }
 
-  const calendar = derived(
-    [weeks, activities, currentMonth, weeklyGoals, displayedActivitiesStore],
-    ([$weeks, $activities, $month, $weeklyGoals, $displayedActivities]) =>
+  const activityIndex = derived(activities, createActivityRangeIndex);
+
+  const calendarTotals = derived(
+    [weeks, activityIndex, currentMonth, displayedActivitiesStore],
+    ([$weeks, $activityIndex, $month, $displayedActivities]) =>
       $weeks.map((weekStart) => {
         const { end: weekEnd } = getWeekRangeFor(weekStart);
-        const weekTotals = calculateWeeklyActivityDurations(
-          $activities,
+        const allWeekActivities = $activityIndex(weekStart, weekEnd);
+        const unrecordedTime = calculateWeeklyUnrecordedActivityDuration(
+          allWeekActivities,
           weekStart,
         );
+        const allowed = $displayedActivities
+          ? new Set($displayedActivities.map(normalizeActivityName))
+          : undefined;
+        const weekActivities = allowed
+          ? allWeekActivities.filter((activity: Activity) =>
+              allowed.has(normalizeActivityName(activity.activity)),
+            )
+          : allWeekActivities;
+        const weekTotals = calculateWeeklyActivityDurations(
+          weekActivities,
+          weekStart,
+        );
+        const days = Array.from({ length: 7 }).map((_, index) => {
+          const date = weekStart.clone().add(index, "day");
+          return {
+            date,
+            accentColor: getDailyAccentColor(date),
+            inCurrentMonth: date.isSame($month, "month"),
+            isToday: date.isSame(window.moment(), "day"),
+            totals: calculateDailyActivityDisplayDurations(
+              weekActivities,
+              date,
+            ),
+          };
+        });
+        return { weekStart, weekEnd, weekTotals, days, unrecordedTime };
+      }),
+  );
+
+  const calendar = derived(
+    [calendarTotals, weeklyGoals, displayedActivitiesStore],
+    ([$calendarTotals, $weeklyGoals, $displayedActivities]) =>
+      $calendarTotals.map((week) => {
         const goalsForWeek = (
-          $weeklyGoals.get(weekStart.valueOf()) ?? ([] as ActivityGoal[])
+          $weeklyGoals.get(week.weekStart.valueOf()) ?? ([] as ActivityGoal[])
         ).filter(
           (goal) =>
             typeof $displayedActivities === "undefined" ||
@@ -157,7 +166,7 @@
 
         // Merge weekly totals with goals first (ensures activityKey matches ActivityDuration keys)
         const weekTotalsWithGoals = mergeActivityDurationsWithGoals(
-          weekTotals,
+          week.weekTotals,
           goalsForWeek,
         );
 
@@ -169,24 +178,10 @@
             .filter((it): it is string => Boolean(it)),
         );
 
-        const days = Array.from({ length: 7 }).map((_, index) => {
-          const date = weekStart.clone().add(index, "day");
-
-          return {
-            date,
-            accentColor: getDailyAccentColor(date),
-            inCurrentMonth: date.isSame($month, "month"),
-            isToday: date.isSame(window.moment(), "day"),
-            totals: calculateDailyActivityDisplayDurations($activities, date),
-          };
-        });
-
         return {
-          weekStart,
-          weekEnd,
+          ...week,
           goalActivityKeys,
           weekTotals: weekTotalsWithGoals,
-          days,
         };
       }),
   );
@@ -312,26 +307,18 @@
   async function loadGoalsForWeeks(weeksToLoad: ReturnType<typeof buildWeeks>) {
     const thisRunId = ++weeklyGoalsRunId;
 
-    if (!periodicNotes.hasWeeklyNotesSupport()) {
-      weeklyGoals.set(new Map());
-      return;
-    }
-
-    const app = getApp();
-    if (!app) {
-      weeklyGoals.set(new Map());
-      return;
-    }
-
     const goals = await Promise.all(
       weeksToLoad.map(async (weekStart) => {
-        const weeklyNote = periodicNotes.getWeeklyNote(weekStart);
-        if (!weeklyNote) return null;
-
         try {
+          const entries = await plannerData.readPlanEntries(weekStart);
           return {
             key: weekStart.valueOf(),
-            goals: await extractActivityGoals(app, weeklyNote),
+            goals: entries
+              .filter((entry) => entry.kind === "goal")
+              .map((entry) => ({
+                activity: entry.activity,
+                goal: window.moment.duration(entry.duration, "minutes"),
+              })),
           };
         } catch (error) {
           console.error("Failed to read weekly note", error);
@@ -359,11 +346,8 @@
 
   async function openWeeklyNote(weekStart: Moment) {
     try {
-      const weeklyNote =
-        await periodicNotes.createWeeklyNoteIfNeeded(weekStart);
-      if (weeklyNote) {
-        await workspaceFacade.openFileInEditor(weeklyNote);
-      }
+      const goalsFile = await plannerData.createOrOpenGoalsFile(weekStart);
+      await workspaceFacade.openFileInEditor(goalsFile);
     } catch (error) {
       console.error("Failed to create weekly note", error);
     }
@@ -459,6 +443,15 @@
                 {/if}
               </div>
             {/each}
+          </div>
+          <div
+            class="summary-row unrecorded-time"
+            title="Time in the week not covered by any activity log"
+          >
+            <span class="summary-name">Unrecorded time</span>
+            <span class="summary-duration"
+              >{formatDuration(week.unrecordedTime)}</span
+            >
           </div>
         </div>
       {/if}
@@ -772,6 +765,11 @@
 
   .summary-row.placeholder {
     color: var(--text-faint);
+  }
+
+  .unrecorded-time {
+    padding-top: var(--size-2-2);
+    border-top: 1px solid var(--background-modifier-border);
   }
 
   .summary-activity {

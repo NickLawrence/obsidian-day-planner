@@ -5,6 +5,7 @@ import {
 } from "obsidian";
 import { mount, type SvelteComponent, unmount } from "svelte";
 
+import type { PlannerData } from "../service/planner-data";
 import type { DayPlannerActivityApi } from "../util/activity-totals";
 
 import ActivityDashboard from "./components/activity-dashboard.svelte";
@@ -27,14 +28,15 @@ export function renderActivityDashboardCodeBlock(props: {
   el: HTMLElement;
   ctx: MarkdownPostProcessorContext;
   activityApi: DayPlannerActivityApi;
+  plannerData: PlannerData;
 }) {
-  const { app, el, ctx, activityApi } = props;
+  const { app, el, ctx, activityApi, plannerData } = props;
   el.empty();
   el.addClass("day-planner-activity-dashboard-code-block");
 
   const component = mount(ActivityDashboard as never, {
     target: el,
-    props: { app, activityApi },
+    props: { app, activityApi, plannerData },
   });
   ctx.addChild(
     new ActivityDashboardChild(el, component as unknown as SvelteComponent),

@@ -1,24 +1,22 @@
 <script lang="ts">
-  import type { App, TFile } from "obsidian";
+  import type { App } from "obsidian";
   import { onDestroy, onMount } from "svelte";
 
-  import type { PeriodicNotes } from "../../service/periodic-notes";
+  import type { PlannerData } from "../../service/planner-data";
   import {
     getActivityDefinition,
     normalizeActivityName,
   } from "../../util/activity-definitions";
   import {
     calculateWeeklyActivityDurations,
+    calculateWeeklyUnrecordedActivityDuration,
     getWeekRangeFor,
     type ActivityDuration,
   } from "../../util/activity-log-summary";
-  import { formatDuration } from "../../util/duration";
   import type { DayPlannerActivityApi } from "../../util/activity-totals";
+  import { formatDuration } from "../../util/duration";
   import type { Activity } from "../../util/props";
-  import {
-    extractActivityPlanEntries,
-    mergeActivityDurationsWithGoals,
-  } from "../../util/weekly-activity-goals";
+  import { mergeActivityDurationsWithGoals } from "../../util/weekly-activity-goals";
 
   type GoalProgressRow = ActivityDuration & {
     goal: import("moment").Duration;
@@ -41,26 +39,25 @@
 
   let {
     app,
-    periodicNotes,
+    plannerData,
     activityApi,
   }: {
     app: App;
-    periodicNotes: PeriodicNotes;
+    plannerData: PlannerData;
     activityApi: DayPlannerActivityApi;
   } = $props();
 
   let rows = $state<GoalProgressRow[]>([]);
   let totalRow = $state<GoalProgressRow | null>(null);
   let otherActivityRows = $state<OtherActivityRow[]>([]);
+  let unrecordedTime = $state(window.moment.duration(0));
   let weekLabel = $state("");
   let weekProgressPercent = $state(0);
-  let isWeeklyNotesEnabled = $state(true);
   let dayColors = $state<DayColorInfo[]>([]);
   let legendDays = $state<DayColorInfo[]>([]);
 
   let refreshTimer: ReturnType<typeof setInterval> | undefined;
-  let offIndexReady: unknown;
-  let offMetadataChange: unknown;
+  let stopPlannerListener: (() => void) | undefined;
 
   function sanitizeLabel(label: string) {
     return (
@@ -78,9 +75,11 @@
   }
 
   function getDayColors(weekStart: import("moment").Moment) {
-    const dailyAccentPlugin = app.plugins?.getPlugin?.(
-      "obsidian-daily-accent",
-    ) as { api?: DailyAccentApi } | undefined;
+    const dailyAccentPlugin = (
+      app as App & { plugins?: { getPlugin?: (id: string) => unknown } }
+    ).plugins?.getPlugin?.("obsidian-daily-accent") as
+      | { api?: DailyAccentApi }
+      | undefined;
     const accentApi = dailyAccentPlugin?.api;
     const isDailyAccentPluginActive = Boolean(dailyAccentPlugin);
 
@@ -202,19 +201,8 @@
   }
 
   onMount(() => {
-    isWeeklyNotesEnabled = periodicNotes.hasWeeklyNotesSupport();
     void refresh();
-
-    offIndexReady = app.metadataCache?.on("dataview:index-ready", () => {
-      void refresh();
-    });
-
-    offMetadataChange = app.metadataCache?.on(
-      "dataview:metadata-change",
-      () => {
-        void refresh();
-      },
-    );
+    stopPlannerListener = plannerData.onChange(() => void refresh());
 
     refreshTimer = setInterval(() => {
       void refresh();
@@ -226,13 +214,7 @@
       clearInterval(refreshTimer);
     }
 
-    if (offIndexReady) {
-      app.metadataCache?.offref(offIndexReady);
-    }
-
-    if (offMetadataChange) {
-      app.metadataCache?.offref(offMetadataChange);
-    }
+    stopPlannerListener?.();
   });
 
   async function refresh() {
@@ -244,15 +226,12 @@
       .format("MMM D")}`;
     weekProgressPercent = getWeekProgressPercent(weekStart, weekEnd, now);
 
-    if (!isWeeklyNotesEnabled) {
-      rows = [];
-      totalRow = null;
-      otherActivityRows = [];
-      return;
-    }
-
-    const weekNote = periodicNotes.getWeeklyNote(weekStart);
-    const planEntries = await getPlanEntriesForWeek(weekNote);
+    const planEntries = (await plannerData.readPlanEntries(weekStart)).map(
+      (entry) => ({
+        ...entry,
+        duration: window.moment.duration(entry.duration, "minutes"),
+      }),
+    );
     const goals = planEntries
       .filter((entry) => entry.kind === "goal")
       .map((entry) => ({ activity: entry.activity, goal: entry.duration }));
@@ -273,6 +252,10 @@
     );
 
     const totals = calculateWeeklyActivityDurations(allActivities, now);
+    unrecordedTime = calculateWeeklyUnrecordedActivityDuration(
+      allActivities,
+      now,
+    );
     const withGoals = mergeActivityDurationsWithGoals(totals, goals);
 
     rows = withGoals
@@ -369,14 +352,6 @@
     });
   }
 
-  async function getPlanEntriesForWeek(weekNote: TFile | null) {
-    if (!weekNote) {
-      return [];
-    }
-
-    return extractActivityPlanEntries(app, weekNote);
-  }
-
   function progressPercent(
     duration: import("moment").Duration,
     goal: import("moment").Duration,
@@ -410,11 +385,7 @@
     <div class="subtitle">{weekLabel}</div>
   </div>
 
-  {#if !isWeeklyNotesEnabled}
-    <div class="empty-state">
-      Weekly notes support is required to show activity goals.
-    </div>
-  {:else if rows.length === 0 && otherActivityRows.length === 0}
+  {#if rows.length === 0 && otherActivityRows.length === 0 && unrecordedTime.asMilliseconds() === 0}
     <div class="empty-state">
       No goals found for this week under the “Activity goals” heading.
     </div>
@@ -496,23 +467,30 @@
       {/if}
     </div>
 
-    {#if otherActivityRows.length > 0}
-      <div class="other-activities" aria-label="Other weekly activities">
-        {#each otherActivityRows as activity (activity.activityKey)}
-          {@const definition = getActivityDefinition(activity.activityKey)}
-          {@const emoji = definition?.emoji ?? "•"}
-          {@const label = definition?.label ?? sanitizeLabel(activity.activity)}
-          <div class="other-activity-card" title={label}>
-            <span class="other-activity-emoji" aria-hidden="true">{emoji}</span>
-            <span class="other-activity-label">{label}</span>
-            <span class="other-activity-duration"
-              >{formatDuration(activity.duration)}</span
-            >
-          </div>
-        {/each}
+    <div class="other-activities" aria-label="Other weekly activities">
+      {#each otherActivityRows as activity (activity.activityKey)}
+        {@const definition = getActivityDefinition(activity.activityKey)}
+        {@const emoji = definition?.emoji ?? "•"}
+        {@const label = definition?.label ?? sanitizeLabel(activity.activity)}
+        <div class="other-activity-card" title={label}>
+          <span class="other-activity-emoji" aria-hidden="true">{emoji}</span>
+          <span class="other-activity-label">{label}</span>
+          <span class="other-activity-duration"
+            >{formatDuration(activity.duration)}</span
+          >
+        </div>
+      {/each}
+      <div
+        class="other-activity-card"
+        title="Time in the week not covered by any activity log"
+      >
+        <span class="other-activity-emoji" aria-hidden="true">◷</span>
+        <span class="other-activity-label">Unrecorded time</span>
+        <span class="other-activity-duration"
+          >{formatDuration(unrecordedTime)}</span
+        >
       </div>
-    {/if}
-
+    </div>
     <div class="legend" aria-label="Weekly day color legend">
       {#each legendDays as day}
         <div class="legend-item">

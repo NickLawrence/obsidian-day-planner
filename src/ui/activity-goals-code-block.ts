@@ -6,6 +6,7 @@ import {
 import { mount, type SvelteComponent, unmount } from "svelte";
 
 import type { PeriodicNotes } from "../service/periodic-notes";
+import type { PlannerData } from "../service/planner-data";
 import type { DayPlannerActivityApi } from "../util/activity-totals";
 
 import ActivityGoals from "./components/activity-goals.svelte";
@@ -28,9 +29,10 @@ export function renderActivityGoalsCodeBlock(props: {
   el: HTMLElement;
   ctx: MarkdownPostProcessorContext;
   periodicNotes: PeriodicNotes;
+  plannerData: PlannerData;
   activityApi: DayPlannerActivityApi;
 }) {
-  const { app, el, ctx, periodicNotes, activityApi } = props;
+  const { app, el, ctx, periodicNotes, plannerData, activityApi } = props;
 
   el.empty();
   el.addClass("day-planner-activity-goals-code-block");
@@ -40,6 +42,7 @@ export function renderActivityGoalsCodeBlock(props: {
     props: {
       app,
       periodicNotes,
+      plannerData,
       activityApi,
     },
   });

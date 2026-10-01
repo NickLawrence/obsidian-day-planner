@@ -340,7 +340,7 @@ const activityDefinitions: ActivityDefinition[] = [
     label: "Hygiene",
     group: "hygiene",
     emoji: "🪥",
-    plan: { defaultHours: 2, intervalMinutes: 15 },
+    plan: { defaultHours: 4, intervalMinutes: 15, maxHours: 6 },
   },
   {
     name: "restaurant",
@@ -407,6 +407,12 @@ const activityDefinitions: ActivityDefinition[] = [
     label: "Social",
     group: "social",
     emoji: "👯",
+  },
+  {
+    name: "chat",
+    label: "Chat",
+    group: "social",
+    emoji: "🗣️"
   },
   {
     name: "bed",

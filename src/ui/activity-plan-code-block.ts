@@ -24,8 +24,9 @@ export function renderActivityPlanCodeBlock(props: {
   el: HTMLElement;
   ctx: MarkdownPostProcessorContext;
   periodicNotes: import("../service/periodic-notes").PeriodicNotes;
+  plannerData: import("../service/planner-data").PlannerData;
 }) {
-  const { app, el, ctx, periodicNotes } = props;
+  const { app, el, ctx, periodicNotes, plannerData } = props;
 
   el.empty();
   el.addClass("day-planner-activity-plan-code-block");
@@ -35,6 +36,7 @@ export function renderActivityPlanCodeBlock(props: {
     props: {
       app,
       periodicNotes,
+      plannerData,
     },
   });
 
