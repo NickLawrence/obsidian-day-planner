@@ -4,11 +4,7 @@ import { getObsidianContext } from "../../context/obsidian-context";
 import { currentTimeSignal } from "../../global-store/current-time";
 import type { LocalTask, Task } from "../../task-types";
 import {
-  getActivityDefinition,
-  getActivityGroup,
-} from "../../util/activity-definitions";
-import {
-  applyActivityColorVariant,
+  getActivityBlockColors,
   getTextColorWithEnoughContrast,
 } from "../../util/color";
 import { getRelationToNow } from "../../util/moment";
@@ -20,12 +16,8 @@ interface UseColorProps {
 }
 
 const defaultBorderColor = "var(--color-base-50)";
-const groupBackgroundMix = 5;
-const groupBorderMix = 45;
 const baseBackgroundColor =
   "var(--background-primary, var(--background-secondary, #ffffff))";
-const lightThemeBackgroundColor = "#ffffff";
-const darkThemeBackgroundColor = "#1e1e1e";
 
 type ActivityBlockTask = LocalTask & {
   clockActivity?: {
@@ -37,18 +29,6 @@ function getClockActivityName(task: Task) {
   return "text" in task
     ? (task as ActivityBlockTask).clockActivity?.activity
     : undefined;
-}
-
-function getOpaqueGroupColor(
-  color: string,
-  mixPercent: number,
-  isDarkMode: boolean,
-) {
-  const backgroundColor = isDarkMode
-    ? darkThemeBackgroundColor
-    : lightThemeBackgroundColor;
-
-  return chroma.mix(backgroundColor, color, mixPercent / 100, "rgb").hex();
 }
 
 export function useColor({ task }: UseColorProps) {
@@ -88,41 +68,9 @@ export function useColor({ task }: UseColorProps) {
     );
   });
 
-  const activityGroup = $derived.by(() => {
-    const activityName = getClockActivityName(task);
-
-    return activityName ? getActivityGroup(activityName) : undefined;
-  });
-
-  const activityColor = $derived.by(() => {
-    if (!activityGroup) {
-      return undefined;
-    }
-
-    const variant = getActivityDefinition(
-      getClockActivityName(task) ?? "",
-    )?.color;
-
-    return applyActivityColorVariant(activityGroup.color, variant);
-  });
-
   const activityGroupColors = $derived.by(() => {
-    if (!activityColor) {
-      return undefined;
-    }
-
-    return {
-      background: getOpaqueGroupColor(
-        activityColor,
-        groupBackgroundMix,
-        isDarkMode.current,
-      ),
-      border: getOpaqueGroupColor(
-        activityColor,
-        groupBorderMix,
-        isDarkMode.current,
-      ),
-    };
+    const name = getClockActivityName(task);
+    return name ? getActivityBlockColors(name, isDarkMode.current) : undefined;
   });
 
   const backgroundColor = $derived.by(() => {

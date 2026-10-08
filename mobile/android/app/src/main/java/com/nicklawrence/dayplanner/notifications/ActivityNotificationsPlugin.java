@@ -59,7 +59,10 @@ public class ActivityNotificationsPlugin extends Plugin {
     }
 
     @PluginMethod
-    public void getConnection(PluginCall call) { resolveConnection(call); }
+    public void getConnection(PluginCall call) {
+        resolveConnection(call);
+        ActivityTimelineWidget.refreshAll(getContext());
+    }
 
     @PluginMethod
     public void chooseVault(PluginCall call) {
@@ -87,6 +90,7 @@ public class ActivityNotificationsPlugin extends Plugin {
                 new ActiveActivityStore(getContext()).clear();
                 ActivityNotificationManager.cancel(getContext());
             }
+            ActivityTimelineWidget.refreshAll(getContext());
             resolveConnection(call);
         } catch (Exception error) { call.reject(error.getMessage(), error); }
     }
@@ -124,6 +128,7 @@ public class ActivityNotificationsPlugin extends Plugin {
         try {
             if (!call.getData().has("expected")) { call.reject("Expected file contents are required"); return; }
             new VaultFiles(getContext()).writeFile(call.getString("path", ""), call.getString("contents", ""), call.getString("expected", null));
+            ActivityTimelineWidget.refreshAll(getContext());
             call.resolve();
         } catch (Exception error) { call.reject(error.getMessage(), error); }
     }

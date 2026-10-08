@@ -28,6 +28,21 @@
             android:name=".notifications.ActivityActionReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".notifications.ActivityTimelineWidget"
+            android:label="@string/widget_timeline_name"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                android:resource="@xml/activity_timeline_widget" />
+        </receiver>
+        <service
+            android:name=".notifications.ActivityTimelineService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

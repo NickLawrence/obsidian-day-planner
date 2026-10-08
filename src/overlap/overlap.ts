@@ -1,20 +1,23 @@
 import Fraction from "fraction.js";
 import { partition } from "lodash/fp";
+import type { Moment } from "moment";
 import { isNotVoid } from "typed-assert";
 
-import type { BaseTask, WithPlacing, WithTime } from "../task-types";
-import type { Overlap } from "../types";
-import { getMinutesSinceMidnight } from "../util/moment";
-import { getEndMinutes } from "../util/task-utils";
+import { getMinutesSinceMidnight, getEndMinutes } from "../util/time-position";
 
+import type { Overlap, HorizontalPlacing } from "./horizontal-placing";
 import { getHorizontalPlacing } from "./horizontal-placing";
 
 const empty = "empty";
 const taken = "taken";
 
-export function computeOverlap(
-  items: Array<WithTime<BaseTask>>,
-): Map<string, Overlap> {
+interface TimedBlock {
+  id: string;
+  startTime: Moment;
+  durationMinutes: number;
+}
+
+export function computeOverlap(items: Array<TimedBlock>): Map<string, Overlap> {
   return items.reduce((overlapLookup, item) => {
     const overlapGroup = getItemsOverlappingItemAndEachOther(item, items);
 
@@ -23,8 +26,8 @@ export function computeOverlap(
 }
 
 function getItemsOverlappingItemAndEachOther(
-  item: WithTime<BaseTask>,
-  items: Array<WithTime<BaseTask>>,
+  item: TimedBlock,
+  items: Array<TimedBlock>,
 ) {
   return items
     .reduce(
@@ -49,7 +52,7 @@ function getItemsOverlappingItemAndEachOther(
 }
 
 function computeOverlapForGroup(
-  overlapGroup: Array<WithTime<BaseTask>>,
+  overlapGroup: Array<TimedBlock>,
   previousLookup: Map<string, Overlap>,
 ) {
   const newLookup = new Map([...previousLookup]);
@@ -123,7 +126,7 @@ function computeOverlapForGroup(
   return newLookup;
 }
 
-function overlaps(a: WithTime<BaseTask>, b: WithTime<BaseTask>) {
+function overlaps(a: TimedBlock, b: TimedBlock) {
   const [early, late] =
     getMinutesSinceMidnight(a.startTime) < getMinutesSinceMidnight(b.startTime)
       ? [a, b]
@@ -132,9 +135,9 @@ function overlaps(a: WithTime<BaseTask>, b: WithTime<BaseTask>) {
   return getEndMinutes(early) > getMinutesSinceMidnight(late.startTime);
 }
 
-export function addHorizontalPlacing<T extends WithTime<BaseTask>>(
+export function addHorizontalPlacing<T extends TimedBlock>(
   blocks: Array<T>,
-): Array<WithPlacing<T>> {
+): Array<T & { placing: HorizontalPlacing }> {
   if (blocks.length === 0) {
     return [];
   }

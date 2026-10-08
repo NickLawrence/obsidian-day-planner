@@ -1,4 +1,3 @@
-import type Fraction from "fraction.js";
 import type { Moment } from "moment";
 import type { App } from "obsidian";
 import type { Readable, Writable } from "svelte/store";
@@ -32,12 +31,7 @@ export type OnEditAbortedFn = () => void;
 
 export type RelationToNow = "past" | "present" | "future";
 
-export interface Overlap {
-  columns: number;
-  span: number;
-  start: number;
-  fraction?: Fraction;
-}
+export type { Overlap } from "./overlap/horizontal-placing";
 
 export type CleanUp = () => void;
 export type RenderMarkdown = (el: HTMLElement, markdown: string) => CleanUp;

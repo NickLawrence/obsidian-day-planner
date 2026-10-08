@@ -26,6 +26,7 @@ public class ActivityActionReceiver extends BroadcastReceiver {
                     if (!store.isActive() || !store.id().equals(intent.getStringExtra("activity_id")) ||
                         !store.connectionId().equals(intent.getStringExtra("vault_uri"))) return;
                     store.appendNote(note.toString());
+                    ActivityTimelineWidget.refreshAll(context);
                     ActivityNotificationManager.show(context, store, "Note added");
                 }
             } catch (Exception error) {

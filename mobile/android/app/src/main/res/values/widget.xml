@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_background">#ffffff</color>
+    <color name="widget_text">#222222</color>
+    <color name="widget_muted">#666666</color>
+    <color name="widget_control">#f0f0f0</color>
+    <string name="widget_timeline_name">Day Planner — Daily timeline</string>
+    <string name="widget_timeline_description">Scroll through the full day of activities from your Obsidian vault.</string>
+    <string name="widget_timeline_title">Daily timeline</string>
+    <string name="widget_now">Now</string>
+    <string name="widget_now_description">Refresh and jump to the current hour</string>
+    <string name="widget_refresh_description">Refresh activity timeline</string>
+    <string name="widget_open_description">Open Day Planner</string>
+    <string name="widget_loading">Loading today’s activities…</string>
+</resources>

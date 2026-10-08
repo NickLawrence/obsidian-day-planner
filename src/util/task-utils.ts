@@ -38,13 +38,8 @@ import {
   minutesToMomentOfDay,
 } from "./moment";
 import { addTasksPluginProp, updateScheduledPropInText } from "./props";
-
-export function getEndMinutes(task: {
-  startTime: Moment;
-  durationMinutes: number;
-}) {
-  return getMinutesSinceMidnight(task.startTime) + task.durationMinutes;
-}
+import { getEndMinutes } from "./time-position";
+export { getEndMinutes } from "./time-position";
 
 export function getEndTime(task: {
   startTime: Moment;

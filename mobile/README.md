@@ -31,6 +31,42 @@ See [the shared API notes](../src/shared/README.md) for the boundary and tests.
 - The notification's **End** action opens the finish form, including after the app
   was closed. **Add note** uses inline reply without a running web view.
 
+## Home-screen daily timeline
+
+After installing the APK, open Day Planner once and connect the vault. On the
+Android home screen, long-press an empty area, choose **Widgets**, and add
+**Day Planner — Daily timeline**. Resize it horizontally or vertically.
+
+Swipe up and down inside the timeline to see the full local day. Blank hours
+remain visible, and activities occupy their actual time ranges. Overlapping logs
+share columns; overnight logs are clipped to the displayed day. Repeated logs
+and duplicate task IDs remain separate. **Now** refreshes and scrolls to the
+current hour; **↻** refreshes without changing the scroll position. Tapping the
+heading or an hour opens the app.
+
+The widget runs the shared TypeScript YAML parser, validation, labels, colors,
+duration/quality formatting, and overlap layout in a short-lived offline WebView.
+Native Android code draws hour rows for the launcher's scrolling collection.
+It works with the app closed and reads the weekly vault files directly; there is
+no widget activity database. The widget follows the device's light/dark theme,
+using the plugin's default activity colors. Custom Obsidian themes, timeline zoom,
+and plugin color overrides are not synchronized in this first version.
+
+Starts, finishes, notification notes, and opening/refreshing the app trigger an
+update. The launcher also schedules periodic refreshes, normally every 30 minutes;
+Android can delay background delivery. The status row shows the last successful
+refresh time, including for ongoing activity lengths and the current-time marker.
+Tap **↻** after external vault sync for an immediate refresh.
+
+All weekly activity files are scanned so a later log retained in an earlier week
+is included. An incomplete sync write preserves the last good in-memory widget
+view and shows a retry message. A new process reloads from the vault.
+
+The widget engine is built automatically by `npm run android:sync`. The shared
+rendering entry is [`../src/shared/activity-timeline.ts`](../src/shared/activity-timeline.ts).
+The Android instrumentation tests exercise the bundled JavaScript in a real
+WebView and apply the bitmap row through `RemoteViews`.
+
 ## Connect the vault
 
 Choose **Choose vault folder** and select the Obsidian vault root containing your

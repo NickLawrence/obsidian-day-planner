@@ -4,26 +4,13 @@
 
   import { getObsidianContext } from "../../context/obsidian-context";
   import type { LocalTask } from "../../task-types";
+  import { getActivityQualityLabel } from "../../util/activity-presentation";
   import { formatDuration } from "../../util/duration";
   import { hoverPreview } from "../actions/hover-preview";
   import type { HTMLActionArray } from "../actions/use-actions";
 
   import RenderedMarkdown from "./rendered-markdown.svelte";
   import TimeBlockBase from "./time-block-base.svelte";
-
-  const qualityEmojiByScore = [
-    "😭",
-    "😢",
-    "🙁",
-    "😟",
-    "😕",
-    "😐",
-    "🙂",
-    "😊",
-    "😄",
-    "😁",
-    "🤩",
-  ];
 
   type ClockActivityDisplay = {
     title?: string;
@@ -60,8 +47,7 @@
       return undefined;
     }
 
-    const emojiIndex = Math.min(10, Math.max(0, Math.round(quality)));
-    return `${quality} ${qualityEmojiByScore[emojiIndex]}`;
+    return getActivityQualityLabel(quality);
   });
 
   const completedActivityDuration = $derived.by(() => {
@@ -127,12 +113,12 @@
   {#if task.clockActivity?.resourcePath}
     <button
       class="activity-resource-link"
-      type="button"
       aria-label="Open resource file"
-      title="Open resource file"
+      onclick={openResourceFile}
       onpointerdown={stopResourceButtonEvent}
       onpointerup={stopResourceButtonEvent}
-      onclick={openResourceFile}
+      title="Open resource file"
+      type="button"
     >
       <FileText aria-hidden="true" size={14} />
     </button>
