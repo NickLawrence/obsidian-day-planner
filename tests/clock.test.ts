@@ -3,11 +3,11 @@ import { describe, expect, test } from "vitest";
 import { createClockTaskFromActivity } from "../src/util/clock";
 
 describe("createClockTaskFromActivity", () => {
-  test("prefers linked task details when taskId matches", () => {
+  test("uses the activity title and weekly file location", () => {
     const start = window.moment("2025-01-01T10:00:00");
     const end = window.moment("2025-01-01T11:30:00");
 
-    const linkedTask = {
+    const source = {
       id: "linked",
       taskId: "task-1",
       text: "Linked task",
@@ -28,20 +28,19 @@ describe("createClockTaskFromActivity", () => {
     const task = createClockTaskFromActivity({
       activity: {
         title: "Activity title",
-        taskId: "task-1",
-        location: linkedTask.location,
+        location: source.location,
       },
       clockMoments: [start, end],
-      tasksById: new Map([["task-1", linkedTask]]),
       defaultDurationMinutes: 15,
     });
 
-    expect(task.text).toBe("Linked task");
-    expect(task.location).toEqual(linkedTask.location);
+    expect(task.text).toBe("Activity title");
+    expect(task).not.toHaveProperty("taskId");
+    expect(task.location).toEqual(source.location);
     expect(task.durationMinutes).toBe(90);
   });
 
-  test("falls back to activity data when taskId is missing", () => {
+  test("uses the activity data without a task relationship", () => {
     const start = window.moment("2025-01-01T09:00:00");
     const end = window.moment("2025-01-01T10:00:00");
 
@@ -57,7 +56,6 @@ describe("createClockTaskFromActivity", () => {
         },
       },
       clockMoments: [start, end],
-      tasksById: new Map(),
       defaultDurationMinutes: 15,
     });
 

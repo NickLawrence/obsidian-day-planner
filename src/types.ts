@@ -7,11 +7,11 @@ import type { ActivitySelection } from "./create-update-handler";
 import type { RawIcal } from "./redux/ical/ical-slice";
 import { type AppDispatch } from "./redux/store";
 import type { UseSelector } from "./redux/use-selector";
+import type { ActivityEditor } from "./service/activity-editor";
 import type { DataviewFacade } from "./service/dataview-facade";
 import type { ListPropsParser } from "./service/list-props-parser";
 import type { PeriodicNotes } from "./service/periodic-notes";
 import type { PlannerData } from "./service/planner-data";
-import type { STaskEditor } from "./service/stask-editor";
 import type { VaultFacade } from "./service/vault-facade";
 import type { WorkspaceFacade } from "./service/workspace-facade";
 import type { DayPlannerSettings, IcalConfig } from "./settings";
@@ -71,7 +71,7 @@ export interface ObsidianContext {
   pointerDateTime: Writable<PointerDateTime>;
   tasksWithActiveClockProps: Readable<LocalTask[]>;
   logSummary: ReturnType<typeof useTasks>["logSummary"];
-  sTaskEditor: STaskEditor;
+  activityEditor: ActivityEditor;
   getDisplayedTasksWithClocksForTimeline: (
     day: Moment,
   ) => Readable<Array<WithPlacing<LocalTask>>>;

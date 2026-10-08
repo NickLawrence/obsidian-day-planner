@@ -1,4 +1,4 @@
-import type { ActivityColorVariant } from "./color";
+import type { ActivityColorVariant } from "./activity-colors";
 
 export type ActivityAttributeField = {
   key: string;

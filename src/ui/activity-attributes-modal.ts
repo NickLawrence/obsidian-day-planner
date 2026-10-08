@@ -1,6 +1,11 @@
 import { App, Modal, Notice } from "obsidian";
 
-import type { ActivityAttributeField } from "../util/activity-definitions";
+import {
+  type ActivityAttributeField,
+  getInitialActivityValues,
+  hasActivityFormChanges,
+  parseActivityValues,
+} from "../shared/activity";
 
 import { askForConfirmation } from "./confirmation-modal";
 
@@ -58,6 +63,8 @@ class ActivityAttributesModal extends Modal {
     const fieldsEl = contentEl.createDiv({
       cls: "day-planner-activity-attributes-modal__fields",
     });
+
+    const initialInputs = getInitialActivityValues(fields, initialValues);
 
     fields.forEach((field, index) => {
       const row = fieldsEl.createDiv({
@@ -117,10 +124,7 @@ class ActivityAttributesModal extends Modal {
         input.step = "1";
       }
 
-      const initialValue = initialValues?.[field.key];
-      if (typeof initialValue !== "undefined") {
-        input.value = String(initialValue);
-      }
+      input.value = initialInputs[field.key];
 
       this.inputs.set(field.key, input);
       this.initialInputValues.set(field.key, input.value);
@@ -168,8 +172,11 @@ class ActivityAttributesModal extends Modal {
 
   private async cancel() {
     if (this.settled || this.confirmingDiscard) return;
-    const hasChanges = [...this.inputs].some(
-      ([key, input]) => input.value !== this.initialInputValues.get(key),
+    const hasChanges = hasActivityFormChanges(
+      Object.fromEntries(this.initialInputValues),
+      Object.fromEntries(
+        [...this.inputs].map(([key, input]) => [key, input.value]),
+      ),
     );
     if (hasChanges) {
       this.confirmingDiscard = true;
@@ -190,50 +197,19 @@ class ActivityAttributesModal extends Modal {
 
   private submit() {
     if (this.settled || this.confirmingDiscard) return;
-    const values: Record<string, string | number | undefined> = {};
-
-    for (const field of this.props.fields) {
-      const input = this.inputs.get(field.key);
-
-      if (!input) {
-        continue;
-      }
-
-      const rawValue = input.value.trim();
-
-      if (!rawValue) {
-        if (field.required) {
-          new Notice(`${field.label} is required.`);
-          return;
-        }
-
-        values[field.key] = undefined;
-        continue;
-      }
-
-      if (field.type === "number") {
-        const parsed = Number(rawValue);
-
-        if (Number.isNaN(parsed)) {
-          new Notice(`${field.label} must be a number.`);
-          return;
-        }
-
-        if (typeof field.min === "number" && parsed < field.min) {
-          new Notice(`${field.label} must be at least ${field.min}.`);
-          return;
-        }
-
-        if (typeof field.max === "number" && parsed > field.max) {
-          new Notice(`${field.label} must be at most ${field.max}.`);
-          return;
-        }
-
-        values[field.key] = parsed;
-        continue;
-      }
-
-      values[field.key] = rawValue;
+    let values: Record<string, string | number | undefined>;
+    try {
+      values = parseActivityValues(
+        this.props.fields,
+        Object.fromEntries(
+          [...this.inputs].map(([key, input]) => [key, input.value]),
+        ),
+      );
+    } catch (error) {
+      new Notice(
+        error instanceof Error ? error.message : "Invalid activity details",
+      );
+      return;
     }
 
     this.settled = true;

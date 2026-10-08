@@ -1,30 +1,23 @@
 import type { Moment } from "moment";
 
-import { clockFormat, defaultDurationMinutes } from "../constants";
+import { defaultDurationMinutes } from "../constants";
 import type { LocalTask } from "../task-types";
 
 import { getId } from "./id";
 
 export type ClockMoments = [Moment, Moment];
 
-export function createClockTimestamp() {
-  return window.moment().format(clockFormat);
-}
-
 export function createClockTaskFromActivity(props: {
   activity: {
     title: string;
-    taskId?: string;
     location: LocalTask["location"];
   };
   clockMoments: ClockMoments;
-  tasksById?: Map<string, LocalTask>;
   defaultDurationMinutes?: number;
 }): LocalTask {
   const {
     activity,
     clockMoments,
-    tasksById,
     defaultDurationMinutes: durationFallback = defaultDurationMinutes,
   } = props;
 
@@ -33,20 +26,6 @@ export function createClockTaskFromActivity(props: {
 
   if (durationMinutes < 0) {
     durationMinutes = durationFallback;
-  }
-
-  const linkedTask =
-    activity.taskId && tasksById ? tasksById.get(activity.taskId) : undefined;
-
-  if (linkedTask) {
-    return {
-      ...linkedTask,
-      id: getId(),
-      startTime,
-      durationMinutes,
-      isAllDayEvent: false,
-      taskId: linkedTask.taskId,
-    };
   }
 
   return {
@@ -59,6 +38,5 @@ export function createClockTaskFromActivity(props: {
     text: activity.title,
     lines: [],
     location: activity.location,
-    taskId: activity.taskId,
   };
 }

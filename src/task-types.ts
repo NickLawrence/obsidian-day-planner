@@ -4,6 +4,7 @@ import type { Pos } from "obsidian";
 
 import type { HorizontalPlacing } from "./overlap/horizontal-placing";
 import type { IcalConfig } from "./settings";
+import type { ActivityLogLocation } from "./util/activity-log-location";
 import type { Props } from "./util/props";
 
 export interface Entry {
@@ -61,6 +62,8 @@ export interface LocalTask extends TaskTokens, BaseTask {
   text: string;
   lines?: Array<FileLine>;
   taskId?: string;
+  /** Present only on activity blocks projected from weekly files. */
+  activityLocation?: ActivityLogLocation;
 
   // todo: move out to InMemoryTask
   location?: TaskLocation;

@@ -60,6 +60,7 @@ import {
 import { settingsUpdated } from "./redux/settings-slice";
 import { type AppDispatch, createReactor } from "./redux/store";
 import { createUseSelector } from "./redux/use-selector";
+import { ActivityEditor } from "./service/activity-editor";
 import { DataviewFacade } from "./service/dataview-facade";
 import { TransactionWriter } from "./service/diff-writer";
 import {
@@ -71,7 +72,7 @@ import {
 import { ListPropsParser } from "./service/list-props-parser";
 import { PeriodicNotes } from "./service/periodic-notes";
 import { PlannerData } from "./service/planner-data";
-import { STaskEditor } from "./service/stask-editor";
+import { PlannerDataWatcher } from "./service/planner-data-watcher";
 import { VaultFacade } from "./service/vault-facade";
 import { WorkspaceFacade } from "./service/workspace-facade";
 import {
@@ -88,7 +89,6 @@ import { renderActivityGoalsCodeBlock } from "./ui/activity-goals-code-block";
 import { renderActivityPlanCodeBlock } from "./ui/activity-plan-code-block";
 import { ActivityQueueView } from "./ui/activity-queue-view";
 import { askForConfirmation } from "./ui/confirmation-modal";
-import { createEditorMenuCallback } from "./ui/editor-menu";
 import { useDateRanges } from "./ui/hooks/use-date-ranges";
 import { useDebounceWithDelay } from "./ui/hooks/use-debounce-with-delay";
 import { mountStatusBarWidget } from "./ui/hooks/use-status-bar-widget";
@@ -123,7 +123,7 @@ export default class DayPlanner extends Plugin {
   private workspaceFacade!: WorkspaceFacade;
   private dataviewFacade!: DataviewFacade;
   private periodicNotes!: PeriodicNotes;
-  private sTaskEditor!: STaskEditor;
+  private activityEditor!: ActivityEditor;
   private vaultFacade!: VaultFacade;
   private transactionWriter!: TransactionWriter;
   private plannerData!: PlannerData;
@@ -229,47 +229,28 @@ export default class DayPlanner extends Plugin {
       dispatch(activitiesLoaded(this.plannerData.asListProps()));
     refreshActivities();
     this.register(this.plannerData.onChange(refreshActivities));
-    let plannerDataReady = false;
-    const reloadPlannerData = (file: TFile) => {
-      if (plannerDataReady && this.plannerData.isDataPath(file.path)) {
-        void this.plannerData.loadActivities().catch((error) => {
-          console.error("Failed to reload planner activity data", error);
-          new Notice(
-            "Failed to reload planner activity data; see console for details.",
-          );
-        });
-      }
-    };
-    this.registerEvent(
-      this.app.vault.on("modify", (file) => {
-        if (file instanceof TFile) reloadPlannerData(file);
-      }),
+    const plannerDataWatcher = new PlannerDataWatcher(
+      this.app.vault,
+      this.plannerData,
+      (error) => {
+        console.error("Failed to reload planner activity data", error);
+        new Notice(
+          "Failed to reload planner activity data; see console for details.",
+        );
+      },
     );
-    this.registerEvent(
-      this.app.vault.on("create", (file) => {
-        if (file instanceof TFile) reloadPlannerData(file);
-      }),
-    );
-    this.registerEvent(
-      this.app.vault.on("delete", (file) => {
-        if (file instanceof TFile) reloadPlannerData(file);
-      }),
-    );
-    this.registerEvent(
-      this.app.vault.on("rename", (file) => {
-        if (file instanceof TFile) reloadPlannerData(file);
-      }),
-    );
+    this.register(() => plannerDataWatcher.stop());
+    this.registerDomEvent(window, "focus", () => {
+      void plannerDataWatcher.refresh();
+    });
+    this.registerDomEvent(document, "visibilitychange", () => {
+      if (document.visibilityState === "visible")
+        void plannerDataWatcher.refresh();
+    });
 
     this.api = createDayPlannerActivityApi(listProps);
 
-    this.sTaskEditor = new STaskEditor(
-      this.app,
-      this.workspaceFacade,
-      this.vaultFacade,
-      this.dataviewFacade,
-      this.plannerData,
-    );
+    this.activityEditor = new ActivityEditor(this.app, this.plannerData);
 
     this.register(() => {
       listenerMiddleware.clearListeners();
@@ -286,13 +267,6 @@ export default class DayPlanner extends Plugin {
       dataviewRefreshSignal,
       useSelector,
     });
-
-    const handleEditorMenu = createEditorMenuCallback({
-      sTaskEditor: this.sTaskEditor,
-      plugin: this,
-    });
-
-    this.registerEvent(this.app.workspace.on("editor-menu", handleEditorMenu));
 
     this.registerCommands();
     this.addRibbonIcons();
@@ -335,17 +309,7 @@ export default class DayPlanner extends Plugin {
     // Vault folders may not be available
     // during onload. Do not await layout readiness here: plugin loading must
     // finish before Obsidian can signal that the layout is ready.
-    this.app.workspace.onLayoutReady(async () => {
-      try {
-        await this.plannerData.loadActivities();
-        plannerDataReady = true;
-      } catch (error) {
-        console.error("Failed to initialize planner data", error);
-        new Notice(
-          "Failed to initialize planner data; see console for details.",
-        );
-      }
-    });
+    this.app.workspace.onLayoutReady(() => plannerDataWatcher.start());
 
     await this.handleNewPluginVersion();
     await this.initTimelineLeafSilently();
@@ -613,7 +577,7 @@ export default class DayPlanner extends Plugin {
       id: "clock-in",
       icon: "play",
       name: "Clock in",
-      editorCallback: () => this.sTaskEditor.clockInUnderCursor(),
+      callback: this.startActivity,
     });
 
     this.addCommand({
@@ -626,20 +590,20 @@ export default class DayPlanner extends Plugin {
       icon: "square",
       id: "clock-out",
       name: "Clock out",
-      editorCallback: () => this.sTaskEditor.clockOutUnderCursor(),
+      callback: () => this.activityEditor.finishSelectedOpenActivity(),
     });
 
     this.addCommand({
       icon: "trash-2",
       id: "cancel-clock",
       name: "Cancel clock",
-      editorCallback: () => this.sTaskEditor.cancelClockUnderCursor(),
+      callback: () => this.activityEditor.cancelSelectedOpenActivity(),
     });
 
     this.addCommand({
       id: "add-note-to-activity",
       name: "Add Note to Activity",
-      callback: () => this.sTaskEditor.addNoteToFirstActiveClock(),
+      callback: () => this.activityEditor.addNoteToSelectedOpenActivity(),
     });
   }
 
@@ -893,7 +857,7 @@ export default class DayPlanner extends Plugin {
       app: this.app,
       periodicNotes: this.periodicNotes,
       plannerData: this.plannerData,
-      sTaskEditor: this.sTaskEditor,
+      activityEditor: this.activityEditor,
       workspaceFacade: this.workspaceFacade,
       initWeeklyView: this.initWeeklyLeaf,
       refreshDataviewFn: this.dataviewFacade.getAllTasksFrom,

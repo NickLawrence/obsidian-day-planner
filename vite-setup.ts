@@ -3,7 +3,7 @@ import { vi, expect } from "vitest";
 import path from "path";
 import yaml from "js-yaml";
 
-window.moment = moment;
+if (typeof window !== "undefined") window.moment = moment;
 
 vi.mock("obsidian", () => ({
   TFile: vi.fn(),

@@ -1,7 +1,7 @@
 import { Menu } from "obsidian";
 import { isNotVoid } from "typed-assert";
 
-import type { STaskEditor } from "../service/stask-editor";
+import type { ActivityEditor } from "../service/activity-editor";
 import type { LocalTask } from "../task-types";
 import { getActivityLabel } from "../util/activity-definitions";
 import type { Activity } from "../util/props";
@@ -12,9 +12,9 @@ export function createTimeBlockMenu(props: {
   event: MouseEvent | TouchEvent;
   task: LocalTask & { clockActivity?: Activity };
   workspaceFacade: WorkspaceFacade;
-  sTaskEditor: STaskEditor;
+  activityEditor: ActivityEditor;
 }) {
-  const { event, task, workspaceFacade, sTaskEditor } = props;
+  const { event, task, workspaceFacade, activityEditor } = props;
   const { location } = task;
 
   // todo: remove when types are fixed
@@ -46,7 +46,7 @@ export function createTimeBlockMenu(props: {
         .setTitle("Clock out")
         .setIcon("square")
         .onClick(async () => {
-          await sTaskEditor.clockOutTask(task);
+          await activityEditor.finishActivity(task);
         });
     });
   }
@@ -57,7 +57,7 @@ export function createTimeBlockMenu(props: {
         .setTitle("Add note to activity")
         .setIcon("sticky-note")
         .onClick(async () => {
-          await sTaskEditor.addNoteToClockActivity(task);
+          await activityEditor.addNoteToClockActivity(task);
         });
     });
 
@@ -66,7 +66,7 @@ export function createTimeBlockMenu(props: {
         .setTitle("Change start time")
         .setIcon("clock")
         .onClick(async () => {
-          await sTaskEditor.changeClockActivityStartTime(task);
+          await activityEditor.changeClockActivityStartTime(task);
         });
     });
   }
@@ -77,7 +77,7 @@ export function createTimeBlockMenu(props: {
         .setTitle("Change end time")
         .setIcon("clock-3")
         .onClick(async () => {
-          await sTaskEditor.changeClockActivityEndTime(task);
+          await activityEditor.changeClockActivityEndTime(task);
         });
     });
 
@@ -86,7 +86,7 @@ export function createTimeBlockMenu(props: {
         .setTitle("Change rating")
         .setIcon("star")
         .onClick(async () => {
-          await sTaskEditor.changeClockActivityRating(task);
+          await activityEditor.changeClockActivityRating(task);
         });
     });
   }
@@ -97,25 +97,14 @@ export function createTimeBlockMenu(props: {
         .setTitle("Cancel clock")
         .setIcon("trash-2")
         .onClick(async () => {
-          await sTaskEditor.cancelClockForTask(task);
-        });
-    });
-  }
-
-  if (!isActivity) {
-    menu.addItem((item) => {
-      item
-        .setTitle("Add to current activity")
-        .setIcon("plus")
-        .onClick(async () => {
-          await sTaskEditor.addTaskToCurrentActivity(task);
+          await activityEditor.cancelActivity(task);
         });
     });
   }
 
   menu.addItem((item) => {
     item
-      .setTitle("Reveal task in file")
+      .setTitle(isActivity ? "Reveal activity file" : "Reveal task in file")
       .setIcon("file-input")
       .onClick(async () => {
         await workspaceFacade.revealLineInFile(path, line);

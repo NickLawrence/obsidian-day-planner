@@ -73,6 +73,16 @@ export function getRenderKey(task: WithTime<Task> | Task) {
     return getRemoteTaskIdentity(task);
   }
 
+  if (task.activityLocation) {
+    const { path, activityIndex, logEntryIndex } = task.activityLocation;
+    return JSON.stringify([
+      path,
+      activityIndex,
+      logEntryIndex,
+      task.startTime.valueOf(),
+    ]);
+  }
+
   const key: string[] = [];
 
   if (isWithTime(task)) {

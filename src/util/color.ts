@@ -1,15 +1,9 @@
 import chroma from "chroma-js";
 import type { HexString } from "obsidian";
 
-export const activityColorVariants = [
-  "lighter",
-  "light",
-  "default",
-  "dark",
-  "darker",
-] as const;
-
-export type ActivityColorVariant = (typeof activityColorVariants)[number];
+import { type ActivityColorVariant } from "./activity-colors";
+export { activityColorVariants } from "./activity-colors";
+export type { ActivityColorVariant } from "./activity-colors";
 
 const activityColorVariantBrightness: Record<ActivityColorVariant, number> = {
   lighter: 2,

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
-  addOpenClock,
+  startActivityLog,
   cancelOpenClockByActivityIndex,
   clockOut,
   toMarkdown,
@@ -45,12 +45,12 @@ describe("clockOut", () => {
   });
 });
 
-describe("addOpenClock", () => {
+describe("startActivityLog", () => {
   test("creates a new activity when another activity references the same task", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
 
-    const result = addOpenClock(
+    const result = startActivityLog(
       {
         activities: [
           {
@@ -65,7 +65,8 @@ describe("addOpenClock", () => {
           },
         ],
       },
-      { taskId: "shared-task", activityName: "Task" },
+      "task",
+      { taskIds: ["shared-task"] },
     );
 
     expect(result.activities).toHaveLength(2);
@@ -83,7 +84,7 @@ describe("addOpenClock", () => {
 });
 
 describe("toMarkdown", () => {
-  test("omits empty task ids from activities", () => {
+  test("preserves optional task id metadata, including empty arrays", () => {
     const result = toMarkdown({
       activities: [
         {
@@ -99,7 +100,7 @@ describe("toMarkdown", () => {
       ],
     });
 
-    expect(result).not.toContain("taskIds: []");
+    expect(result).toContain("taskIds: []");
     expect(result).toContain("taskIds:");
     expect(result).toContain("- task-123");
   });

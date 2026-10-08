@@ -1,7 +1,7 @@
 import { describe, expect, test, vi, afterEach } from "vitest";
 
 import { upsertActivitiesBlock } from "../src/util/activities-file";
-import { addOpenClock } from "../src/util/props";
+import { startActivityLog } from "../src/util/props";
 
 vi.mock("obsidian", async () => {
   const yaml = await import("js-yaml");
@@ -24,16 +24,13 @@ describe("upsertActivitiesBlock", () => {
     const result = upsertActivitiesBlock({
       fileText: "- [ ] Task\n",
       updateFn: (props) =>
-        addOpenClock(props, {
-          taskId: "task-123",
-          activityName: "Task",
-        }),
+        startActivityLog(props, "Task", { taskIds: ["task-123"] }),
     });
 
     expect(result).toContain("# Activities");
     expect(result).toContain("taskIds:");
     expect(result).toContain("- task-123");
-    expect(result).toContain("activity: task");
+    expect(result).toContain("activity: Task");
     expect(result).toContain("- [ ] Task");
     expect(result).not.toContain("text:");
     expect(result).toMatch(/start:\s*'?\d{4}-\d{2}-\d{2}/);

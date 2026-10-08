@@ -10,7 +10,7 @@
 
   const { task }: { task: LocalTask & { clockActivity?: Activity } } = $props();
 
-  const { workspaceFacade, sTaskEditor } = getObsidianContext();
+  const { workspaceFacade, activityEditor } = getObsidianContext();
 
   function openActivityContextMenu(
     event: MouseEvent | PointerEvent | TouchEvent,
@@ -21,7 +21,7 @@
 
     event.preventDefault();
     event.stopPropagation();
-    createTimeBlockMenu({ event, task, workspaceFacade, sTaskEditor });
+    createTimeBlockMenu({ event, task, workspaceFacade, activityEditor });
   }
 </script>
 

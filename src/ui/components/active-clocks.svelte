@@ -21,7 +21,7 @@
     useSelector,
     workspaceFacade,
     tasksWithActiveClockProps,
-    sTaskEditor,
+    activityEditor,
   } = getObsidianContext();
 
   const listProps = useSelector(selectListProps);
@@ -94,7 +94,7 @@
         createActiveClockMenu({
           event,
           task,
-          sTaskEditor,
+          activityEditor,
           workspaceFacade,
         })}
     >

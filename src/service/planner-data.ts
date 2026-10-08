@@ -1,15 +1,28 @@
 import type { Moment } from "moment";
-import { normalizePath, parseYaml, stringifyYaml, type Vault } from "obsidian";
+import { parseYaml, stringifyYaml, type Vault } from "obsidian";
 import { z } from "zod";
 
 import type { PathToListProps } from "../redux/dataview/dataview-slice";
-import { propsSchema, type Activity } from "../util/props";
+import {
+  activitiesFolder,
+  plannerFolder,
+  goalsFolder,
+  goalsPathFor,
+  hasOpenActivityClock,
+  ActivityRepository,
+  storedActivityId,
+  readStoredActivities,
+} from "../shared/activity";
+import type { Activity } from "../util/props";
 
-import { normalizeActivities } from "./list-props-parser";
-
-export const plannerFolder = "_Planner";
-export const activitiesFolder = `${plannerFolder}/activities`;
-export const goalsFolder = `${plannerFolder}/goals`;
+export {
+  plannerFolder,
+  activitiesFolder,
+  goalsFolder,
+  activitiesPathFor,
+  goalsPathFor,
+} from "../shared/activity";
+const activityYaml = { parse: parseYaml, stringify: stringifyYaml };
 
 export type ActivityPlanEntryKind = "goal" | "estimate";
 export type StoredActivityPlanEntry = {
@@ -25,50 +38,12 @@ const planEntrySchema = z.object({
 });
 const planFileSchema = z.object({ entries: z.array(planEntrySchema) });
 
-function weekKey(date: Moment) {
-  return `${date.isoWeekYear()}-W${String(date.isoWeek()).padStart(2, "0")}`;
-}
-
-function weeklyPath(folder: string, date: Moment) {
-  const key = weekKey(date);
-  return normalizePath(`${folder}/${date.isoWeekYear()}/${key}.yaml`);
-}
-
-export function activitiesPathFor(date: Moment) {
-  return weeklyPath(activitiesFolder, date);
-}
-
-export function goalsPathFor(date: Moment) {
-  return weeklyPath(goalsFolder, date);
-}
-
-function activityStart(activity: Activity) {
-  const starts = (activity.log ?? []).map(({ start }) =>
-    window.moment(start, window.moment.ISO_8601, true),
-  );
-  if (starts.length === 0 || starts.some((start) => !start.isValid())) {
-    throw new Error(`Activity "${activity.activity}" has no valid start time`);
-  }
-  return starts.reduce((earliest, start) =>
-    start.isBefore(earliest) ? start : earliest,
-  );
-}
-
-function serializeActivities(activities: Activity[]) {
-  return stringifyYaml({
-    activities: activities.map(({ taskIds, ...activity }) => ({
-      ...activity,
-      ...(taskIds.length > 0 ? { taskIds } : {}),
-    })),
-  });
-}
-
 async function ensureParentFolders(vault: Vault, path: string) {
   const parts = path.split("/").slice(0, -1);
   let current = "";
   for (const part of parts) {
     current = current ? `${current}/${part}` : part;
-    if (!vault.getAbstractFileByPath(current))
+    if (!(await vault.adapter.exists(current)))
       await vault.createFolder(current);
   }
 }
@@ -76,8 +51,42 @@ async function ensureParentFolders(vault: Vault, path: string) {
 export class PlannerData {
   private activitiesByPath = new Map<string, Activity[]>();
   private listeners = new Set<() => void>();
+  private readonly repository: ActivityRepository;
+  private fileContents?: Map<string, string>;
+  private loading?: Promise<void>;
+  private reloadRequested = false;
 
-  constructor(private readonly vault: Vault) {}
+  constructor(private readonly vault: Vault) {
+    this.repository = new ActivityRepository(
+      {
+        listFiles: () => this.listDataFiles(),
+        readFile: (path) => this.readDataFile(path),
+        writeFile: async (path, contents, expected) => {
+          await ensureParentFolders(vault, path);
+          const file = vault.getFileByPath(path);
+          if (file) {
+            await vault.process(file, (current) => {
+              if (current !== expected)
+                throw new Error(
+                  "The activity file changed. Refresh and try again.",
+                );
+              return contents;
+            });
+          } else {
+            const current = await this.readDataFile(path);
+            if (current !== expected)
+              throw new Error(
+                "The activity file changed. Refresh and try again.",
+              );
+            // Sync can create a YAML file before Obsidian indexes it as a TFile.
+            if (current !== null) await vault.adapter.write(path, contents);
+            else await vault.create(path, contents);
+          }
+        },
+      },
+      activityYaml,
+    );
+  }
 
   onChange(listener: () => void) {
     this.listeners.add(listener);
@@ -90,27 +99,74 @@ export class PlannerData {
 
   isDataPath(path: string) {
     return (
+      path === plannerFolder ||
+      path === activitiesFolder ||
+      path === goalsFolder ||
       path.startsWith(`${activitiesFolder}/`) ||
       path.startsWith(`${goalsFolder}/`)
     );
   }
 
-  async loadActivities() {
+  private async listDataFiles() {
+    const files: string[] = [];
+    const visit = async (folder: string) => {
+      if (!(await this.vault.adapter.exists(folder))) return;
+      const children = await this.vault.adapter.list(folder);
+      files.push(...children.files.filter((path) => path.endsWith(".yaml")));
+      for (const child of children.folders) await visit(child);
+    };
+    await visit(activitiesFolder);
+    await visit(goalsFolder);
+    return files.sort();
+  }
+
+  private async readDataFile(path: string) {
+    return (await this.vault.adapter.exists(path))
+      ? this.vault.adapter.read(path)
+      : null;
+  }
+
+  loadActivities(): Promise<void> {
+    this.reloadRequested = true;
+    if (!this.loading) {
+      this.loading = this.reloadActivities().finally(() => {
+        this.loading = undefined;
+      });
+    }
+    return this.loading;
+  }
+
+  private async reloadActivities() {
+    while (this.reloadRequested) {
+      this.reloadRequested = false;
+      await this.readActivitiesSnapshot();
+    }
+  }
+
+  private async readActivitiesSnapshot() {
+    const contents = new Map<string, string>();
+    for (const path of await this.listDataFiles()) {
+      const data = await this.readDataFile(path);
+      if (data !== null) contents.set(path, data);
+    }
+    if (
+      this.fileContents &&
+      contents.size === this.fileContents.size &&
+      [...contents].every(
+        ([path, data]) => this.fileContents!.get(path) === data,
+      )
+    )
+      return;
     const next = new Map<string, Activity[]>();
-    for (const file of this.vault.getFiles()) {
-      if (file.extension !== "yaml") continue;
-      if (file.path.startsWith(`${activitiesFolder}/`)) {
-        const props = propsSchema.parse(
-          normalizeActivities(parseYaml(await this.vault.read(file))),
-        );
-        const activities = props.activities ?? [];
-        activities.forEach(activityStart);
-        next.set(file.path, activities);
-      } else if (file.path.startsWith(`${goalsFolder}/`)) {
-        planFileSchema.parse(parseYaml(await this.vault.read(file)));
+    for (const { path, record } of readStoredActivities(contents, activityYaml))
+      next.set(path, [...(next.get(path) ?? []), record]);
+    for (const [path, data] of contents) {
+      if (path.startsWith(`${goalsFolder}/`)) {
+        planFileSchema.parse(parseYaml(data));
       }
     }
     this.activitiesByPath = next;
+    this.fileContents = contents;
     this.changed();
   }
 
@@ -137,7 +193,7 @@ export class PlannerData {
 
   getOpenActivities() {
     return this.getActivitiesWithLocations().filter(({ activity }) =>
-      activity.log?.some((entry) => !entry.end),
+      hasOpenActivityClock(activity),
     );
   }
 
@@ -150,55 +206,34 @@ export class PlannerData {
   }
 
   async addActivity(activity: Activity) {
-    const path = activitiesPathFor(activityStart(activity));
-    await this.updateActivities(path, (activities) => [
-      ...activities,
-      activity,
-    ]);
+    await this.repository.addActivity(activity);
+    await this.loadActivities();
   }
 
   async updateActivities(
     path: string,
     update: (activities: Activity[]) => Activity[],
   ) {
-    const activities =
-      propsSchema.parse({
-        activities: update(this.activitiesByPath.get(path) ?? []),
-      }).activities ?? [];
-    activities.forEach(activityStart);
-    const staying: Activity[] = [];
-    const moved = new Map<string, Activity[]>();
-    for (const activity of activities) {
-      const destination = activitiesPathFor(activityStart(activity));
-      if (destination === path) staying.push(activity);
-      else
-        moved.set(destination, [...(moved.get(destination) ?? []), activity]);
-    }
-    await this.writeActivities(path, staying);
-    this.activitiesByPath.set(path, staying);
-    for (const [destination, movedActivities] of moved) {
-      const combined = [
-        ...(this.activitiesByPath.get(destination) ?? []),
-        ...movedActivities,
-      ];
-      await this.writeActivities(destination, combined);
-      this.activitiesByPath.set(destination, combined);
-    }
-    this.changed();
-  }
-
-  private async writeActivities(path: string, activities: Activity[]) {
-    await ensureParentFolders(this.vault, path);
-    const contents = serializeActivities(activities);
-    const file = this.vault.getFileByPath(path);
-    if (file) await this.vault.modify(file, contents);
-    else await this.vault.create(path, contents);
+    const visible = this.activitiesByPath.get(path) ?? [];
+    await this.repository.updateActivities(path, (latest) => {
+      if (
+        visible.some(
+          (record, index) =>
+            !latest[index] ||
+            storedActivityId(path, record) !==
+              storedActivityId(path, latest[index]),
+        )
+      )
+        throw new Error("The activity list changed. Refresh and try again.");
+      return update(latest);
+    });
+    await this.loadActivities();
   }
 
   async readPlanEntries(week: Moment): Promise<StoredActivityPlanEntry[]> {
-    const file = this.vault.getFileByPath(goalsPathFor(week));
-    if (!file) return [];
-    return planFileSchema.parse(parseYaml(await this.vault.read(file))).entries;
+    const contents = await this.readDataFile(goalsPathFor(week));
+    if (contents === null) return [];
+    return planFileSchema.parse(parseYaml(contents)).entries;
   }
 
   async upsertPlanEntry(week: Moment, entry: StoredActivityPlanEntry) {
@@ -214,8 +249,10 @@ export class PlannerData {
     const contents = stringifyYaml({ entries: updated });
     const file = this.vault.getFileByPath(path);
     if (file) await this.vault.modify(file, contents);
+    else if (await this.vault.adapter.exists(path))
+      await this.vault.adapter.write(path, contents);
     else await this.vault.create(path, contents);
-    this.changed();
+    await this.loadActivities();
   }
 
   async createOrOpenGoalsFile(week: Moment) {

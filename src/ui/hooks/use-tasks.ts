@@ -13,10 +13,10 @@ import type { DayPlannerSettings } from "../../settings";
 import type { LocalTask, RemoteTask, Task, WithTime } from "../../task-types";
 import type { OnEditAbortedFn, OnUpdateFn, PointerDateTime } from "../../types";
 import { getActivityDisplayLabel } from "../../util/activity-definitions";
+import { getActivityLogEntries } from "../../util/activity-log-location";
 import { getActivityResourcePath } from "../../util/activity-resources";
 import { createClockTaskFromActivity } from "../../util/clock";
 import { doesOverlapWithRange, splitMultiday } from "../../util/moment";
-import { type LogEntry } from "../../util/props";
 import { getUpdateTrigger } from "../../util/store";
 import { getDayKey, getRenderKey } from "../../util/task-utils";
 
@@ -77,46 +77,52 @@ export function useTasks(props: {
     refreshSignal: debouncedTaskUpdateTrigger,
   });
 
-  const activitiesWithLogs = derived([listProps], ([$listProps]) => {
-    return Object.entries($listProps).flatMap(([path, lineToProps]) =>
+  const activitiesWithLogs = derived([listProps], ([$listProps]) =>
+    Object.entries($listProps).flatMap(([path, lineToProps]) =>
       Object.values(lineToProps).flatMap(({ parsed, position }) =>
-        (parsed.activities ?? [])
-          .filter((activity) => activity?.log?.length)
-          .map((activity) => ({
-            activity: activity.activity,
+        (parsed.activities ?? []).map((activity, activityIndex) => ({
+          activity: {
+            ...activity,
             title: getActivityDisplayLabel(activity.activity, activity),
-            notes: activity.notes,
-            quality: activity.quality,
             resourcePath: getActivityResourcePath({
               metadataCache,
               activityName: activity.activity,
               activityEntry: activity,
               sourcePath: path,
             }),
-            log: activity.log as LogEntry[],
-            taskId: activity.taskIds?.[0],
-            location: {
-              path,
-              position,
-            },
-          })),
+            location: { path, position },
+          },
+          path,
+          activityIndex,
+        })),
       ),
-    );
-  });
+    ),
+  );
 
-  const logSummary = derived([activitiesWithLogs], ([$activitiesWithLogs]) =>
-    $activitiesWithLogs.map(({ title, log }) => ({
-      title,
-      log: log.map(({ start, end }) => ({
+  const activityEntries = derived(activitiesWithLogs, ($rows) =>
+    $rows.flatMap(({ activity, path, activityIndex }) =>
+      getActivityLogEntries(path, [activity]).map(
+        ({ log, activityLocation }) => ({
+          activity,
+          log,
+          activityLocation: { ...activityLocation, activityIndex },
+        }),
+      ),
+    ),
+  );
+
+  const logSummary = derived(activitiesWithLogs, ($rows) =>
+    $rows.map(({ activity }) => ({
+      title: activity.title,
+      log: (activity.log ?? []).map(({ start, end }) => ({
         start,
         end: end || "-",
       })),
-      timeSpent: log.reduce((result, current) => {
-        const start = window.moment(current.start);
-        const end = window.moment(current.end);
-
-        return result.add(end.diff(start));
-      }, window.moment.duration()),
+      timeSpent: (activity.log ?? []).reduce(
+        (result, log) =>
+          result.add(window.moment(log.end).diff(window.moment(log.start))),
+        window.moment.duration(),
+      ),
     })),
   );
 
@@ -126,50 +132,30 @@ export function useTasks(props: {
     periodicNotes,
   );
 
-  const tasksById = derived(localTasks, ($localTasks) => {
-    return new Map(
-      $localTasks
-        .filter((task): task is LocalTask & { taskId: string } =>
-          Boolean(task.taskId),
-        )
-        .map((task) => [task.taskId, task]),
-    );
-  });
-
   const tasksWithActiveClockProps = derived(
-    [activitiesWithLogs, currentTime, tasksById],
-    ([$activitiesWithLogs, $currentTime, $tasksById]) =>
-      $activitiesWithLogs
-        .flatMap((activity) =>
-          activity.log
-            .filter(({ end }) => typeof end === "undefined")
-            .map(({ start }) => ({
-              activity,
-              start,
-              clockMoments: [
-                window.moment(start, window.moment.ISO_8601, true),
-                $currentTime.clone(),
-              ] as [Moment, Moment],
-            })),
-        )
-        .filter(({ clockMoments: [start] }) => start.isValid())
-        .map(({ activity, start, clockMoments }) => ({
-          key: `${activity.activity}-${start}`,
-          task: {
-            ...createClockTaskFromActivity({
-              activity,
-              clockMoments,
-              tasksById: $tasksById,
-              defaultDurationMinutes,
-            }),
-            clockActivity: { ...activity, log: [{ start }] },
-          },
+    [activityEntries, currentTime],
+    ([$entries, $currentTime]) =>
+      $entries
+        .filter(({ log }) => typeof log.end === "undefined")
+        .map(({ activity, log, activityLocation }) => ({
+          activity,
+          log,
+          activityLocation,
+          clockMoments: [
+            window.moment(log.start, window.moment.ISO_8601, true),
+            $currentTime.clone(),
+          ] as [Moment, Moment],
         }))
-        .filter(
-          ({ key }, index, entries) =>
-            entries.findIndex((entry) => entry.key === key) === index,
-        )
-        .map(({ task }) => task),
+        .filter(({ clockMoments: [start] }) => start.isValid())
+        .map(({ activity, log, activityLocation, clockMoments }) => ({
+          ...createClockTaskFromActivity({
+            activity,
+            clockMoments,
+            defaultDurationMinutes,
+          }),
+          activityLocation,
+          clockActivity: { ...activity, log: [log] },
+        })),
   );
 
   const splitTasksWithActiveClockProps = derived(
@@ -191,43 +177,23 @@ export function useTasks(props: {
       }),
   );
 
-  const logRecords = derived(
-    [activitiesWithLogs, tasksById],
-    ([$activitiesWithLogs, $tasksById]) =>
-      $activitiesWithLogs
-        .flatMap((activity) => {
-          return activity.log
-            .filter(({ end }) => typeof end !== "undefined")
-            .flatMap(({ start, end }) => {
-              const parsedStart = window.moment(
-                start,
-                window.moment.ISO_8601,
-                true,
-              );
-              const parsedEnd = window.moment(
-                end,
-                window.moment.ISO_8601,
-                true,
-              );
-
-              return splitMultiday(parsedStart, parsedEnd).map(
-                (clockMoments) => ({
-                  activity,
-                  clockMoments,
-                  logEntry: { start, end },
-                }),
-              );
-            });
-        })
-        .map(({ activity, clockMoments, logEntry }) => ({
+  const logRecords = derived([activityEntries], ([$entries]) =>
+    $entries
+      .filter(({ log }) => typeof log.end !== "undefined")
+      .flatMap(({ activity, log, activityLocation }) =>
+        splitMultiday(
+          window.moment(log.start, window.moment.ISO_8601, true),
+          window.moment(log.end, window.moment.ISO_8601, true),
+        ).map((clockMoments) => ({
           ...createClockTaskFromActivity({
             activity,
             clockMoments,
             defaultDurationMinutes,
-            tasksById: $tasksById,
           }),
-          clockActivity: { ...activity, log: [logEntry] },
+          activityLocation,
+          clockActivity: { ...activity, log: [log] },
         })),
+      ),
   );
 
   const combinedClocks = derived(

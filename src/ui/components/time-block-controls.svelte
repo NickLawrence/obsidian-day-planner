@@ -29,13 +29,13 @@
   const {
     editContext: { editOperation },
     workspaceFacade,
-    sTaskEditor,
+    activityEditor,
   } = getObsidianContext();
 </script>
 
 <Selectable
   onSecondarySelect={(event) =>
-    createTimeBlockMenu({ event, task, workspaceFacade, sTaskEditor })}
+    createTimeBlockMenu({ event, task, workspaceFacade, activityEditor })}
   selectionBlocked={Boolean($editOperation)}
 >
   {#snippet children(selectable)}
