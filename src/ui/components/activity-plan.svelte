@@ -8,6 +8,7 @@
     normalizeActivityName,
   } from "../../util/activity-definitions";
   import { getWeekRangeFor } from "../../util/activity-log-summary";
+  import { formatDuration } from "../../util/duration";
   import { type ActivityPlanEntryKind } from "../../util/weekly-activity-goals";
 
   type ActivityPlanItem = {
@@ -87,7 +88,7 @@
   }
 
   function formatHours(hours: number) {
-    return Number.isInteger(hours) ? `${hours}` : hours.toFixed(1);
+    return formatDuration(window.moment.duration(hours, "hours"));
   }
 
   function mergePlanEntries(
@@ -235,7 +236,7 @@
       <div class="subtitle">Weekly allocation · {weekLabel}</div>
     </div>
     <div class="remaining" class:over={remainingHours < 0}>
-      {formatHours(Math.abs(remainingHours))}h
+      {formatHours(Math.abs(remainingHours))}
       {remainingHours < 0 ? "over" : "left"}
     </div>
   </div>
@@ -247,15 +248,15 @@
   <div class="activity-summary">
     <div>
       <span class="summary-label">Planned</span>
-      <span class="summary-value">{formatHours(totalHours)}h</span>
+      <span class="summary-value">{formatHours(totalHours)}</span>
     </div>
     <div>
       <span class="summary-label">Per day</span>
-      <span class="summary-value">{formatHours(totalHours / 7)}h</span>
+      <span class="summary-value">{formatHours(totalHours / 7)}</span>
     </div>
     <div>
       <span class="summary-label">Week</span>
-      <span class="summary-value">{weeklyHours}h</span>
+      <span class="summary-value">{formatHours(weeklyHours)}</span>
     </div>
   </div>
 
@@ -277,8 +278,8 @@
             <span>{getLabel(item.name)}</span>
           </span>
           <span class="activity-value" class:goal={kind === "goal"}>
-            {formatHours(hours)}h
-            <span class="per-day">/ {formatHours(hours / 7)}h day</span>
+            {formatHours(hours)}
+            <span class="per-day">/ {formatHours(hours / 7)} day</span>
           </span>
         </div>
 
@@ -302,6 +303,7 @@
           <input
             style={`--slider-fill:${getSliderFillPercent(hours, maxHours)}%;`}
             aria-label={`Hours for ${getLabel(item.name)}`}
+            aria-valuetext={formatHours(hours)}
             max={maxHours}
             min="0"
             onchange={() => saveActivityByName(item.name)}
