@@ -8,7 +8,11 @@
     normalizeActivityName,
   } from "../../util/activity-definitions";
   import { getWeekRangeFor } from "../../util/activity-log-summary";
-  import { type ActivityPlanEntryKind } from "../../util/weekly-activity-goals";
+  import {
+    type ActivityPlanEntryKind,
+    sortActivityPlanItemsByRecordedTime,
+  } from "../../util/weekly-activity-goals";
+  import { scrollSafeRange } from "../scroll-safe-range";
 
   type ActivityPlanItem = {
     name: string;
@@ -128,7 +132,10 @@
       }
     }
 
-    activityPlanItems = nextItems;
+    activityPlanItems = sortActivityPlanItemsByRecordedTime(
+      nextItems,
+      plannerData.getAllActivities(),
+    );
     planByActivity = nextPlanByActivity;
   }
 
@@ -299,18 +306,20 @@
             </select>
           </label>
 
-          <input
-            style={`--slider-fill:${getSliderFillPercent(hours, maxHours)}%;`}
-            aria-label={`Hours for ${getLabel(item.name)}`}
-            max={maxHours}
-            min="0"
-            onchange={() => saveActivityByName(item.name)}
-            oninput={(event) =>
-              setActivityHours(item.name, event.currentTarget.value)}
-            step={intervalHours}
-            type="range"
-            value={hours}
-          />
+          <div class="goal-slider" use:scrollSafeRange>
+            <input
+              style={`--slider-fill:${getSliderFillPercent(hours, maxHours)}%;`}
+              aria-label={`Hours for ${getLabel(item.name)}`}
+              max={maxHours}
+              min="0"
+              onchange={() => saveActivityByName(item.name)}
+              oninput={(event) =>
+                setActivityHours(item.name, event.currentTarget.value)}
+              step={intervalHours}
+              type="range"
+              value={hours}
+            />
+          </div>
         </div>
       </div>
     {/each}
@@ -486,7 +495,13 @@
     clip: rect(0, 0, 0, 0);
   }
 
+  .goal-slider {
+    cursor: pointer;
+    touch-action: pan-y;
+  }
+
   input[type="range"] {
+    pointer-events: none;
     cursor: pointer;
 
     width: 100%;

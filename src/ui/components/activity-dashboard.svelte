@@ -143,7 +143,11 @@
       {/if}
     </section>
 
-    <WeeklyActivityHeatmap label={definition.label} weeks={dashboard.weeks} />
+    <WeeklyActivityHeatmap
+      label={definition.label}
+      weeks={dashboard.weeks}
+      allowDaily
+    />
 
     <section>
       <h3>{definition.emoji ?? ""} {definition.label} — Activity Logs</h3>

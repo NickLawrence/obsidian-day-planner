@@ -18,13 +18,27 @@
     square = false,
     color,
     rows,
+    allowDaily = false,
   }: {
     weeks?: ActivityDashboardWeek[];
     label: string;
     square?: boolean;
     color?: string;
     rows?: WeeklyActivityHeatmapRow[];
+    allowDaily?: boolean;
   } = $props();
+
+  let view = $state<"weekly" | "daily">("weekly");
+  const daily = $derived(allowDaily && view === "daily");
+  const weekdays = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+  ];
 
   const displayedWeeks = $derived(rows?.[0]?.weeks ?? weeks);
   const monthGroups = $derived(
@@ -84,35 +98,129 @@
     </div>
   </div>
 {:else}
-  <div
-    style:--activity-heatmap-color={color}
-    class="activity-heatmap"
-    class:square
-  >
-    <div class="month-labels" aria-hidden="true">
-      {#each monthGroups as group}
-        <span style={`grid-column: ${group.start} / span ${group.count}`}
-          >{group.month}</span
+  <div class="frequency-layout">
+    {#if allowDaily}
+      <div
+        class="view-buttons"
+        aria-label="Activity frequency view"
+        role="group"
+      >
+        <button
+          class:active={!daily}
+          aria-label="Weekly view"
+          aria-pressed={!daily}
+          onclick={() => (view = "weekly")}
+          type="button">W</button
         >
-      {/each}
-    </div>
-    <div class="week-bars">
-      {#each weeks as week}
-        <div
-          style={`--week-intensity: ${week.intensity}`}
-          class="week-bar"
-          class:empty={week.minutes === 0}
-          aria-label={`${label}, ${week.start} through ${week.end}: ${displayTime(week.minutes)}`}
-          use:weeklyTooltip={`${week.start}–${week.end}: ${displayTime(week.minutes)}`}
-        ></div>
-      {/each}
+        <button
+          class:active={daily}
+          aria-label="Daily view"
+          aria-pressed={daily}
+          onclick={() => (view = "daily")}
+          type="button">D</button
+        >
+      </div>
+    {/if}
+    {#if daily}
+      <div class="weekday-labels" aria-label="Days of the week">
+        {#each weekdays as day}
+          <span aria-label={day}>{day[0]}</span>
+        {/each}
+      </div>
+    {/if}
+    <div
+      style:--activity-heatmap-color={color}
+      class="activity-heatmap"
+      class:daily
+      class:square
+    >
+      <div class="month-labels" aria-hidden="true">
+        {#each monthGroups as group}
+          <span style={`grid-column: ${group.start} / span ${group.count}`}
+            >{group.month}</span
+          >
+        {/each}
+      </div>
+      {#if daily}
+        <div class="day-grid">
+          {#each weeks as week, weekIndex}
+            {#each week.days as day, dayIndex}
+              <div
+                style={`--week-intensity: ${day.intensity}; grid-column: ${weekIndex + 1}; grid-row: ${dayIndex + 1}`}
+                class="week-bar day-cell"
+                class:empty={day.minutes === 0}
+                aria-label={`${label}, ${day.date}: ${displayTime(day.minutes)}`}
+                use:weeklyTooltip={`${day.date}: ${displayTime(day.minutes)}`}
+              ></div>
+            {/each}
+          {/each}
+        </div>
+      {:else}
+        <div class="week-bars">
+          {#each weeks as week}
+            <div
+              style={`--week-intensity: ${week.intensity}`}
+              class="week-bar"
+              class:empty={week.minutes === 0}
+              aria-label={`${label}, ${week.start} through ${week.end}: ${displayTime(week.minutes)}`}
+              use:weeklyTooltip={`${week.start}–${week.end}: ${displayTime(week.minutes)}`}
+            ></div>
+          {/each}
+        </div>
+      {/if}
     </div>
   </div>
 {/if}
 
 <style>
+  .frequency-layout {
+    display: flex;
+    gap: var(--size-2-2);
+    align-items: flex-start;
+  }
+
+  .view-buttons {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    gap: 2px;
+
+    padding-top: var(--size-2-2);
+  }
+
+  .view-buttons button {
+    width: 1.8rem;
+    height: 1.8rem;
+    padding: 0;
+
+    color: var(--text-muted);
+
+    background: var(--background-secondary);
+    box-shadow: none;
+  }
+
+  .view-buttons button.active {
+    color: var(--text-on-accent);
+    background: var(--interactive-accent);
+  }
+
+  .weekday-labels {
+    display: grid;
+    grid-template-rows: repeat(7, 0.75rem);
+    flex: 0 0 auto;
+    gap: 2px;
+
+    margin-top: calc(var(--size-2-2) * 2 + 1.2rem);
+
+    font-size: 0.65rem;
+    line-height: 0.75rem;
+    color: var(--text-muted);
+  }
+
   .activity-heatmap {
     overflow-x: auto;
+    flex: 1;
+    min-width: 0;
     padding: var(--size-2-2) 0 var(--size-4-2);
   }
 
@@ -194,12 +302,30 @@
   .month-labels {
     margin-bottom: var(--size-2-2);
     font-size: var(--font-ui-smaller);
+    line-height: 1.2rem;
     color: var(--text-muted);
   }
 
   .month-labels span {
     overflow: hidden;
     text-align: center;
+  }
+
+  .day-grid,
+  .daily .month-labels {
+    display: grid;
+    grid-template-columns: repeat(52, 0.75rem);
+    gap: 2px;
+    min-width: max-content;
+  }
+
+  .day-grid {
+    grid-template-rows: repeat(7, 0.75rem);
+  }
+
+  .day-grid .day-cell {
+    width: 0.75rem;
+    height: 0.75rem;
   }
 
   .week-bar {

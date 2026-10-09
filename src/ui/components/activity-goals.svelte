@@ -306,50 +306,25 @@
           }
         : null;
 
-    const estimateKeys = new Set(
-      planEntries
-        .filter((entry) => entry.kind === "estimate")
-        .map((entry) => normalizeActivityName(entry.activity)),
-    );
-    const otherRowsByActivity = new Map(
-      withGoals
-        .filter((entry) => !entry.goal)
-        .filter(
-          (entry) =>
-            entry.duration.asMilliseconds() > 0 ||
-            estimateKeys.has(entry.activityKey),
-        )
-        .map(({ activity, activityKey, duration }) => [
-          activityKey,
-          { activity, activityKey, duration },
-        ]),
-    );
+    otherActivityRows = withGoals
+      .filter((entry) => !entry.goal && entry.duration.asMilliseconds() > 0)
+      .map(({ activity, activityKey, duration }) => ({
+        activity,
+        activityKey,
+        duration,
+      }))
+      .sort((a, b) => {
+        const durationDiff =
+          b.duration.asMilliseconds() - a.duration.asMilliseconds();
 
-    for (const entry of planEntries) {
-      if (entry.kind !== "estimate") continue;
+        if (durationDiff !== 0) {
+          return durationDiff;
+        }
 
-      const activityKey = normalizeActivityName(entry.activity);
-      if (!otherRowsByActivity.has(activityKey)) {
-        otherRowsByActivity.set(activityKey, {
-          activity: entry.activity,
-          activityKey,
-          duration: window.moment.duration(0),
+        return a.activity.localeCompare(b.activity, undefined, {
+          sensitivity: "base",
         });
-      }
-    }
-
-    otherActivityRows = [...otherRowsByActivity.values()].sort((a, b) => {
-      const durationDiff =
-        b.duration.asMilliseconds() - a.duration.asMilliseconds();
-
-      if (durationDiff !== 0) {
-        return durationDiff;
-      }
-
-      return a.activity.localeCompare(b.activity, undefined, {
-        sensitivity: "base",
       });
-    });
   }
 
   function progressPercent(
@@ -390,6 +365,15 @@
       No goals found for this week under the “Activity goals” heading.
     </div>
   {:else}
+    <div class="legend" aria-label="Weekly day color legend">
+      {#each legendDays as day}
+        <div class="legend-item">
+          <span style={`--legend-color:${day.color};`} class="legend-swatch"
+          ></span>
+          <span>{day.shortLabel}</span>
+        </div>
+      {/each}
+    </div>
     <div class="goal-list">
       {#each rows as row (row.activityKey)}
         {@const definition = getActivityDefinition(row.activityKey)}
@@ -490,15 +474,6 @@
           >{formatDuration(unrecordedTime)}</span
         >
       </div>
-    </div>
-    <div class="legend" aria-label="Weekly day color legend">
-      {#each legendDays as day}
-        <div class="legend-item">
-          <span style={`--legend-color:${day.color};`} class="legend-swatch"
-          ></span>
-          <span>{day.shortLabel}</span>
-        </div>
-      {/each}
     </div>
   {/if}
 </div>

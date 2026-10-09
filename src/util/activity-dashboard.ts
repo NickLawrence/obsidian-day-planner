@@ -24,27 +24,31 @@ export type ActivityDashboardGroup = {
   latest: string;
 };
 
+export type ActivityDashboardDay = {
+  date: string;
+  minutes: number;
+  intensity: number;
+};
+
 export type ActivityDashboardWeek = {
   start: string;
   end: string;
   month: string;
   minutes: number;
   intensity: number;
+  days: ActivityDashboardDay[];
 };
 
-function buildWeeks(rows: ActivityDashboardRow[], year: number) {
+function buildWeeks(minutesByDay: Map<string, number>, year: number) {
   // January 4 is always in the first ISO week assigned to a calendar year.
   const firstWeek = window.moment(`${year}-01-04`).startOf("isoWeek");
-  const minutesByWeek = new Map<string, number>();
-
-  for (const row of rows) {
-    const week = window.moment(row.day).startOf("isoWeek").format("YYYY-MM-DD");
-    minutesByWeek.set(week, (minutesByWeek.get(week) ?? 0) + row.minutes);
-  }
-
   const weeks = Array.from({ length: 52 }, (_, index) => {
     const start = firstWeek.clone().add(index, "weeks");
-    const minutes = minutesByWeek.get(start.format("YYYY-MM-DD")) ?? 0;
+    const days = Array.from({ length: 7 }, (_, dayIndex) => {
+      const date = start.clone().add(dayIndex, "days").format("YYYY-MM-DD");
+      return { date, minutes: minutesByDay.get(date) ?? 0, intensity: 0 };
+    });
+    const minutes = days.reduce((total, day) => total + day.minutes, 0);
 
     return {
       start: start.format("YYYY-MM-DD"),
@@ -53,13 +57,23 @@ function buildWeeks(rows: ActivityDashboardRow[], year: number) {
       month: start.clone().add(3, "days").format("MMM"),
       minutes,
       intensity: 0,
+      days,
     };
   });
   const maximum = Math.max(0, ...weeks.map(({ minutes }) => minutes));
 
+  const dailyMaximum = Math.max(
+    0,
+    ...weeks.flatMap(({ days }) => days.map(({ minutes }) => minutes)),
+  );
+
   return weeks.map((week) => ({
     ...week,
     intensity: maximum === 0 ? 0 : week.minutes / maximum,
+    days: week.days.map((day) => ({
+      ...day,
+      intensity: dailyMaximum === 0 ? 0 : day.minutes / dailyMaximum,
+    })),
   }));
 }
 
@@ -84,6 +98,7 @@ export function buildActivityDashboard(
   const ranges = attributes?.ranges ?? [];
   const groups = new Map<string, ActivityDashboardGroup>();
   const rows: ActivityDashboardRow[] = [];
+  const minutesByDay = new Map<string, number>();
 
   for (const activity of activities) {
     if (
@@ -117,6 +132,20 @@ export function buildActivityDashboard(
       const minutes = Math.round(
         window.moment.duration(end.diff(start)).asMinutes(),
       );
+      let segmentStart = start.clone();
+      while (segmentStart.isBefore(end)) {
+        const segmentEnd = window.moment.min(
+          end,
+          segmentStart.clone().startOf("day").add(1, "day"),
+        );
+        const date = segmentStart.format("YYYY-MM-DD");
+        minutesByDay.set(
+          date,
+          (minutesByDay.get(date) ?? 0) +
+            segmentEnd.diff(segmentStart) / 60_000,
+        );
+        segmentStart = segmentEnd;
+      }
       const day = start.format("YYYY-MM-DD");
       const rangeValues = ranges.map(({ start: startKey, end: endKey }) => {
         const rangeStart = Number(details[startKey]);
@@ -155,7 +184,7 @@ export function buildActivityDashboard(
   }
 
   return {
-    weeks: buildWeeks(rows, year),
+    weeks: buildWeeks(minutesByDay, year),
     rows: rows.sort((a, b) => b.day.localeCompare(a.day)),
     groups: [...groups.values()].sort((a, b) => b.minutes - a.minutes),
   };
