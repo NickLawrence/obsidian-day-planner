@@ -1,7 +1,10 @@
 <script lang="ts">
   import { setTooltip } from "obsidian";
 
-  import type { ActivityDashboardWeek } from "../../util/activity-dashboard";
+  import type {
+    ActivityDashboardWeek,
+    ActivityDashboardItem,
+  } from "../../util/activity-dashboard";
   import { formatDuration } from "../../util/duration";
 
   type WeeklyActivityHeatmapRow = {
@@ -28,6 +31,7 @@
     allowDaily?: boolean;
   } = $props();
 
+  let dayCellSize = $state(12);
   let view = $state<"weekly" | "daily">("weekly");
   const daily = $derived(allowDaily && view === "daily");
   const weekdays = [
@@ -52,8 +56,28 @@
     }, []),
   );
 
+  function trackDayCellSize(node: HTMLElement) {
+    const observer = new ResizeObserver(() => {
+      const cell = node.querySelector<HTMLElement>(".day-cell");
+      if (cell) dayCellSize = cell.getBoundingClientRect().width;
+    });
+    observer.observe(node);
+    return { destroy: () => observer.disconnect() };
+  }
+
   function displayTime(minutes: number) {
     return formatDuration(window.moment.duration(minutes, "minutes"));
+  }
+
+  function frequencyTooltip(
+    period: string,
+    minutes: number,
+    items: ActivityDashboardItem[],
+  ) {
+    return [
+      `${period}: ${displayTime(minutes)}`,
+      ...items.map(({ name, minutes }) => `${name}: ${displayTime(minutes)}`),
+    ].join("\n");
   }
 
   function weeklyTooltip(node: HTMLElement, text: string) {
@@ -88,7 +112,11 @@
             class="week-bar square-cell"
             class:empty={week.minutes === 0}
             aria-label={`${row.label}, ${week.start} through ${week.end}: ${displayTime(week.minutes)}`}
-            use:weeklyTooltip={`${row.label} · ${week.start}–${week.end}: ${displayTime(week.minutes)}`}
+            use:weeklyTooltip={frequencyTooltip(
+              `${row.label} · ${week.start}–${week.end}`,
+              week.minutes,
+              week.items,
+            )}
           ></div>
         {/each}
         <span style={`grid-row: ${rowIndex + 2}`} class="row-total">
@@ -98,7 +126,7 @@
     </div>
   </div>
 {:else}
-  <div class="frequency-layout">
+  <div style:--day-cell-size={`${dayCellSize}px`} class="frequency-layout">
     {#if allowDaily}
       <div
         class="view-buttons"
@@ -142,7 +170,7 @@
         {/each}
       </div>
       {#if daily}
-        <div class="day-grid">
+        <div class="day-grid" use:trackDayCellSize>
           {#each weeks as week, weekIndex}
             {#each week.days as day, dayIndex}
               <div
@@ -150,7 +178,11 @@
                 class="week-bar day-cell"
                 class:empty={day.minutes === 0}
                 aria-label={`${label}, ${day.date}: ${displayTime(day.minutes)}`}
-                use:weeklyTooltip={`${day.date}: ${displayTime(day.minutes)}`}
+                use:weeklyTooltip={frequencyTooltip(
+                  day.date,
+                  day.minutes,
+                  day.items,
+                )}
               ></div>
             {/each}
           {/each}
@@ -163,7 +195,11 @@
               class="week-bar"
               class:empty={week.minutes === 0}
               aria-label={`${label}, ${week.start} through ${week.end}: ${displayTime(week.minutes)}`}
-              use:weeklyTooltip={`${week.start}–${week.end}: ${displayTime(week.minutes)}`}
+              use:weeklyTooltip={frequencyTooltip(
+                `${week.start}–${week.end}`,
+                week.minutes,
+                week.items,
+              )}
             ></div>
           {/each}
         </div>
@@ -206,14 +242,14 @@
 
   .weekday-labels {
     display: grid;
-    grid-template-rows: repeat(7, 0.75rem);
+    grid-template-rows: repeat(7, var(--day-cell-size));
     flex: 0 0 auto;
     gap: 2px;
 
     margin-top: calc(var(--size-2-2) * 2 + 1.2rem);
 
     font-size: 0.65rem;
-    line-height: 0.75rem;
+    line-height: var(--day-cell-size);
     color: var(--text-muted);
   }
 
@@ -314,18 +350,19 @@
   .day-grid,
   .daily .month-labels {
     display: grid;
-    grid-template-columns: repeat(52, 0.75rem);
+    grid-template-columns: repeat(52, minmax(4px, 1fr));
     gap: 2px;
-    min-width: max-content;
+    min-width: 31rem;
   }
 
   .day-grid {
-    grid-template-rows: repeat(7, 0.75rem);
+    grid-template-rows: repeat(7, auto);
   }
 
   .day-grid .day-cell {
-    width: 0.75rem;
-    height: 0.75rem;
+    aspect-ratio: 1;
+    width: 100%;
+    height: auto;
   }
 
   .week-bar {
