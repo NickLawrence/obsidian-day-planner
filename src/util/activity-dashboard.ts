@@ -4,11 +4,13 @@ import {
   normalizeActivityName,
   type ActivityDefinition,
 } from "./activity-definitions";
+import { activityTimeSlices } from "./activity-log-summary";
 import type { Activity } from "./props";
 
 export type ActivityDashboardRow = {
   day: string;
   minutes: number;
+  totalMinutes?: number;
   notes: string;
   quality: number | "";
   startValues: unknown[];
@@ -20,6 +22,7 @@ export type ActivityDashboardRow = {
 export type ActivityDashboardGroup = {
   value: string;
   minutes: number;
+  totalMinutes?: number;
   earliest: string;
   latest: string;
 };
@@ -29,22 +32,20 @@ export type ActivityDashboardWeek = {
   end: string;
   month: string;
   minutes: number;
+  totalMinutes?: number;
   intensity: number;
 };
 
-function buildWeeks(rows: ActivityDashboardRow[], year: number) {
+function buildWeeks(
+  minutesByWeek: Map<string, { minutes: number; totalMinutes: number }>,
+  year: number,
+) {
   // January 4 is always in the first ISO week assigned to a calendar year.
   const firstWeek = window.moment(`${year}-01-04`).startOf("isoWeek");
-  const minutesByWeek = new Map<string, number>();
-
-  for (const row of rows) {
-    const week = window.moment(row.day).startOf("isoWeek").format("YYYY-MM-DD");
-    minutesByWeek.set(week, (minutesByWeek.get(week) ?? 0) + row.minutes);
-  }
-
   const weeks = Array.from({ length: 52 }, (_, index) => {
     const start = firstWeek.clone().add(index, "weeks");
-    const minutes = minutesByWeek.get(start.format("YYYY-MM-DD")) ?? 0;
+    const total = minutesByWeek.get(start.format("YYYY-MM-DD"));
+    const minutes = total?.minutes ?? 0;
 
     return {
       start: start.format("YYYY-MM-DD"),
@@ -52,6 +53,9 @@ function buildWeeks(rows: ActivityDashboardRow[], year: number) {
       // A week's Thursday determines its month, giving that month at least four days.
       month: start.clone().add(3, "days").format("MMM"),
       minutes,
+      ...(total && total.totalMinutes > minutes
+        ? { totalMinutes: total.totalMinutes }
+        : {}),
       intensity: 0,
     };
   });
@@ -85,6 +89,75 @@ export function buildActivityDashboard(
   const groups = new Map<string, ActivityDashboardGroup>();
   const rows: ActivityDashboardRow[] = [];
 
+  const selectedKey = normalizeActivityName(definition.name);
+  const matches = (activity: Activity) =>
+    normalizeActivityName(activity.activity) === selectedKey;
+  function mainValueFor(activity: Activity) {
+    const details = attributes?.key ? activity[attributes.key] : undefined;
+    const value =
+      attributes?.mainKey && details && typeof details === "object"
+        ? (details as Record<string, unknown>)[attributes.mainKey]
+        : undefined;
+    return value == null || String(value).trim() === ""
+      ? "(empty)"
+      : String(value);
+  }
+  const countedByLog = new Map<Activity, Map<number, number>>();
+  const groupTimes = new Map<
+    string,
+    { minutes: number; totalMinutes: number }
+  >();
+  const weekTimes = new Map<
+    string,
+    { minutes: number; totalMinutes: number }
+  >();
+  for (const slice of activityTimeSlices(
+    activities,
+    window.moment("0001-01-01"),
+    window.moment(),
+  )) {
+    // This dashboard lists completed logs; open logs still compete for time.
+    const logs = slice.logs.filter(
+      ({ activity, logIndex }) =>
+        matches(activity) && activity.log?.[logIndex].end,
+    );
+    if (logs.length === 0) continue;
+    const minutes = (slice.end - slice.start) / 60_000;
+    const credited =
+      matches(slice.winner.activity) &&
+      Boolean(slice.winner.activity.log?.[slice.winner.logIndex].end);
+    if (credited) {
+      const byLog =
+        countedByLog.get(slice.winner.activity) ?? new Map<number, number>();
+      byLog.set(
+        slice.winner.logIndex,
+        (byLog.get(slice.winner.logIndex) ?? 0) + minutes,
+      );
+      countedByLog.set(slice.winner.activity, byLog);
+    }
+    for (const value of new Set(
+      logs.map(({ activity }) => mainValueFor(activity)),
+    )) {
+      const total = groupTimes.get(value) ?? { minutes: 0, totalMinutes: 0 };
+      total.totalMinutes += minutes;
+      if (credited && mainValueFor(slice.winner.activity) === value)
+        total.minutes += minutes;
+      groupTimes.set(value, total);
+    }
+    let cursor = window.moment(slice.start);
+    while (cursor.valueOf() < slice.end) {
+      const week = cursor.clone().startOf("isoWeek");
+      const end = Math.min(week.clone().add(1, "week").valueOf(), slice.end);
+      const part = (end - cursor.valueOf()) / 60_000;
+      const key = week.format("YYYY-MM-DD");
+      const total = weekTimes.get(key) ?? { minutes: 0, totalMinutes: 0 };
+      total.totalMinutes += part;
+      if (credited) total.minutes += part;
+      weekTimes.set(key, total);
+      cursor = window.moment(end);
+    }
+  }
+
   for (const activity of activities) {
     if (
       normalizeActivityName(activity.activity) !==
@@ -93,30 +166,26 @@ export function buildActivityDashboard(
       continue;
     }
 
-    const activityValues = activity as unknown as Record<string, unknown>;
     const detailsCandidate = attributes?.key
-      ? activityValues[attributes.key]
+      ? activity[attributes.key]
       : undefined;
     const details =
       detailsCandidate && typeof detailsCandidate === "object"
         ? (detailsCandidate as Record<string, unknown>)
         : {};
-    const mainValueCandidate = attributes?.mainKey
-      ? details[attributes.mainKey]
-      : undefined;
-    const mainValue =
-      mainValueCandidate == null || String(mainValueCandidate).trim() === ""
-        ? "(empty)"
-        : String(mainValueCandidate);
+    const mainValue = mainValueFor(activity);
 
-    for (const log of activity.log ?? []) {
+    for (const [logIndex, log] of (activity.log ?? []).entries()) {
       const start = parseClock(log.start);
       const end = parseClock(log.end);
       if (!start || !end || !end.isAfter(start)) continue;
 
-      const minutes = Math.round(
-        window.moment.duration(end.diff(start)).asMinutes(),
+      const totalMinutes = Math.max(
+        0,
+        window.moment.min(end, window.moment()).diff(start) / 60_000,
       );
+      if (totalMinutes === 0) continue;
+      const minutes = countedByLog.get(activity)?.get(logIndex) ?? 0;
       const day = start.format("YYYY-MM-DD");
       const rangeValues = ranges.map(({ start: startKey, end: endKey }) => {
         const rangeStart = Number(details[startKey]);
@@ -129,13 +198,14 @@ export function buildActivityDashboard(
       rows.push({
         day,
         minutes,
+        ...(totalMinutes > minutes ? { totalMinutes } : {}),
         notes: activity.notes ?? "",
         quality: typeof activity.quality === "number" ? activity.quality : "",
         startValues: startFields.map(({ key }) => details[key] ?? ""),
         endValues: endFields.map(({ key }) => details[key] ?? ""),
         rangeValues,
         rangeValuesPerHour: rangeValues.map((value) =>
-          typeof value === "number" ? value / (minutes / 60) : "-",
+          typeof value === "number" ? value / (totalMinutes / 60) : "-",
         ),
       });
 
@@ -146,7 +216,10 @@ export function buildActivityDashboard(
           earliest: day,
           latest: day,
         };
-        current.minutes += minutes;
+        const total = groupTimes.get(mainValue)!;
+        current.minutes = total.minutes;
+        if (total.totalMinutes > total.minutes)
+          current.totalMinutes = total.totalMinutes;
         if (day < current.earliest) current.earliest = day;
         if (day > current.latest) current.latest = day;
         groups.set(mainValue, current);
@@ -155,7 +228,7 @@ export function buildActivityDashboard(
   }
 
   return {
-    weeks: buildWeeks(rows, year),
+    weeks: buildWeeks(weekTimes, year),
     rows: rows.sort((a, b) => b.day.localeCompare(a.day)),
     groups: [...groups.values()].sort((a, b) => b.minutes - a.minutes),
   };

@@ -8,15 +8,18 @@
     normalizeActivityName,
   } from "../../util/activity-definitions";
   import {
+    calculateDailyActivityDurations,
     calculateWeeklyActivityDurations,
     calculateWeeklyUnrecordedActivityDuration,
     getWeekRangeFor,
     type ActivityDuration,
   } from "../../util/activity-log-summary";
   import type { DayPlannerActivityApi } from "../../util/activity-totals";
-  import { formatDuration } from "../../util/duration";
+  import { formatActivityDuration, formatDuration } from "../../util/duration";
   import type { Activity } from "../../util/props";
   import { mergeActivityDurationsWithGoals } from "../../util/weekly-activity-goals";
+
+  import WeeklyActivityPie from "./weekly-activity-pie.svelte";
 
   type GoalProgressRow = ActivityDuration & {
     goal: import("moment").Duration;
@@ -50,6 +53,7 @@
   let rows = $state<GoalProgressRow[]>([]);
   let totalRow = $state<GoalProgressRow | null>(null);
   let otherActivityRows = $state<OtherActivityRow[]>([]);
+  let weeklyTotals = $state<ActivityDuration[]>([]);
   let unrecordedTime = $state(window.moment.duration(0));
   let weekLabel = $state("");
   let weekProgressPercent = $state(0);
@@ -122,48 +126,16 @@
   ) {
     const durationsByActivity = new Map<string, number[]>();
 
-    activities.forEach(({ activity, log }) => {
-      const activityKey = normalizeActivityName(activity);
-      const durations =
-        durationsByActivity.get(activityKey) ?? Array(7).fill(0);
-
-      log?.forEach(({ start, end }) => {
-        const startMoment = window.moment(start, window.moment.ISO_8601, true);
-        const endMoment = end
-          ? window.moment(end, window.moment.ISO_8601, true)
-          : window.moment();
-
-        if (!startMoment.isValid() || !endMoment.isValid()) {
-          return;
-        }
-
-        const clampedStart = window.moment.max(startMoment, weekStart);
-        const clampedEnd = window.moment.min(endMoment, weekEnd);
-
-        if (!clampedEnd.isAfter(clampedStart)) {
-          return;
-        }
-
-        let segmentStart = clampedStart.clone();
-        while (segmentStart.isBefore(clampedEnd)) {
-          const currentDayStart = segmentStart.clone().startOf("day");
-          const nextDayStart = currentDayStart.clone().add(1, "day");
-          const segmentEnd = window.moment.min(clampedEnd, nextDayStart);
-          const dayIndex = currentDayStart.diff(weekStart, "days");
-
-          if (dayIndex >= 0 && dayIndex < 7) {
-            durations[dayIndex] += segmentEnd.diff(
-              segmentStart,
-              "milliseconds",
-            );
-          }
-
-          segmentStart = segmentEnd;
-        }
-      });
-
-      durationsByActivity.set(activityKey, durations);
-    });
+    for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+      const day = weekStart.clone().add(dayIndex, "days");
+      if (!day.isBefore(weekEnd)) break;
+      for (const total of calculateDailyActivityDurations(activities, day)) {
+        const durations =
+          durationsByActivity.get(total.activityKey) ?? Array(7).fill(0);
+        durations[dayIndex] = total.duration.asMilliseconds();
+        durationsByActivity.set(total.activityKey, durations);
+      }
+    }
 
     return durationsByActivity;
   }
@@ -252,11 +224,14 @@
     );
 
     const totals = calculateWeeklyActivityDurations(allActivities, now);
+    weeklyTotals = totals;
     unrecordedTime = calculateWeeklyUnrecordedActivityDuration(
       allActivities,
       now,
     );
-    const withGoals = mergeActivityDurationsWithGoals(totals, goals);
+    const withGoals: Array<
+      ActivityDuration & { goal?: import("moment").Duration }
+    > = mergeActivityDurationsWithGoals(totals, goals);
 
     rows = withGoals
       .filter((entry): entry is GoalProgressRow => Boolean(entry.goal))
@@ -292,6 +267,13 @@
                 0,
               ),
             ),
+            totalDuration: window.moment.duration(
+              rows.reduce(
+                (total, row) =>
+                  total + (row.totalDuration ?? row.duration).asMilliseconds(),
+                0,
+              ),
+            ),
             goal: window.moment.duration(
               rows.reduce((total, row) => total + row.goal.asMilliseconds(), 0),
             ),
@@ -311,18 +293,15 @@
         .filter((entry) => entry.kind === "estimate")
         .map((entry) => normalizeActivityName(entry.activity)),
     );
-    const otherRowsByActivity = new Map(
+    const otherRowsByActivity = new Map<string, OtherActivityRow>(
       withGoals
         .filter((entry) => !entry.goal)
         .filter(
           (entry) =>
-            entry.duration.asMilliseconds() > 0 ||
+            (entry.totalDuration ?? entry.duration).asMilliseconds() > 0 ||
             estimateKeys.has(entry.activityKey),
         )
-        .map(({ activity, activityKey, duration }) => [
-          activityKey,
-          { activity, activityKey, duration },
-        ]),
+        .map((entry) => [entry.activityKey, entry] as const),
     );
 
     for (const entry of planEntries) {
@@ -410,7 +389,7 @@
                 class="value"
                 class:complete={isComplete(row.duration, row.goal)}
               >
-                {formatDuration(row.duration)} / {formatDuration(row.goal)}
+                {formatActivityDuration(row)} / {formatDuration(row.goal)}
               </div>
             </div>
 
@@ -445,7 +424,7 @@
                 class="value"
                 class:complete={isComplete(totalRow.duration, totalRow.goal)}
               >
-                {formatDuration(totalRow.duration)} / {formatDuration(
+                {formatActivityDuration(totalRow)} / {formatDuration(
                   totalRow.goal,
                 )}
               </div>
@@ -476,7 +455,7 @@
           <span class="other-activity-emoji" aria-hidden="true">{emoji}</span>
           <span class="other-activity-label">{label}</span>
           <span class="other-activity-duration"
-            >{formatDuration(activity.duration)}</span
+            >{formatActivityDuration(activity)}</span
           >
         </div>
       {/each}
@@ -500,6 +479,7 @@
         </div>
       {/each}
     </div>
+    <WeeklyActivityPie totals={weeklyTotals} {unrecordedTime} />
   {/if}
 </div>
 

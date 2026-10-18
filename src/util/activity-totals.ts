@@ -2,6 +2,7 @@ import type { Moment } from "moment";
 import { get, type Readable } from "svelte/store";
 
 import type { PathToListProps } from "../redux/dataview/dataview-slice";
+
 import {
   getActivityDefinitions,
   getActivityAttributeValues,
@@ -86,14 +87,11 @@ export function getActivityTotalsForRange(
   rangeEnd: Moment,
   filter?: ActivityTotalsFilter,
 ) {
-  return calculateActivityDurationsForRange(
-    filterActivitiesByMainKey(activities, filter),
-    rangeStart,
-    rangeEnd,
-    {
-      getLabel: (activityName) => getActivityLabel(activityName),
-    },
-  );
+  const included = new Set(filterActivitiesByMainKey(activities, filter));
+  return calculateActivityDurationsForRange(activities, rangeStart, rangeEnd, {
+    includeActivity: (activity) => included.has(activity),
+    getLabel: (activityName) => getActivityLabel(activityName),
+  });
 }
 
 export function createDayPlannerActivityApi(

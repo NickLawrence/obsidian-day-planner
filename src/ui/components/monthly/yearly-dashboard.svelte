@@ -28,6 +28,10 @@
             getActivityGroup(definition.name)?.color ?? "#808080",
             definition.color,
           ),
+          totalMinutes: dashboard.weeks.reduce(
+            (total, week) => total + (week.totalMinutes ?? week.minutes),
+            0,
+          ),
           minutes: dashboard.weeks.reduce(
             (total, week) => total + week.minutes,
             0,
@@ -73,6 +77,7 @@
           ? `${row.definition.emoji} ${row.definition.label}`
           : row.definition.label,
         minutes: row.minutes,
+        totalMinutes: row.totalMinutes,
         color: row.color,
         weeks: row.weeks,
       }))}

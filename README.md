@@ -166,6 +166,21 @@ A right click on an active clock will bring the control menu:
 
 - For now clock time blocks are read-only. This is going to be addressed in the future.
 
+## Activity priorities
+
+Activities define a numeric `priority` in `src/util/activity-definitions.ts`.
+Higher values receive overlapping time first: deep work and light work are above
+TV and social activities. Activities without a priority use 0. Equal priorities
+favor the log that started earlier, then the normalized activity name.
+
+Activity totals show credited time, followed by full elapsed time in parentheses
+when overlap reduced the credited time, for example `TV 1h 30m (2h 30m)`.
+Overlapping logs of the same activity count elapsed time once. Weekly credited
+totals plus unrecorded time cover the elapsed week; completed weeks cover the
+whole week. Filters keep the same credited totals even when competing activities
+are hidden. Goal progress uses credited time, while pace and remaining-time
+estimates use full elapsed time.
+
 ## Note on the old plugin version
 
 0.7.0 significantly changes what the plugin looks like and what it does. If you like to have some of the old behaviors back, [consider creating an issue](https://github.com/ivan-lednev/obsidian-day-planner/issues).

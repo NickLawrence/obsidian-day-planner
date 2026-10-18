@@ -6,12 +6,14 @@ import {
   getActivityAttributeValues,
   normalizeActivityName,
 } from "./activity-definitions";
+import { calculateActivityDurationsForRange } from "./activity-log-summary";
 import { getResourceFilesForField } from "./activity-resources";
 import type { Activity } from "./props";
 
 export type ActivityMainKeyProgress = {
   value: string;
   minutes: number;
+  countedMinutes?: number;
   filePath?: string;
   rangeKey?: string;
   current?: number;
@@ -20,17 +22,6 @@ export type ActivityMainKeyProgress = {
   minutesPerUnit?: number;
   estimatedMinutesRemaining?: number;
 };
-
-function activityMinutes(activity: Activity) {
-  return (activity.log ?? []).reduce((total, log) => {
-    const start = window.moment(log.start);
-    const end = window.moment(log.end);
-
-    return start.isValid() && end.isValid() && end.isAfter(start)
-      ? total + window.moment.duration(end.diff(start)).asMinutes()
-      : total;
-  }, 0);
-}
 
 /** Summarize time, completion, pace, and ETA for one main-key value. */
 export function calculateActivityMainKeyProgress(props: {
@@ -69,16 +60,33 @@ export function calculateActivityMainKeyProgress(props: {
         .toLowerCase(),
     );
   });
-  const minutes = matching.reduce(
-    (total, activity) => total + activityMinutes(activity),
+  const included = new Set(matching);
+  const totals = calculateActivityDurationsForRange(
+    activities,
+    window.moment("0001-01-01"),
+    window.moment(),
+    {
+      includeActivity: (activity) => included.has(activity),
+    },
+  );
+  const minutes = totals.reduce(
+    (sum, total) => sum + (total.totalDuration ?? total.duration).asMinutes(),
     0,
   );
+  const counted = totals.reduce(
+    (sum, total) => sum + total.duration.asMinutes(),
+    0,
+  );
+  const time = {
+    minutes,
+    ...(counted < minutes ? { countedMinutes: counted } : {}),
+  };
   const range = attributes?.ranges?.find((candidate) => {
     const maximum = Number(rangeMaximums[candidate.key]);
     return Number.isFinite(maximum) && maximum > 0;
   });
 
-  if (!range) return { value, minutes };
+  if (!range) return { value, ...time };
 
   const maximum = Number(rangeMaximums[range.key]);
   let current = 0;
@@ -103,7 +111,7 @@ export function calculateActivityMainKeyProgress(props: {
 
   return {
     value,
-    minutes,
+    ...time,
     rangeKey: range.key,
     current,
     maximum,

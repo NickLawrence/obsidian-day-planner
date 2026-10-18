@@ -2,12 +2,13 @@
   import { setTooltip } from "obsidian";
 
   import type { ActivityDashboardWeek } from "../../util/activity-dashboard";
-  import { formatDuration } from "../../util/duration";
+  import { formatActivityDuration } from "../../util/duration";
 
   type WeeklyActivityHeatmapRow = {
     key: string;
     label: string;
     minutes: number;
+    totalMinutes?: number;
     color?: string;
     weeks: ActivityDashboardWeek[];
   };
@@ -38,8 +39,14 @@
     }, []),
   );
 
-  function displayTime(minutes: number) {
-    return formatDuration(window.moment.duration(minutes, "minutes"));
+  function displayTime(minutes: number, totalMinutes?: number) {
+    return formatActivityDuration({
+      duration: window.moment.duration(minutes, "minutes"),
+      totalDuration:
+        totalMinutes === undefined
+          ? undefined
+          : window.moment.duration(totalMinutes, "minutes"),
+    });
   }
 
   function weeklyTooltip(node: HTMLElement, text: string) {
@@ -73,12 +80,12 @@
             style={`--week-intensity: ${week.intensity}; --activity-heatmap-color: ${row.color ?? "var(--interactive-accent)"}; grid-column: ${weekIndex + 2}; grid-row: ${rowIndex + 2}`}
             class="week-bar square-cell"
             class:empty={week.minutes === 0}
-            aria-label={`${row.label}, ${week.start} through ${week.end}: ${displayTime(week.minutes)}`}
-            use:weeklyTooltip={`${row.label} · ${week.start}–${week.end}: ${displayTime(week.minutes)}`}
+            aria-label={`${row.label}, ${week.start} through ${week.end}: ${displayTime(week.minutes, week.totalMinutes)}`}
+            use:weeklyTooltip={`${row.label} · ${week.start}–${week.end}: ${displayTime(week.minutes, week.totalMinutes)}`}
           ></div>
         {/each}
         <span style={`grid-row: ${rowIndex + 2}`} class="row-total">
-          {displayTime(row.minutes)}
+          {displayTime(row.minutes, row.totalMinutes)}
         </span>
       {/each}
     </div>
@@ -102,8 +109,8 @@
           style={`--week-intensity: ${week.intensity}`}
           class="week-bar"
           class:empty={week.minutes === 0}
-          aria-label={`${label}, ${week.start} through ${week.end}: ${displayTime(week.minutes)}`}
-          use:weeklyTooltip={`${week.start}–${week.end}: ${displayTime(week.minutes)}`}
+          aria-label={`${label}, ${week.start} through ${week.end}: ${displayTime(week.minutes, week.totalMinutes)}`}
+          use:weeklyTooltip={`${week.start}–${week.end}: ${displayTime(week.minutes, week.totalMinutes)}`}
         ></div>
       {/each}
     </div>

@@ -1,6 +1,5 @@
 <script lang="ts">
-  import type { App, EventRef } from "obsidian";
-  import { setTooltip } from "obsidian";
+  import type { App } from "obsidian";
   import { onDestroy, onMount } from "svelte";
 
   import type { PlannerData } from "../../service/planner-data";
@@ -8,7 +7,8 @@
   import type { ActivityDefinition } from "../../util/activity-definitions";
   import { getInProgressMainKeys } from "../../util/activity-progress";
   import type { DayPlannerActivityApi } from "../../util/activity-totals";
-  import { formatDuration } from "../../util/duration";
+  import { formatActivityDuration } from "../../util/duration";
+
   import WeeklyActivityHeatmap from "./weekly-activity-heatmap.svelte";
 
   let {
@@ -43,19 +43,14 @@
     activities = activityApi.getAllActivities();
   }
 
-  function displayTime(minutes: number) {
-    return formatDuration(window.moment.duration(minutes, "minutes"));
-  }
-
-  function weeklyTooltip(node: HTMLElement, text: string) {
-    // Obsidian's setTooltip skips falsy delays, so set zero explicitly.
-    node.setAttribute("data-tooltip-delay", "0");
-    setTooltip(node, text, { delay: 0 });
-    return {
-      update(text: string) {
-        setTooltip(node, text, { delay: 0 });
-      },
-    };
+  function displayTime(minutes: number, totalMinutes?: number) {
+    return formatActivityDuration({
+      duration: window.moment.duration(minutes, "minutes"),
+      totalDuration:
+        totalMinutes === undefined
+          ? undefined
+          : window.moment.duration(totalMinutes, "minutes"),
+    });
   }
 
   function selectActivity(activity: ActivityDefinition) {
@@ -112,7 +107,12 @@
                 {#if item.percent !== undefined}
                   <span>{item.percent.toFixed(0)}%</span>
                 {:else}
-                  <span>{displayTime(item.minutes)} spent</span>
+                  <span
+                    >{displayTime(
+                      item.countedMinutes ?? item.minutes,
+                      item.minutes,
+                    )} spent</span
+                  >
                 {/if}
               </div>
               {#if item.percent !== undefined}
@@ -121,7 +121,12 @@
                 >
                 <div class="progress-details">
                   <span>{item.current} / {item.maximum} {item.rangeKey}</span>
-                  <span>{displayTime(item.minutes)} spent</span>
+                  <span
+                    >{displayTime(
+                      item.countedMinutes ?? item.minutes,
+                      item.minutes,
+                    )} spent</span
+                  >
                   {#if item.minutesPerUnit !== undefined}
                     <span
                       >{item.minutesPerUnit.toFixed(1)} min/{item.rangeKey?.replace(
@@ -172,9 +177,9 @@
             <tbody>
               {#each dashboard.rows as row}
                 <tr>
-                  <td>{row.day}</td><td>{displayTime(row.minutes)}</td><td
-                    >{row.notes}</td
-                  ><td>{row.quality}</td>
+                  <td>{row.day}</td><td
+                    >{displayTime(row.minutes, row.totalMinutes)}</td
+                  ><td>{row.notes}</td><td>{row.quality}</td>
                   {#each row.startValues as value}<td>{String(value)}</td
                     >{/each}
                   {#each row.endValues as value}<td>{String(value)}</td>{/each}
@@ -203,7 +208,8 @@
               >
               <tbody
                 >{#each dashboard.groups as group}<tr
-                    ><td>{group.value}</td><td>{displayTime(group.minutes)}</td
+                    ><td>{group.value}</td><td
+                      >{displayTime(group.minutes, group.totalMinutes)}</td
                     ><td>{group.earliest}</td><td>{group.latest}</td></tr
                   >{/each}</tbody
               >
