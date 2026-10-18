@@ -95,6 +95,36 @@ describe("activity priorities", () => {
     ).toBe(7 * 24 * 60);
   });
 
+  test.each(["transit", "ride", "bed", "eat"])(
+    "credits reading, games, and other goals over an earlier-started %s log",
+    (background) => {
+      const activities = [
+        entry(background, "09:00", "14:00"),
+        entry("read", "10:00", "11:00"),
+        entry("game", "11:00", "12:00"),
+        entry("language", "12:00", "13:00"),
+        entry("custom activity", "13:00", "13:30"),
+      ];
+      const rows = summarize(activities);
+      expect(rows).toEqual(
+        expect.arrayContaining([
+          { key: background, counted: 90, total: 300 },
+          { key: "read", counted: 60, total: 60 },
+          { key: "game", counted: 60, total: 60 },
+          { key: "language", counted: 60, total: 60 },
+          { key: "custom activity", counted: 30, total: 30 },
+        ]),
+      );
+      expect(
+        rows.reduce((sum, row) => sum + row.counted, 0) +
+          calculateWeeklyUnrecordedActivityDuration(
+            activities,
+            window.moment(day),
+          ).asMinutes(),
+      ).toBe(7 * 24 * 60);
+    },
+  );
+
   test("merges repeated and overlapping logs for the same normalized activity", () => {
     const activities = [
       entry(" TV ", "09:00", "11:00"),

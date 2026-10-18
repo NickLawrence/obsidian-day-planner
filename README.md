@@ -170,8 +170,11 @@ A right click on an active clock will bring the control menu:
 
 Activities define a numeric `priority` in `src/util/activity-definitions.ts`.
 Higher values receive overlapping time first: deep work and light work are above
-TV and social activities. Activities without a priority use 0. Equal priorities
-favor the log that started earlier, then the normalized activity name.
+TV and social activities. Transit, rides, bed, and eating are background activities
+with priority -10, so reading, games, and other weekly goal activities take
+precedence during overlaps. Activities without a priority use 0 and also take
+precedence over background activities. Equal priorities favor the log that started
+earlier, then the normalized activity name.
 
 Activity totals show credited time, followed by full elapsed time in parentheses
 when overlap reduced the credited time, for example `TV 1h 30m (2h 30m)`.

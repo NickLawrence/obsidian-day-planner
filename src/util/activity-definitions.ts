@@ -358,7 +358,8 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "eat",
-    priority: 50,
+    // Background contexts yield to other activities, including unspecified ones (0).
+    priority: -10,
     label: "Eat",
     group: "household",
     emoji: "🍽️",
@@ -450,7 +451,7 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "bed",
-    priority: 80,
+    priority: -10,
     label: "Bed",
     group: "bed",
     emoji: "🛏️",
@@ -458,14 +459,14 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "ride",
-    priority: 50,
+    priority: -10,
     label: "Ride",
     group: "transit",
     emoji: "🚗",
   },
   {
     name: "transit",
-    priority: 50,
+    priority: -10,
     label: "Transit",
     group: "transit",
     emoji: "🚃",
