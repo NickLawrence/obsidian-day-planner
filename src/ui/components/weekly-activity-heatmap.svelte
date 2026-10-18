@@ -5,12 +5,13 @@
     ActivityDashboardWeek,
     ActivityDashboardItem,
   } from "../../util/activity-dashboard";
-  import { formatDuration } from "../../util/duration";
+  import { formatActivityDuration } from "../../util/duration";
 
   type WeeklyActivityHeatmapRow = {
     key: string;
     label: string;
     minutes: number;
+    totalMinutes?: number;
     color?: string;
     weeks: ActivityDashboardWeek[];
   };
@@ -65,18 +66,28 @@
     return { destroy: () => observer.disconnect() };
   }
 
-  function displayTime(minutes: number) {
-    return formatDuration(window.moment.duration(minutes, "minutes"));
+  function displayTime(minutes: number, totalMinutes?: number) {
+    return formatActivityDuration({
+      duration: window.moment.duration(minutes, "minutes"),
+      totalDuration:
+        totalMinutes === undefined
+          ? undefined
+          : window.moment.duration(totalMinutes, "minutes"),
+    });
   }
 
   function frequencyTooltip(
     period: string,
     minutes: number,
     items: ActivityDashboardItem[],
+    totalMinutes?: number,
   ) {
     return [
-      `${period}: ${displayTime(minutes)}`,
-      ...items.map(({ name, minutes }) => `${name}: ${displayTime(minutes)}`),
+      `${period}: ${displayTime(minutes, totalMinutes)}`,
+      ...items.map(
+        ({ name, minutes, totalMinutes }) =>
+          `${name}: ${displayTime(minutes, totalMinutes)}`,
+      ),
     ].join("\n");
   }
 
@@ -111,16 +122,17 @@
             style={`--week-intensity: ${week.intensity}; --activity-heatmap-color: ${row.color ?? "var(--interactive-accent)"}; grid-column: ${weekIndex + 2}; grid-row: ${rowIndex + 2}`}
             class="week-bar square-cell"
             class:empty={week.minutes === 0}
-            aria-label={`${row.label}, ${week.start} through ${week.end}: ${displayTime(week.minutes)}`}
+            aria-label={`${row.label}, ${week.start} through ${week.end}: ${displayTime(week.minutes, week.totalMinutes)}`}
             use:weeklyTooltip={frequencyTooltip(
               `${row.label} · ${week.start}–${week.end}`,
               week.minutes,
               week.items,
+              week.totalMinutes,
             )}
           ></div>
         {/each}
         <span style={`grid-row: ${rowIndex + 2}`} class="row-total">
-          {displayTime(row.minutes)}
+          {displayTime(row.minutes, row.totalMinutes)}
         </span>
       {/each}
     </div>
@@ -177,11 +189,12 @@
                 style={`--week-intensity: ${day.intensity}; grid-column: ${weekIndex + 1}; grid-row: ${dayIndex + 1}`}
                 class="week-bar day-cell"
                 class:empty={day.minutes === 0}
-                aria-label={`${label}, ${day.date}: ${displayTime(day.minutes)}`}
+                aria-label={`${label}, ${day.date}: ${displayTime(day.minutes, day.totalMinutes)}`}
                 use:weeklyTooltip={frequencyTooltip(
                   day.date,
                   day.minutes,
                   day.items,
+                  day.totalMinutes,
                 )}
               ></div>
             {/each}
@@ -194,11 +207,12 @@
               style={`--week-intensity: ${week.intensity}`}
               class="week-bar"
               class:empty={week.minutes === 0}
-              aria-label={`${label}, ${week.start} through ${week.end}: ${displayTime(week.minutes)}`}
+              aria-label={`${label}, ${week.start} through ${week.end}: ${displayTime(week.minutes, week.totalMinutes)}`}
               use:weeklyTooltip={frequencyTooltip(
                 `${week.start}–${week.end}`,
                 week.minutes,
                 week.items,
+                week.totalMinutes,
               )}
             ></div>
           {/each}

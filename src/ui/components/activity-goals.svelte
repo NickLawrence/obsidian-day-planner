@@ -3,20 +3,20 @@
   import { onDestroy, onMount } from "svelte";
 
   import type { PlannerData } from "../../service/planner-data";
+  import { getActivityDefinition } from "../../util/activity-definitions";
   import {
-    getActivityDefinition,
-    normalizeActivityName,
-  } from "../../util/activity-definitions";
-  import {
-    calculateWeeklyActivityDurations,
-    calculateWeeklyUnrecordedActivityDuration,
+    calculateDailyActivityDurations,
+    calculateActivitySummaryForRange,
     getWeekRangeFor,
     type ActivityDuration,
   } from "../../util/activity-log-summary";
+  import { createActivityRangeIndex } from "../../util/activity-range-index";
   import type { DayPlannerActivityApi } from "../../util/activity-totals";
-  import { formatDuration } from "../../util/duration";
+  import { formatActivityDuration, formatDuration } from "../../util/duration";
   import type { Activity } from "../../util/props";
   import { mergeActivityDurationsWithGoals } from "../../util/weekly-activity-goals";
+
+  import ActivityPie from "./activity-pie.svelte";
 
   type GoalProgressRow = ActivityDuration & {
     goal: import("moment").Duration;
@@ -50,6 +50,8 @@
   let rows = $state<GoalProgressRow[]>([]);
   let totalRow = $state<GoalProgressRow | null>(null);
   let otherActivityRows = $state<OtherActivityRow[]>([]);
+  let pieActivities = $state.raw<Activity[]>([]);
+  let pieRange = $state(getWeekRangeFor(window.moment()));
   let unrecordedTime = $state(window.moment.duration(0));
   let weekLabel = $state("");
   let weekProgressPercent = $state(0);
@@ -122,48 +124,16 @@
   ) {
     const durationsByActivity = new Map<string, number[]>();
 
-    activities.forEach(({ activity, log }) => {
-      const activityKey = normalizeActivityName(activity);
-      const durations =
-        durationsByActivity.get(activityKey) ?? Array(7).fill(0);
-
-      log?.forEach(({ start, end }) => {
-        const startMoment = window.moment(start, window.moment.ISO_8601, true);
-        const endMoment = end
-          ? window.moment(end, window.moment.ISO_8601, true)
-          : window.moment();
-
-        if (!startMoment.isValid() || !endMoment.isValid()) {
-          return;
-        }
-
-        const clampedStart = window.moment.max(startMoment, weekStart);
-        const clampedEnd = window.moment.min(endMoment, weekEnd);
-
-        if (!clampedEnd.isAfter(clampedStart)) {
-          return;
-        }
-
-        let segmentStart = clampedStart.clone();
-        while (segmentStart.isBefore(clampedEnd)) {
-          const currentDayStart = segmentStart.clone().startOf("day");
-          const nextDayStart = currentDayStart.clone().add(1, "day");
-          const segmentEnd = window.moment.min(clampedEnd, nextDayStart);
-          const dayIndex = currentDayStart.diff(weekStart, "days");
-
-          if (dayIndex >= 0 && dayIndex < 7) {
-            durations[dayIndex] += segmentEnd.diff(
-              segmentStart,
-              "milliseconds",
-            );
-          }
-
-          segmentStart = segmentEnd;
-        }
-      });
-
-      durationsByActivity.set(activityKey, durations);
-    });
+    for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+      const day = weekStart.clone().add(dayIndex, "days");
+      if (!day.isBefore(weekEnd)) break;
+      for (const total of calculateDailyActivityDurations(activities, day)) {
+        const durations =
+          durationsByActivity.get(total.activityKey) ?? Array(7).fill(0);
+        durations[dayIndex] = total.duration.asMilliseconds();
+        durationsByActivity.set(total.activityKey, durations);
+      }
+    }
 
     return durationsByActivity;
   }
@@ -244,19 +214,27 @@
       now,
     );
 
-    const allActivities = activityApi.getAllActivities();
+    const allActivities = createActivityRangeIndex(
+      activityApi.getAllActivities(),
+    )(weekStart, weekEnd);
     const dailyDurationsByActivity = getDailyDurationsForWeek(
       allActivities,
       weekStart,
       weekEnd,
     );
 
-    const totals = calculateWeeklyActivityDurations(allActivities, now);
-    unrecordedTime = calculateWeeklyUnrecordedActivityDuration(
-      allActivities,
-      now,
-    );
-    const withGoals = mergeActivityDurationsWithGoals(totals, goals);
+    const { totals, unrecordedTime: elapsedUnrecordedTime } =
+      calculateActivitySummaryForRange(
+        allActivities,
+        weekStart,
+        window.moment.min(weekEnd, now),
+      );
+    pieActivities = allActivities;
+    pieRange = { start: weekStart, end: weekEnd };
+    unrecordedTime = elapsedUnrecordedTime;
+    const withGoals: Array<
+      ActivityDuration & { goal?: import("moment").Duration }
+    > = mergeActivityDurationsWithGoals(totals, goals);
 
     rows = withGoals
       .filter((entry): entry is GoalProgressRow => Boolean(entry.goal))
@@ -292,6 +270,13 @@
                 0,
               ),
             ),
+            totalDuration: window.moment.duration(
+              rows.reduce(
+                (total, row) =>
+                  total + (row.totalDuration ?? row.duration).asMilliseconds(),
+                0,
+              ),
+            ),
             goal: window.moment.duration(
               rows.reduce((total, row) => total + row.goal.asMilliseconds(), 0),
             ),
@@ -307,23 +292,21 @@
         : null;
 
     otherActivityRows = withGoals
-      .filter((entry) => !entry.goal && entry.duration.asMilliseconds() > 0)
-      .map(({ activity, activityKey, duration }) => ({
-        activity,
-        activityKey,
-        duration,
-      }))
+      .filter(
+        (entry) =>
+          !entry.goal &&
+          (entry.totalDuration ?? entry.duration).asMilliseconds() > 0,
+      )
+      .map((entry) => ({ ...entry }))
       .sort((a, b) => {
         const durationDiff =
           b.duration.asMilliseconds() - a.duration.asMilliseconds();
-
-        if (durationDiff !== 0) {
-          return durationDiff;
-        }
-
-        return a.activity.localeCompare(b.activity, undefined, {
-          sensitivity: "base",
-        });
+        return (
+          durationDiff ||
+          a.activity.localeCompare(b.activity, undefined, {
+            sensitivity: "base",
+          })
+        );
       });
   }
 
@@ -394,7 +377,7 @@
                 class="value"
                 class:complete={isComplete(row.duration, row.goal)}
               >
-                {formatDuration(row.duration)} / {formatDuration(row.goal)}
+                {formatActivityDuration(row)} / {formatDuration(row.goal)}
               </div>
             </div>
 
@@ -429,7 +412,7 @@
                 class="value"
                 class:complete={isComplete(totalRow.duration, totalRow.goal)}
               >
-                {formatDuration(totalRow.duration)} / {formatDuration(
+                {formatActivityDuration(totalRow)} / {formatDuration(
                   totalRow.goal,
                 )}
               </div>
@@ -460,7 +443,7 @@
           <span class="other-activity-emoji" aria-hidden="true">{emoji}</span>
           <span class="other-activity-label">{label}</span>
           <span class="other-activity-duration"
-            >{formatDuration(activity.duration)}</span
+            >{formatActivityDuration(activity)}</span
           >
         </div>
       {/each}
@@ -475,6 +458,13 @@
         >
       </div>
     </div>
+    <ActivityPie
+      activities={pieActivities}
+      periodLabel="so far this week"
+      rangeEnd={pieRange.end}
+      rangeStart={pieRange.start}
+      title="Weekly activity time"
+    />
   {/if}
 </div>
 

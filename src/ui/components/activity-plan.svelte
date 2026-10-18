@@ -310,6 +310,7 @@
             <input
               style={`--slider-fill:${getSliderFillPercent(hours, maxHours)}%;`}
               aria-label={`Hours for ${getLabel(item.name)}`}
+              aria-valuetext={formatHours(hours)}
               max={maxHours}
               min="0"
               onchange={() => saveActivityByName(item.name)}

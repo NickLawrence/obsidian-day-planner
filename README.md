@@ -166,6 +166,36 @@ A right click on an active clock will bring the control menu:
 
 - For now clock time blocks are read-only. This is going to be addressed in the future.
 
+## Activity priorities
+
+Activities define a numeric `priority` in `src/util/activity-definitions.ts`.
+Higher values receive overlapping time first: deep work and light work are above
+TV and social activities. Transit, rides, bed, and eating are background activities
+with priority -10, so reading, games, and other weekly goal activities take
+precedence during overlaps. Activities without a priority use 0 and also take
+precedence over background activities. Equal priorities favor the log that started
+earlier, then the normalized activity name.
+
+Activity totals show credited time, followed by full elapsed time in parentheses
+when overlap reduced the credited time, for example `TV 1h 30m (2h 30m)`.
+Overlapping logs of the same activity count elapsed time once. Weekly credited
+totals plus unrecorded time cover the elapsed week; completed weeks cover the
+whole week. Filters keep the same credited totals even when competing activities
+are hidden. Goal progress uses credited time, while pace and remaining-time
+estimates use full elapsed time.
+
+Weekly and yearly dashboards include a pie chart of credited activity time and
+unrecorded time. The yearly chart covers January 1 through now. The reusable
+`ActivityPie` component accepts `activities`, `rangeStart`, and `rangeEnd` for
+other time frames; the end is exclusive and future time is excluded. The chart
+grows to fill available space, with a compact legend beside it or below it in
+narrow panels.
+
+Dashboard history updates when planner data changes, with minute ticks for live
+totals. Activity edits reload only the affected weekly files. Vault events trigger
+prompt updates; background scans check for silent sync changes every 30 seconds
+after the previous scan completes, and returning to the app also triggers a scan.
+
 ## Note on the old plugin version
 
 0.7.0 significantly changes what the plugin looks like and what it does. If you like to have some of the old behaviors back, [consider creating an issue](https://github.com/ivan-lednev/obsidian-day-planner/issues).

@@ -17,8 +17,10 @@
   } from "../../../util/activity-log-summary";
   import { createActivityRangeIndex } from "../../../util/activity-range-index";
   import { getAllActivitiesFromListProps } from "../../../util/activity-totals";
-  import { formatDuration } from "../../../util/duration";
-  import type { Activity } from "../../../util/props";
+  import {
+    formatActivityDuration,
+    formatDuration,
+  } from "../../../util/duration";
   import {
     mergeActivityDurationsWithGoals,
     type ActivityGoal,
@@ -122,15 +124,12 @@
         const allowed = $displayedActivities
           ? new Set($displayedActivities.map(normalizeActivityName))
           : undefined;
-        const weekActivities = allowed
-          ? allWeekActivities.filter((activity: Activity) =>
-              allowed.has(normalizeActivityName(activity.activity)),
-            )
-          : allWeekActivities;
+        const isDisplayed = (total: ActivityDuration) =>
+          !allowed || allowed.has(total.activityKey);
         const weekTotals = calculateWeeklyActivityDurations(
-          weekActivities,
+          allWeekActivities,
           weekStart,
-        );
+        ).filter(isDisplayed);
         const days = Array.from({ length: 7 }).map((_, index) => {
           const date = weekStart.clone().add(index, "day");
           return {
@@ -139,9 +138,9 @@
             inCurrentMonth: date.isSame($month, "month"),
             isToday: date.isSame(window.moment(), "day"),
             totals: calculateDailyActivityDisplayDurations(
-              weekActivities,
+              allWeekActivities,
               date,
-            ),
+            ).filter(isDisplayed),
           };
         });
         return { weekStart, weekEnd, weekTotals, days, unrecordedTime };
@@ -429,8 +428,8 @@
                   {entry.isPlaceholder
                     ? ""
                     : entry.goal
-                      ? `${formatDuration(entry.duration)} / ${formatDuration(entry.goal)}`
-                      : formatDuration(entry.duration)}
+                      ? `${formatActivityDuration(entry)} / ${formatDuration(entry.goal)}`
+                      : formatActivityDuration(entry)}
                 </span>
 
                 {#if !entry.isPlaceholder && entry.goal}
@@ -493,7 +492,7 @@
                   >
                 </div>
                 <span class="summary-duration">
-                  {entry.isPlaceholder ? "" : formatDuration(entry.duration)}
+                  {entry.isPlaceholder ? "" : formatActivityDuration(entry)}
                 </span>
               </div>
             {/each}

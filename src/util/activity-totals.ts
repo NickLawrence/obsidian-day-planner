@@ -2,6 +2,7 @@ import type { Moment } from "moment";
 import { get, type Readable } from "svelte/store";
 
 import type { PathToListProps } from "../redux/dataview/dataview-slice";
+
 import {
   getActivityDefinitions,
   getActivityAttributeValues,
@@ -32,12 +33,19 @@ export type DayPlannerActivityApi = {
   ) => ActivityDuration[];
 };
 
+const activitySnapshots = new WeakMap<PathToListProps, Activity[]>();
+
+/** listProps is an immutable Redux snapshot; reuse its flattened activity view. */
 export function getAllActivitiesFromListProps(listProps: PathToListProps) {
-  return Object.values(listProps).flatMap((lineToProps) =>
+  const cached = activitySnapshots.get(listProps);
+  if (cached) return cached;
+  const activities = Object.values(listProps).flatMap((lineToProps) =>
     Object.values(lineToProps).flatMap(
       ({ parsed }) => (parsed.activities as Activity[]) ?? [],
     ),
   );
+  activitySnapshots.set(listProps, activities);
+  return activities;
 }
 
 export function filterActivitiesByMainKey(
@@ -86,14 +94,11 @@ export function getActivityTotalsForRange(
   rangeEnd: Moment,
   filter?: ActivityTotalsFilter,
 ) {
-  return calculateActivityDurationsForRange(
-    filterActivitiesByMainKey(activities, filter),
-    rangeStart,
-    rangeEnd,
-    {
-      getLabel: (activityName) => getActivityLabel(activityName),
-    },
-  );
+  const included = new Set(filterActivitiesByMainKey(activities, filter));
+  return calculateActivityDurationsForRange(activities, rangeStart, rangeEnd, {
+    includeActivity: (activity) => included.has(activity),
+    getLabel: (activityName) => getActivityLabel(activityName),
+  });
 }
 
 export function createDayPlannerActivityApi(

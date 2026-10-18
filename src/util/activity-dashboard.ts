@@ -1,14 +1,17 @@
-import { clockFormat } from "../constants";
-
 import {
   normalizeActivityName,
   type ActivityDefinition,
 } from "./activity-definitions";
+import {
+  activityTimeSlices,
+  getActivityLogTimes,
+} from "./activity-log-summary";
 import type { Activity } from "./props";
 
 export type ActivityDashboardRow = {
   day: string;
   minutes: number;
+  totalMinutes?: number;
   notes: string;
   quality: number | "";
   startValues: unknown[];
@@ -20,84 +23,130 @@ export type ActivityDashboardRow = {
 export type ActivityDashboardGroup = {
   value: string;
   minutes: number;
+  totalMinutes?: number;
   earliest: string;
   latest: string;
 };
 
+type TimeTotal = { minutes: number; totalMinutes: number };
+
 export type ActivityDashboardItem = {
   name: string;
   minutes: number;
+  totalMinutes?: number;
 };
-
-function sortedItems(items: Map<string, number>): ActivityDashboardItem[] {
-  return [...items]
-    .map(([name, minutes]) => ({ name, minutes }))
-    .sort((a, b) => b.minutes - a.minutes || a.name.localeCompare(b.name));
-}
 
 export type ActivityDashboardDay = {
   date: string;
-  items: ActivityDashboardItem[];
   minutes: number;
+  totalMinutes?: number;
   intensity: number;
+  items: ActivityDashboardItem[];
 };
+
+function addTime(
+  times: Map<string, TimeTotal>,
+  key: string,
+  minutes: number,
+  totalMinutes: number,
+) {
+  const total = times.get(key) ?? { minutes: 0, totalMinutes: 0 };
+  total.minutes += minutes;
+  total.totalMinutes += totalMinutes;
+  times.set(key, total);
+}
+
+function sortedItems(items: Map<string, TimeTotal>): ActivityDashboardItem[] {
+  return [...items]
+    .map(([name, { minutes, totalMinutes }]) => ({
+      name,
+      minutes,
+      ...(totalMinutes > minutes ? { totalMinutes } : {}),
+    }))
+    .sort((a, b) => b.minutes - a.minutes || a.name.localeCompare(b.name));
+}
 
 export type ActivityDashboardWeek = {
   start: string;
   end: string;
   month: string;
   minutes: number;
+  totalMinutes?: number;
   intensity: number;
   days: ActivityDashboardDay[];
   items: ActivityDashboardItem[];
 };
 
-function buildWeeks(
-  minutesByDay: Map<string, number>,
-  itemsByDay: Map<string, Map<string, number>>,
-  year: number,
-) {
-  // January 4 is always in the first ISO week assigned to a calendar year.
+type DashboardCalendar = Array<{
+  start: string;
+  end: string;
+  month: string;
+  dates: string[];
+}>;
+
+function createCalendar(year: number): DashboardCalendar {
   const firstWeek = window.moment(`${year}-01-04`).startOf("isoWeek");
-  const weeks = Array.from({ length: 52 }, (_, index) => {
+  return Array.from({ length: 52 }, (_, index) => {
     const start = firstWeek.clone().add(index, "weeks");
-    const days = Array.from({ length: 7 }, (_, dayIndex) => {
-      const date = start.clone().add(dayIndex, "days").format("YYYY-MM-DD");
+    return {
+      start: start.format("YYYY-MM-DD"),
+      end: start.clone().add(6, "days").format("YYYY-MM-DD"),
+      month: start.clone().add(3, "days").format("MMM"),
+      dates: Array.from({ length: 7 }, (_, day) =>
+        start.clone().add(day, "days").format("YYYY-MM-DD"),
+      ),
+    };
+  });
+}
+
+function buildWeeks(
+  timesByDay: Map<string, TimeTotal>,
+  itemsByDay: Map<string, Map<string, TimeTotal>>,
+  calendar: DashboardCalendar,
+) {
+  const weeks = calendar.map(({ dates, ...week }) => {
+    const days = dates.map((date) => {
+      const total = timesByDay.get(date);
+      const minutes = total?.minutes ?? 0;
       return {
         date,
-        minutes: minutesByDay.get(date) ?? 0,
+        minutes,
+        ...(total && total.totalMinutes > minutes
+          ? { totalMinutes: total.totalMinutes }
+          : {}),
         intensity: 0,
         items: sortedItems(itemsByDay.get(date) ?? new Map()),
       };
     });
-    const weekItems = new Map<string, number>();
+    const weekItems = new Map<string, TimeTotal>();
     for (const day of days) {
       for (const item of day.items)
-        weekItems.set(
+        addTime(
+          weekItems,
           item.name,
-          (weekItems.get(item.name) ?? 0) + item.minutes,
+          item.minutes,
+          item.totalMinutes ?? item.minutes,
         );
     }
-    const minutes = days.reduce((total, day) => total + day.minutes, 0);
-
+    const minutes = days.reduce((sum, day) => sum + day.minutes, 0);
+    const totalMinutes = days.reduce(
+      (sum, day) => sum + (day.totalMinutes ?? day.minutes),
+      0,
+    );
     return {
-      start: start.format("YYYY-MM-DD"),
-      end: start.clone().add(6, "days").format("YYYY-MM-DD"),
-      // A week's Thursday determines its month, giving that month at least four days.
-      month: start.clone().add(3, "days").format("MMM"),
+      ...week,
       minutes,
+      ...(totalMinutes > minutes ? { totalMinutes } : {}),
       intensity: 0,
       days,
       items: sortedItems(weekItems),
     };
   });
   const maximum = Math.max(0, ...weeks.map(({ minutes }) => minutes));
-
   const dailyMaximum = Math.max(
     0,
     ...weeks.flatMap(({ days }) => days.map(({ minutes }) => minutes)),
   );
-
   return weeks.map((week) => ({
     ...week,
     intensity: maximum === 0 ? 0 : week.minutes / maximum,
@@ -108,125 +157,232 @@ function buildWeeks(
   }));
 }
 
-function parseClock(timestamp?: string) {
-  if (!timestamp) return null;
+export type ActivityDashboard = {
+  weeks: ActivityDashboardWeek[];
+  rows: ActivityDashboardRow[];
+  groups: ActivityDashboardGroup[];
+};
 
-  const clock = window.moment(timestamp, clockFormat, true);
-  if (clock.isValid()) return clock;
+type DashboardAccumulator = {
+  definition: ActivityDefinition;
+  rows: ActivityDashboardRow[];
+  groups: Map<string, ActivityDashboardGroup>;
+  groupTimes: Map<string, TimeTotal>;
+  timesByDay: Map<string, TimeTotal>;
+  itemsByDay: Map<string, Map<string, TimeTotal>>;
+};
 
-  const isoClock = window.moment(timestamp, window.moment.ISO_8601, true);
-  return isoClock.isValid() ? isoClock : null;
+/** Resolve overlaps once for all frequency rows, instead of once per activity.
+ * includeHistory=false limits work to the displayed year and omits log/group tables.
+ */
+export function buildActivityDashboards(
+  activities: Activity[],
+  definitions: ActivityDefinition[],
+  year = window.moment().year(),
+  options: { includeHistory?: boolean } = {},
+): Map<string, ActivityDashboard> {
+  const now = window.moment();
+  const includeHistory = options.includeHistory !== false;
+  const calendar = createCalendar(year);
+  const rangeStart = includeHistory
+    ? window.moment("0001-01-01")
+    : window.moment(calendar[0].start);
+  const rangeEnd = includeHistory
+    ? now
+    : window.moment.min(now, window.moment(calendar.at(-1)!.end).add(1, "day"));
+  const accumulators = new Map<string, DashboardAccumulator>(
+    definitions.map((definition) => [
+      normalizeActivityName(definition.name),
+      {
+        definition,
+        rows: [],
+        groups: new Map(),
+        groupTimes: new Map(),
+        timesByDay: new Map(),
+        itemsByDay: new Map(),
+      },
+    ]),
+  );
+  const info = new Map<
+    Activity,
+    {
+      accumulator: DashboardAccumulator;
+      mainValue: string;
+      details: Record<string, unknown>;
+    }
+  >();
+  for (const activity of activities) {
+    const accumulator = accumulators.get(
+      normalizeActivityName(activity.activity),
+    );
+    if (!accumulator) continue;
+    const attributes = accumulator.definition.attributes;
+    const candidate = attributes?.key ? activity[attributes.key] : undefined;
+    const details =
+      candidate && typeof candidate === "object"
+        ? (candidate as Record<string, unknown>)
+        : {};
+    const value = attributes?.mainKey ? details[attributes.mainKey] : undefined;
+    const mainValue =
+      value == null || String(value).trim() === "" ? "(empty)" : String(value);
+    info.set(activity, { accumulator, mainValue, details });
+  }
+
+  const countedByLog = new Map<Activity, Map<number, number>>();
+  for (const slice of activityTimeSlices(activities, rangeStart, rangeEnd)) {
+    const winner = slice.winner.activity.log?.[slice.winner.logIndex].end
+      ? info.get(slice.winner.activity)
+      : undefined;
+    const minutes = (slice.end - slice.start) / 60_000;
+    if (winner && includeHistory) {
+      const logs =
+        countedByLog.get(slice.winner.activity) ?? new Map<number, number>();
+      logs.set(
+        slice.winner.logIndex,
+        (logs.get(slice.winner.logIndex) ?? 0) + minutes,
+      );
+      countedByLog.set(slice.winner.activity, logs);
+    }
+    const namesByActivity = new Map<DashboardAccumulator, Set<string>>();
+    for (const { activity, logIndex } of slice.logs) {
+      // Frequencies list completed logs; open clocks still compete for time.
+      if (!activity.log?.[logIndex].end) continue;
+      const entry = info.get(activity);
+      if (!entry) continue;
+      const names = namesByActivity.get(entry.accumulator) ?? new Set<string>();
+      names.add(entry.mainValue);
+      namesByActivity.set(entry.accumulator, names);
+    }
+    if (namesByActivity.size === 0) continue;
+    const parts: Array<{ date: string; minutes: number }> = [];
+    let cursor = window.moment(slice.start);
+    while (cursor.valueOf() < slice.end) {
+      const end = Math.min(
+        cursor.clone().startOf("day").add(1, "day").valueOf(),
+        slice.end,
+      );
+      parts.push({
+        date: cursor.format("YYYY-MM-DD"),
+        minutes: (end - cursor.valueOf()) / 60_000,
+      });
+      cursor = window.moment(end);
+    }
+    for (const [accumulator, names] of namesByActivity) {
+      const credited = winner?.accumulator === accumulator;
+      if (includeHistory)
+        for (const name of names)
+          addTime(
+            accumulator.groupTimes,
+            name,
+            credited && winner?.mainValue === name ? minutes : 0,
+            minutes,
+          );
+      for (const part of parts) {
+        addTime(
+          accumulator.timesByDay,
+          part.date,
+          credited ? part.minutes : 0,
+          part.minutes,
+        );
+        if (!accumulator.definition.attributes?.mainKey) continue;
+        const items =
+          accumulator.itemsByDay.get(part.date) ?? new Map<string, TimeTotal>();
+        for (const name of names)
+          addTime(
+            items,
+            name,
+            credited && winner?.mainValue === name ? part.minutes : 0,
+            part.minutes,
+          );
+        accumulator.itemsByDay.set(part.date, items);
+      }
+    }
+  }
+
+  if (includeHistory)
+    for (const [activity, { accumulator, mainValue, details }] of info) {
+      const attributes = accumulator.definition.attributes;
+      for (const [logIndex, log] of (activity.log ?? []).entries()) {
+        const { start, end } = getActivityLogTimes(log);
+        if (
+          end === undefined ||
+          !Number.isFinite(start) ||
+          !Number.isFinite(end) ||
+          end <= start
+        )
+          continue;
+        const totalMinutes =
+          Math.max(0, Math.min(end, now.valueOf()) - start) / 60_000;
+        if (totalMinutes === 0) continue;
+        const minutes = countedByLog.get(activity)?.get(logIndex) ?? 0;
+        const day = window.moment(start).format("YYYY-MM-DD");
+        const rangeValues = (attributes?.ranges ?? []).map(
+          ({ start: startKey, end: endKey }) => {
+            const from = Number(details[startKey]);
+            const until = Number(details[endKey]);
+            return Number.isFinite(from) && Number.isFinite(until)
+              ? until - from + 1
+              : "";
+          },
+        );
+        accumulator.rows.push({
+          day,
+          minutes,
+          ...(totalMinutes > minutes ? { totalMinutes } : {}),
+          notes: activity.notes ?? "",
+          quality: typeof activity.quality === "number" ? activity.quality : "",
+          startValues: (attributes?.start ?? []).map(
+            ({ key }) => details[key] ?? "",
+          ),
+          endValues: (attributes?.end ?? []).map(
+            ({ key }) => details[key] ?? "",
+          ),
+          rangeValues,
+          rangeValuesPerHour: rangeValues.map((value) =>
+            typeof value === "number" ? value / (totalMinutes / 60) : "-",
+          ),
+        });
+        if (attributes?.mainKey) {
+          const group = accumulator.groups.get(mainValue) ?? {
+            value: mainValue,
+            minutes: 0,
+            earliest: day,
+            latest: day,
+          };
+          const time = accumulator.groupTimes.get(mainValue)!;
+          group.minutes = time.minutes;
+          if (time.totalMinutes > time.minutes)
+            group.totalMinutes = time.totalMinutes;
+          if (day < group.earliest) group.earliest = day;
+          if (day > group.latest) group.latest = day;
+          accumulator.groups.set(mainValue, group);
+        }
+      }
+    }
+  return new Map(
+    [...accumulators].map(([key, accumulator]) => [
+      key,
+      {
+        weeks: buildWeeks(
+          accumulator.timesByDay,
+          accumulator.itemsByDay,
+          calendar,
+        ),
+        rows: accumulator.rows.sort((a, b) => b.day.localeCompare(a.day)),
+        groups: [...accumulator.groups.values()].sort(
+          (a, b) => b.minutes - a.minutes,
+        ),
+      },
+    ]),
+  );
 }
 
 export function buildActivityDashboard(
   activities: Activity[],
   definition: ActivityDefinition,
   year = window.moment().year(),
-) {
-  const attributes = definition.attributes;
-  const startFields = attributes?.start ?? [];
-  const endFields = attributes?.end ?? [];
-  const ranges = attributes?.ranges ?? [];
-  const groups = new Map<string, ActivityDashboardGroup>();
-  const rows: ActivityDashboardRow[] = [];
-  const minutesByDay = new Map<string, number>();
-  const itemsByDay = new Map<string, Map<string, number>>();
-
-  for (const activity of activities) {
-    if (
-      normalizeActivityName(activity.activity) !==
-      normalizeActivityName(definition.name)
-    ) {
-      continue;
-    }
-
-    const activityValues = activity as unknown as Record<string, unknown>;
-    const detailsCandidate = attributes?.key
-      ? activityValues[attributes.key]
-      : undefined;
-    const details =
-      detailsCandidate && typeof detailsCandidate === "object"
-        ? (detailsCandidate as Record<string, unknown>)
-        : {};
-    const mainValueCandidate = attributes?.mainKey
-      ? details[attributes.mainKey]
-      : undefined;
-    const mainValue =
-      mainValueCandidate == null || String(mainValueCandidate).trim() === ""
-        ? "(empty)"
-        : String(mainValueCandidate);
-
-    for (const log of activity.log ?? []) {
-      const start = parseClock(log.start);
-      const end = parseClock(log.end);
-      if (!start || !end || !end.isAfter(start)) continue;
-
-      const minutes = Math.round(
-        window.moment.duration(end.diff(start)).asMinutes(),
-      );
-      let segmentStart = start.clone();
-      while (segmentStart.isBefore(end)) {
-        const segmentEnd = window.moment.min(
-          end,
-          segmentStart.clone().startOf("day").add(1, "day"),
-        );
-        const date = segmentStart.format("YYYY-MM-DD");
-        minutesByDay.set(
-          date,
-          (minutesByDay.get(date) ?? 0) +
-            segmentEnd.diff(segmentStart) / 60_000,
-        );
-        if (attributes?.mainKey) {
-          const items = itemsByDay.get(date) ?? new Map<string, number>();
-          items.set(
-            mainValue,
-            (items.get(mainValue) ?? 0) +
-              segmentEnd.diff(segmentStart) / 60_000,
-          );
-          itemsByDay.set(date, items);
-        }
-        segmentStart = segmentEnd;
-      }
-      const day = start.format("YYYY-MM-DD");
-      const rangeValues = ranges.map(({ start: startKey, end: endKey }) => {
-        const rangeStart = Number(details[startKey]);
-        const rangeEnd = Number(details[endKey]);
-        return Number.isFinite(rangeStart) && Number.isFinite(rangeEnd)
-          ? rangeEnd - rangeStart + 1
-          : "";
-      });
-
-      rows.push({
-        day,
-        minutes,
-        notes: activity.notes ?? "",
-        quality: typeof activity.quality === "number" ? activity.quality : "",
-        startValues: startFields.map(({ key }) => details[key] ?? ""),
-        endValues: endFields.map(({ key }) => details[key] ?? ""),
-        rangeValues,
-        rangeValuesPerHour: rangeValues.map((value) =>
-          typeof value === "number" ? value / (minutes / 60) : "-",
-        ),
-      });
-
-      if (attributes?.mainKey) {
-        const current = groups.get(mainValue) ?? {
-          value: mainValue,
-          minutes: 0,
-          earliest: day,
-          latest: day,
-        };
-        current.minutes += minutes;
-        if (day < current.earliest) current.earliest = day;
-        if (day > current.latest) current.latest = day;
-        groups.set(mainValue, current);
-      }
-    }
-  }
-
-  return {
-    weeks: buildWeeks(minutesByDay, itemsByDay, year),
-    rows: rows.sort((a, b) => b.day.localeCompare(a.day)),
-    groups: [...groups.values()].sort((a, b) => b.minutes - a.minutes),
-  };
+): ActivityDashboard {
+  return buildActivityDashboards(activities, [definition], year).get(
+    normalizeActivityName(definition.name),
+  )!;
 }

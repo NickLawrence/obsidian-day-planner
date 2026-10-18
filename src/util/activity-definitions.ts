@@ -38,6 +38,8 @@ export type ActivityGroupDefinition = {
 export type ActivityDefinition = {
   name: string;
   label: string;
+  /** Higher values receive overlapping time first. Unspecified activities use 0. */
+  priority?: number;
   startSuggestionLimit?: number;
   group: ActivityGroupDefinition["name"];
   color?: ActivityColorVariant;
@@ -66,6 +68,7 @@ const activityGroups: ActivityGroupDefinition[] = [
 const activityDefinitions: ActivityDefinition[] = [
   {
     name: "read",
+    priority: 30,
     label: "Read",
     group: "media",
     plan: { defaultHours: 5 },
@@ -109,6 +112,7 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "game",
+    priority: 20,
     label: "Game",
     group: "media",
     color: "darker",
@@ -131,6 +135,7 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "board game",
+    priority: 20,
     label: "Board Game",
     group: "media",
     emoji: "♟️",
@@ -143,14 +148,15 @@ const activityDefinitions: ActivityDefinition[] = [
           label: "Game",
           type: "text",
           required: true,
-          resourceTag: "boardgame"
-        }
+          resourceTag: "boardgame",
+        },
       ],
       end: [],
-    }
+    },
   },
   {
     name: "movie",
+    priority: 10,
     label: "Movie",
     group: "media",
     emoji: "📺",
@@ -171,6 +177,7 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "tv",
+    priority: 10,
     label: "TV",
     startSuggestionLimit: 10,
     group: "media",
@@ -188,6 +195,7 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "theater",
+    priority: 10,
     label: "Theater",
     group: "media",
     emoji: "📽️",
@@ -208,6 +216,7 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "call",
+    priority: 10,
     label: "Call",
     group: "social",
     emoji: "📞",
@@ -220,6 +229,7 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "light work",
+    priority: 90,
     label: "Light Work",
     group: "work",
     plan: { defaultHours: 30, maxHours: 60 },
@@ -240,6 +250,7 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "deep work",
+    priority: 100,
     label: "Deep Work",
     group: "work",
     color: "darker",
@@ -261,12 +272,14 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "piano",
+    priority: 40,
     label: "Piano",
     group: "media",
     emoji: "🎹",
   },
   {
     name: "walk",
+    priority: 60,
     label: "Walk",
     group: "exercise",
     emoji: "🚶",
@@ -274,6 +287,7 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "juggle",
+    priority: 40,
     label: "Juggle",
     group: "hobby",
     emoji: "🤹",
@@ -281,6 +295,7 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "exercise",
+    priority: 60,
     label: "Exercise",
     group: "exercise",
     emoji: "🏋️",
@@ -288,6 +303,7 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "stretch",
+    priority: 60,
     label: "Stretch",
     group: "exercise",
     emoji: "🧘",
@@ -295,6 +311,7 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "bike",
+    priority: 60,
     label: "Bike",
     group: "exercise",
     emoji: "🚴",
@@ -302,6 +319,7 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "language",
+    priority: 40,
     label: "Language",
     group: "hobby",
     emoji: "🗣️",
@@ -309,6 +327,7 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "craft",
+    priority: 40,
     label: "Craft",
     group: "hobby",
     emoji: "🪡",
@@ -316,6 +335,7 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "housework",
+    priority: 50,
     label: "Housework",
     group: "household",
     emoji: "🧹",
@@ -323,20 +343,30 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "cook",
+    priority: 50,
     label: "Cook",
     group: "household",
     emoji: "🍳",
     plan: { defaultHours: 5, intervalMinutes: 30 },
   },
-  { name: "brew", label: "Brew", group: "household", emoji: "🍺"},
+  {
+    name: "brew",
+    priority: 50,
+    label: "Brew",
+    group: "household",
+    emoji: "🍺",
+  },
   {
     name: "eat",
+    // Background contexts yield to other activities, including unspecified ones (0).
+    priority: -10,
     label: "Eat",
     group: "household",
     emoji: "🍽️",
   },
   {
     name: "hygiene",
+    priority: 50,
     label: "Hygiene",
     group: "hygiene",
     emoji: "🪥",
@@ -344,6 +374,7 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "restaurant",
+    priority: 10,
     label: "Restaurant",
     group: "social",
     emoji: "🍜",
@@ -364,6 +395,7 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "bar",
+    priority: 10,
     label: "Bar",
     group: "social",
     emoji: "🍸",
@@ -384,6 +416,7 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "cafe",
+    priority: 10,
     label: "Cafe",
     group: "social",
     emoji: "☕",
@@ -404,18 +437,21 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "social",
+    priority: 10,
     label: "Social",
     group: "social",
     emoji: "👯",
   },
   {
     name: "chat",
+    priority: 10,
     label: "Chat",
     group: "social",
-    emoji: "🗣️"
+    emoji: "🗣️",
   },
   {
     name: "bed",
+    priority: -10,
     label: "Bed",
     group: "bed",
     emoji: "🛏️",
@@ -423,18 +459,21 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "ride",
+    priority: -10,
     label: "Ride",
     group: "transit",
     emoji: "🚗",
   },
   {
     name: "transit",
+    priority: -10,
     label: "Transit",
     group: "transit",
     emoji: "🚃",
   },
   {
     name: "shop",
+    priority: 50,
     label: "Shop",
     group: "household",
     emoji: "🛍️",
@@ -455,6 +494,7 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "tour",
+    priority: 10,
     label: "Tour",
     group: "social",
     emoji: "🖼️",
@@ -475,6 +515,7 @@ const activityDefinitions: ActivityDefinition[] = [
   },
   {
     name: "pathfinder",
+    priority: 10,
     label: "Pathfinder",
     group: "social",
     emoji: "🪄",

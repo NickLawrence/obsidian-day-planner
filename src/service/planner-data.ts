@@ -51,13 +51,18 @@ async function ensureParentFolders(vault: Vault, path: string) {
 export class PlannerData {
   private activitiesByPath = new Map<string, Activity[]>();
   private listeners = new Set<() => void>();
-  private readonly repository: ActivityRepository;
   private fileContents?: Map<string, string>;
   private loading?: Promise<void>;
-  private reloadRequested = false;
+  private fullReloadRequested = false;
+  private dirtyPaths = new Set<string>();
+  private activitySnapshot: Activity[] = [];
+  private listPropsSnapshot?: PathToListProps;
 
-  constructor(private readonly vault: Vault) {
-    this.repository = new ActivityRepository(
+  constructor(private readonly vault: Vault) {}
+
+  private createRepository(writtenPaths: Set<string>) {
+    const vault = this.vault;
+    return new ActivityRepository(
       {
         listFiles: () => this.listDataFiles(),
         readFile: (path) => this.readDataFile(path),
@@ -82,6 +87,7 @@ export class PlannerData {
             if (current !== null) await vault.adapter.write(path, contents);
             else await vault.create(path, contents);
           }
+          writtenPaths.add(path);
         },
       },
       activityYaml,
@@ -120,14 +126,24 @@ export class PlannerData {
     return files.sort();
   }
 
-  private async readDataFile(path: string) {
-    return (await this.vault.adapter.exists(path))
-      ? this.vault.adapter.read(path)
-      : null;
+  private async readDataFile(path: string, listed = false) {
+    if (!listed && !(await this.vault.adapter.exists(path))) return null;
+    try {
+      return await this.vault.adapter.read(path);
+    } catch (error) {
+      // A sync deletion can race a directory scan. Do not hide read timeouts.
+      if (!(await this.vault.adapter.exists(path))) return null;
+      throw error;
+    }
   }
 
-  loadActivities(): Promise<void> {
-    this.reloadRequested = true;
+  /** Known file changes reload only those paths; full scans also discover silent sync writes. */
+  loadActivities(paths?: Iterable<string>): Promise<void> {
+    if (paths && this.fileContents) {
+      for (const path of paths) this.dirtyPaths.add(path);
+    } else {
+      this.fullReloadRequested = true;
+    }
     if (!this.loading) {
       this.loading = this.reloadActivities().finally(() => {
         this.loading = undefined;
@@ -137,41 +153,92 @@ export class PlannerData {
   }
 
   private async reloadActivities() {
-    while (this.reloadRequested) {
-      this.reloadRequested = false;
-      await this.readActivitiesSnapshot();
+    while (this.fullReloadRequested || this.dirtyPaths.size) {
+      const paths = this.fullReloadRequested ? undefined : [...this.dirtyPaths];
+      this.fullReloadRequested = false;
+      this.dirtyPaths.clear();
+      await this.readActivitiesSnapshot(paths);
     }
   }
 
-  private async readActivitiesSnapshot() {
-    const contents = new Map<string, string>();
-    for (const path of await this.listDataFiles()) {
-      const data = await this.readDataFile(path);
-      if (data !== null) contents.set(path, data);
-    }
+  private async readActivitiesSnapshot(changedPaths?: string[]) {
+    const paths = changedPaths ?? (await this.listDataFiles());
+    const reads = new Array<string | null>(paths.length);
+    let nextIndex = 0;
+    let readFailed = false;
+    let readError: unknown;
+    // Bound parallel I/O: a long vault history should neither serialize every
+    // read nor flood Obsidian's filesystem adapter with hundreds of requests.
+    await Promise.all(
+      Array.from({ length: Math.min(4, paths.length) }, async () => {
+        while (!readFailed && nextIndex < paths.length) {
+          const index = nextIndex++;
+          try {
+            reads[index] = await this.readDataFile(
+              paths[index],
+              changedPaths === undefined,
+            );
+          } catch (error) {
+            if (!readFailed) readError = error;
+            readFailed = true;
+          }
+        }
+      }),
+    );
+    if (readFailed) throw readError;
+    const contents = changedPaths
+      ? new Map(this.fileContents)
+      : new Map<string, string>();
+    paths.forEach((path, index) => {
+      const data = reads[index];
+      if (data === null) contents.delete(path);
+      else contents.set(path, data);
+    });
+    const previous = this.fileContents;
     if (
-      this.fileContents &&
-      contents.size === this.fileContents.size &&
-      [...contents].every(
-        ([path, data]) => this.fileContents!.get(path) === data,
-      )
+      previous &&
+      contents.size === previous.size &&
+      [...contents].every(([path, data]) => previous.get(path) === data)
     )
       return;
-    const next = new Map<string, Activity[]>();
-    for (const { path, record } of readStoredActivities(contents, activityYaml))
-      next.set(path, [...(next.get(path) ?? []), record]);
-    for (const [path, data] of contents) {
-      if (path.startsWith(`${goalsFolder}/`)) {
+    const next = new Map(this.activitiesByPath);
+    let activitiesChanged = false;
+    for (const path of new Set([
+      ...(previous?.keys() ?? []),
+      ...contents.keys(),
+    ])) {
+      const data = contents.get(path);
+      if (previous?.get(path) === data) continue;
+      if (path.startsWith(`${activitiesFolder}/`)) {
+        activitiesChanged = true;
+        if (data === undefined) next.delete(path);
+        else
+          next.set(
+            path,
+            readStoredActivities([[path, data]], activityYaml).map(
+              ({ record }) => record,
+            ),
+          );
+      } else if (data !== undefined && path.startsWith(`${goalsFolder}/`)) {
         planFileSchema.parse(parseYaml(data));
       }
     }
-    this.activitiesByPath = next;
+    // Publish only after every changed file validates, retaining the last good
+    // snapshot if sync temporarily leaves an incomplete YAML file.
+    if (activitiesChanged) {
+      this.activitiesByPath = new Map(
+        [...next].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+      );
+      this.activitySnapshot = [...this.activitiesByPath.values()].flat();
+      this.listPropsSnapshot = undefined;
+    }
     this.fileContents = contents;
     this.changed();
   }
 
   asListProps(): PathToListProps {
-    return Object.fromEntries(
+    if (this.listPropsSnapshot) return this.listPropsSnapshot;
+    this.listPropsSnapshot = Object.fromEntries(
       [...this.activitiesByPath].map(([path, activities]) => [
         path,
         {
@@ -185,10 +252,12 @@ export class PlannerData {
         },
       ]),
     );
+    return this.listPropsSnapshot;
   }
 
+  /** Stable read-only snapshot, replaced after a validated activity-file change. */
   getAllActivities() {
-    return [...this.activitiesByPath.values()].flat();
+    return this.activitySnapshot;
   }
 
   getOpenActivities() {
@@ -206,8 +275,9 @@ export class PlannerData {
   }
 
   async addActivity(activity: Activity) {
-    await this.repository.addActivity(activity);
-    await this.loadActivities();
+    const writtenPaths = new Set<string>();
+    await this.createRepository(writtenPaths).addActivity(activity);
+    await this.loadActivities(writtenPaths);
   }
 
   async updateActivities(
@@ -215,19 +285,23 @@ export class PlannerData {
     update: (activities: Activity[]) => Activity[],
   ) {
     const visible = this.activitiesByPath.get(path) ?? [];
-    await this.repository.updateActivities(path, (latest) => {
-      if (
-        visible.some(
-          (record, index) =>
-            !latest[index] ||
-            storedActivityId(path, record) !==
-              storedActivityId(path, latest[index]),
+    const writtenPaths = new Set<string>();
+    await this.createRepository(writtenPaths).updateActivities(
+      path,
+      (latest) => {
+        if (
+          visible.some(
+            (record, index) =>
+              !latest[index] ||
+              storedActivityId(path, record) !==
+                storedActivityId(path, latest[index]),
+          )
         )
-      )
-        throw new Error("The activity list changed. Refresh and try again.");
-      return update(latest);
-    });
-    await this.loadActivities();
+          throw new Error("The activity list changed. Refresh and try again.");
+        return update(latest);
+      },
+    );
+    await this.loadActivities(writtenPaths);
   }
 
   async readPlanEntries(week: Moment): Promise<StoredActivityPlanEntry[]> {
@@ -252,7 +326,7 @@ export class PlannerData {
     else if (await this.vault.adapter.exists(path))
       await this.vault.adapter.write(path, contents);
     else await this.vault.create(path, contents);
-    await this.loadActivities();
+    await this.loadActivities([path]);
   }
 
   async createOrOpenGoalsFile(week: Moment) {

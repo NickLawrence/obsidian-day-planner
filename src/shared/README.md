@@ -70,3 +70,10 @@ history. `tests/activity-repository.test.ts` exercises the plugin adapter and
 companion repository against a single file backend, including external edits,
 reloads, suggestions, date moves, and stale/conflicting writes. No adapter should
 create a second activity database or implement a manual snapshot transfer flow.
+
+The Obsidian adapter publishes stable activity snapshots and reuses unchanged
+files' records. Known file changes reload only those paths; full scans read at
+most four files concurrently and parse only changed contents. Mutations still
+read fresh files and compare expected contents before writing. Background scans
+also catch sync writes that emit no vault event and preserve the previous mtime;
+do not rely only on Obsidian's file index or mtime to invalidate this cache.

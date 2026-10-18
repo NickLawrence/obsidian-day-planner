@@ -13,6 +13,38 @@ import { formatDuration } from "../src/util/duration";
 import type { Activity } from "../src/util/props";
 
 describe("calculateDailyActivityDisplayDurations", () => {
+  test("cached log times still update after edits and as an open clock advances", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2024-09-09T12:00:00Z"));
+      const log = {
+        start: "2024-09-09T09:00:00Z",
+        end: undefined as string | undefined,
+      };
+      const activities: Activity[] = [
+        { activity: "piano", taskIds: [], log: [log] },
+      ];
+      const day = window.moment("2024-09-09");
+      expect(
+        calculateDailyActivityDurations(activities, day)[0].duration.asHours(),
+      ).toBe(3);
+      vi.setSystemTime(new Date("2024-09-09T13:00:00Z"));
+      expect(
+        calculateDailyActivityDurations(activities, day)[0].duration.asHours(),
+      ).toBe(4);
+      log.end = "2024-09-09T11:00:00Z";
+      expect(
+        calculateDailyActivityDurations(activities, day)[0].duration.asHours(),
+      ).toBe(2);
+      log.start = "2024-09-09T10:00:00Z";
+      expect(
+        calculateDailyActivityDurations(activities, day)[0].duration.asHours(),
+      ).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("splits an activity by its main key and aggregates matching values", () => {
     const activities: Activity[] = [
       {

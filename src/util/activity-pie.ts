@@ -1,0 +1,80 @@
+import type { Duration, Moment } from "moment";
+
+import {
+  getActivityDefinition,
+  getActivityGroup,
+} from "./activity-definitions";
+import {
+  calculateActivitySummaryForRange,
+  type ActivityDuration,
+} from "./activity-log-summary";
+import { applyActivityColorVariant } from "./color";
+import { formatActivityDuration, formatDuration } from "./duration";
+import type { Activity } from "./props";
+
+export type ActivityPieSlice = {
+  key: string;
+  label: string;
+  emoji: string;
+  color: string;
+  value: number;
+  durationLabel: string;
+};
+
+/** Chart values use credited time only; full logged time is tooltip context. */
+export function buildActivityPieSlices(
+  totals: ActivityDuration[],
+  unrecordedTime: Duration,
+): ActivityPieSlice[] {
+  const slices = totals
+    .filter(
+      ({ duration }) =>
+        Number.isFinite(duration.asMilliseconds()) &&
+        duration.asMilliseconds() > 0,
+    )
+    .map((total) => {
+      const definition = getActivityDefinition(total.activityKey);
+      return {
+        key: total.activityKey,
+        label: definition?.label ?? total.activity,
+        emoji: definition?.emoji ?? "•",
+        color: applyActivityColorVariant(
+          getActivityGroup(total.activityKey)?.color ?? "#808080",
+          definition?.color,
+        ),
+        value: total.duration.asMilliseconds(),
+        durationLabel: formatActivityDuration(total),
+      };
+    })
+    .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+
+  const unrecorded = unrecordedTime.asMilliseconds();
+  if (Number.isFinite(unrecorded) && unrecorded > 0) {
+    slices.push({
+      key: "__unrecorded__",
+      label: "Unrecorded time",
+      emoji: "◷",
+      color: "#9ca3af",
+      value: unrecorded,
+      durationLabel: formatDuration(unrecordedTime),
+    });
+  }
+  return slices;
+}
+
+/** Build a priority-adjusted chart for any half-open range, through now at most. */
+export function calculateActivityPieForRange(
+  activities: Activity[],
+  rangeStart: Moment,
+  rangeEnd: Moment,
+): ActivityPieSlice[] {
+  if (!rangeStart.isValid() || !rangeEnd.isValid()) return [];
+  const elapsedEnd = window.moment.min(rangeEnd, window.moment());
+  if (!elapsedEnd.isAfter(rangeStart)) return [];
+  const { totals, unrecordedTime } = calculateActivitySummaryForRange(
+    activities,
+    rangeStart,
+    elapsedEnd,
+  );
+  return buildActivityPieSlices(totals, unrecordedTime);
+}
