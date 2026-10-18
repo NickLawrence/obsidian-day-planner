@@ -5,8 +5,7 @@ import {
   getActivityGroup,
 } from "./activity-definitions";
 import {
-  calculateActivityDurationsForRange,
-  calculateUnrecordedActivityDurationForRange,
+  calculateActivitySummaryForRange,
   type ActivityDuration,
 } from "./activity-log-summary";
 import { applyActivityColorVariant } from "./color";
@@ -72,12 +71,10 @@ export function calculateActivityPieForRange(
   if (!rangeStart.isValid() || !rangeEnd.isValid()) return [];
   const elapsedEnd = window.moment.min(rangeEnd, window.moment());
   if (!elapsedEnd.isAfter(rangeStart)) return [];
-  return buildActivityPieSlices(
-    calculateActivityDurationsForRange(activities, rangeStart, elapsedEnd),
-    calculateUnrecordedActivityDurationForRange(
-      activities,
-      rangeStart,
-      elapsedEnd,
-    ),
+  const { totals, unrecordedTime } = calculateActivitySummaryForRange(
+    activities,
+    rangeStart,
+    elapsedEnd,
   );
+  return buildActivityPieSlices(totals, unrecordedTime);
 }

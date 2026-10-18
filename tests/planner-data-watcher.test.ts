@@ -1,5 +1,5 @@
 import { dump, load, JSON_SCHEMA } from "js-yaml";
-import type { EventRef, Vault } from "obsidian";
+import { parseYaml, type EventRef, type Vault } from "obsidian";
 import { writable } from "svelte/store";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,7 +12,7 @@ import { createActivityRecord } from "../src/shared/activity";
 import { createDayPlannerActivityApi } from "../src/util/activity-totals";
 
 vi.mock("obsidian", () => ({
-  parseYaml: (data: string) => load(data, { schema: JSON_SCHEMA }),
+  parseYaml: vi.fn((data: string) => load(data, { schema: JSON_SCHEMA })),
   stringifyYaml: dump,
 }));
 
@@ -45,7 +45,7 @@ function fixture(initial: Record<string, string> = {}) {
     write: async (path: string, contents: string) => {
       disk.set(path, contents);
     },
-    list: async (folder: string) => {
+    list: vi.fn(async (folder: string) => {
       const files: string[] = [];
       const folders = new Set<string>();
       for (const path of disk.keys()) {
@@ -55,7 +55,7 @@ function fixture(initial: Record<string, string> = {}) {
         else files.push(path);
       }
       return { files, folders: [...folders] };
-    },
+    }),
   };
   const vault = {
     adapter,
@@ -125,6 +125,168 @@ describe("planner reloads after sync adapter writes", () => {
     vi.useRealTimers();
   });
 
+  it("reloads and parses only the changed weekly file, retaining unchanged record identities", async () => {
+    const f = fixture({
+      [week]: activityFile("Current"),
+      [olderWeek]: activityFile("History"),
+    });
+    await f.planner.loadActivities();
+    const snapshot = f.planner.getAllActivities();
+    const history = snapshot.find(({ notes }) => notes === "History");
+    expect(f.planner.getAllActivities()).toBe(snapshot);
+    expect(f.api.getAllActivities()).toBe(f.api.getAllActivities());
+    f.adapter.read.mockClear();
+    f.adapter.list.mockClear();
+    vi.mocked(parseYaml).mockClear();
+    f.disk.set(week, activityFile("Changed"));
+    await f.planner.loadActivities([week]);
+    expect(f.adapter.read.mock.calls.map(([path]) => path)).toEqual([week]);
+    expect(f.adapter.list).not.toHaveBeenCalled();
+    expect(parseYaml).toHaveBeenCalledTimes(1);
+    expect(
+      f.planner.getAllActivities().find(({ notes }) => notes === "History"),
+    ).toBe(history);
+    expect(
+      f.api.getAllActivities().some(({ notes }) => notes === "Changed"),
+    ).toBe(true);
+    f.dispose();
+  });
+
+  it("starting an activity refreshes only its destination file", async () => {
+    const f = fixture({
+      [week]: activityFile("Current"),
+      [olderWeek]: activityFile("History"),
+    });
+    await f.planner.loadActivities();
+    f.adapter.read.mockClear();
+    f.adapter.list.mockClear();
+    await f.planner.addActivity(
+      createActivityRecord("piano", {}, "2026-10-07 11:00:00"),
+    );
+    expect(new Set(f.adapter.read.mock.calls.map(([path]) => path))).toEqual(
+      new Set([week]),
+    );
+    expect(f.adapter.list).not.toHaveBeenCalled();
+    expect(f.api.getAllActivities()).toHaveLength(3);
+    f.dispose();
+  });
+
+  it("refreshes both files after moving an activity between weeks", async () => {
+    const f = fixture({
+      [week]: activityFile("Move me"),
+      [olderWeek]: activityFile("History"),
+    });
+    await f.planner.loadActivities();
+    f.adapter.list.mockClear();
+    await f.planner.updateActivities(week, (records) =>
+      records.map((activity) => ({
+        ...activity,
+        log: [{ start: "2026-10-01 11:00:00" }],
+      })),
+    );
+    expect(f.adapter.list).not.toHaveBeenCalled();
+    expect(f.planner.asListProps()[week][0].parsed.activities).toEqual([]);
+    expect(
+      f.api
+        .getAllActivities()
+        .map(({ notes }) => notes)
+        .sort(),
+    ).toEqual(["History", "Move me"]);
+    f.dispose();
+  });
+
+  it("keeps activity snapshots stable for goal-only changes", async () => {
+    const f = fixture({ [week]: activityFile("Current") });
+    await f.planner.loadActivities();
+    const activities = f.planner.getAllActivities();
+    const props = f.planner.asListProps();
+    f.disk.set(
+      goals,
+      dump({ entries: [{ activity: "walk", kind: "goal", duration: 30 }] }),
+    );
+    await f.planner.loadActivities([goals]);
+    expect(f.planner.getAllActivities()).toBe(activities);
+    expect(f.planner.asListProps()).toBe(props);
+    expect(f.changed).toHaveBeenCalledTimes(2);
+    f.dispose();
+  });
+
+  it("retains the last complete snapshot after a filesystem timeout and recovers on retry", async () => {
+    const f = fixture({
+      [week]: activityFile("Current"),
+      [olderWeek]: activityFile("History"),
+    });
+    await f.planner.loadActivities();
+    const snapshot = f.planner.getAllActivities();
+    const read = f.adapter.read.getMockImplementation()!;
+    f.disk.set(week, activityFile("Changed"));
+    f.adapter.read.mockImplementation(async (path) => {
+      if (path === olderWeek)
+        throw new Error("File system operation timed out.");
+      return read(path);
+    });
+    await expect(f.planner.loadActivities()).rejects.toThrow(
+      "File system operation timed out.",
+    );
+    expect(f.planner.getAllActivities()).toBe(snapshot);
+    expect(f.changed).toHaveBeenCalledTimes(1);
+    f.adapter.read.mockImplementation(read);
+    await f.planner.loadActivities();
+    expect(
+      f.api.getAllActivities().some(({ notes }) => notes === "Changed"),
+    ).toBe(true);
+    f.dispose();
+  });
+
+  it("limits initial reads to four concurrent filesystem requests", async () => {
+    const files = Object.fromEntries(
+      Array.from({ length: 9 }, (_, index) => [
+        `_Planner/activities/2026/2026-W${String(index + 1).padStart(2, "0")}.yaml`,
+        activityFile(`Week ${index}`),
+      ]),
+    );
+    const f = fixture(files);
+    const read = f.adapter.read.getMockImplementation()!;
+    let active = 0;
+    let maximum = 0;
+    f.adapter.read.mockImplementation(async (path) => {
+      active++;
+      maximum = Math.max(maximum, active);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      active--;
+      return read(path);
+    });
+    const loaded = f.planner.loadActivities();
+    await vi.runAllTimersAsync();
+    await loaded;
+    expect(maximum).toBe(4);
+    expect(f.api.getAllActivities()).toHaveLength(9);
+    f.dispose();
+  });
+
+  it("waits until a slow scan finishes before scheduling the next poll", async () => {
+    const f = fixture({ [week]: activityFile("Current") });
+    const read = f.adapter.read.getMockImplementation()!;
+    let release!: () => void;
+    const paused = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    f.adapter.read.mockImplementationOnce(async (path) => {
+      await paused;
+      return read(path);
+    });
+    f.watcher.start();
+    await vi.advanceTimersByTimeAsync(plannerPollIntervalMs * 3);
+    expect(f.adapter.read).toHaveBeenCalledTimes(1);
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(plannerPollIntervalMs - 1);
+    expect(f.adapter.read).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(f.adapter.read).toHaveBeenCalledTimes(2);
+    f.dispose();
+  });
+
   it("refreshes the dashboard/API when sync updates contents without events or an mtime change", async () => {
     const f = fixture({ [week]: activityFile("Before sync") });
     f.watcher.start();
@@ -173,6 +335,7 @@ describe("planner reloads after sync adapter writes", () => {
     expect(reload).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
     expect(reload).toHaveBeenCalledTimes(1);
+    expect(reload).toHaveBeenCalledWith([week]);
     expect(f.api.getAllActivities()[0].notes).toBe("After");
     f.disk.delete(week);
     f.emit("rename", "Archive/activities", "_Planner/activities");

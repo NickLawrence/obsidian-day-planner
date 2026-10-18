@@ -188,6 +188,11 @@ other time frames; the end is exclusive and future time is excluded. The chart
 grows to fill available space, with a compact legend beside it or below it in
 narrow panels.
 
+Dashboard history updates when planner data changes, with minute ticks for live
+totals. Activity edits reload only the affected weekly files. Vault events trigger
+prompt updates; background scans check for silent sync changes every 30 seconds
+after the previous scan completes, and returning to the app also triggers a scan.
+
 ## Note on the old plugin version
 
 0.7.0 significantly changes what the plugin looks like and what it does. If you like to have some of the old behaviors back, [consider creating an issue](https://github.com/ivan-lednev/obsidian-day-planner/issues).

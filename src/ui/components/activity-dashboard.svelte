@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { App } from "obsidian";
+  import type { App, EventRef } from "obsidian";
   import { onDestroy, onMount } from "svelte";
 
   import type { PlannerData } from "../../service/planner-data";
@@ -23,7 +23,11 @@
 
   const definitions = activityApi.getActivityDefinitions();
   let selectedName = $state(definitions[0]?.name ?? "");
-  let activities = $state(activityApi.getAllActivities());
+  let activities = $state.raw(activityApi.getAllActivities());
+  let progressTime = $state(window.moment());
+  const year = $derived(progressTime.year());
+  let metadataChangeRef: EventRef | undefined;
+  let resourceRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   let refreshTimer: ReturnType<typeof setInterval> | undefined;
   let stopPlannerListener: (() => void) | undefined;
 
@@ -32,15 +36,18 @@
   );
   const dashboard = $derived(
     definition
-      ? buildActivityDashboard(activities, definition)
+      ? buildActivityDashboard(activities, definition, year)
       : { rows: [], groups: [], weeks: [] },
   );
   const inProgress = $derived(
-    definition ? getInProgressMainKeys(app, activities, definition) : [],
+    definition
+      ? getInProgressMainKeys(app, activities, definition, progressTime)
+      : [],
   );
 
   function refresh() {
     activities = activityApi.getAllActivities();
+    progressTime = window.moment();
   }
 
   function displayTime(minutes: number, totalMinutes?: number) {
@@ -67,13 +74,22 @@
     );
     if (firstWithLogs) selectedName = firstWithLogs.name;
 
-    refreshTimer = setInterval(refresh, 2_000);
+    refreshTimer = setInterval(refresh, 60_000);
     stopPlannerListener = plannerData.onChange(refresh);
+    metadataChangeRef = app.metadataCache.on("changed", () => {
+      if (resourceRefreshTimer) clearTimeout(resourceRefreshTimer);
+      resourceRefreshTimer = setTimeout(() => {
+        resourceRefreshTimer = undefined;
+        progressTime = window.moment();
+      }, 250);
+    });
   });
 
   onDestroy(() => {
     if (refreshTimer) clearInterval(refreshTimer);
     stopPlannerListener?.();
+    if (resourceRefreshTimer) clearTimeout(resourceRefreshTimer);
+    if (metadataChangeRef) app.metadataCache.offref(metadataChangeRef);
   });
 </script>
 
@@ -149,9 +165,9 @@
     </section>
 
     <WeeklyActivityHeatmap
+      allowDaily
       label={definition.label}
       weeks={dashboard.weeks}
-      allowDaily
     />
 
     <section>

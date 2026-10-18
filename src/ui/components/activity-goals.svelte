@@ -6,11 +6,11 @@
   import { getActivityDefinition } from "../../util/activity-definitions";
   import {
     calculateDailyActivityDurations,
-    calculateWeeklyActivityDurations,
-    calculateWeeklyUnrecordedActivityDuration,
+    calculateActivitySummaryForRange,
     getWeekRangeFor,
     type ActivityDuration,
   } from "../../util/activity-log-summary";
+  import { createActivityRangeIndex } from "../../util/activity-range-index";
   import type { DayPlannerActivityApi } from "../../util/activity-totals";
   import { formatActivityDuration, formatDuration } from "../../util/duration";
   import type { Activity } from "../../util/props";
@@ -50,7 +50,7 @@
   let rows = $state<GoalProgressRow[]>([]);
   let totalRow = $state<GoalProgressRow | null>(null);
   let otherActivityRows = $state<OtherActivityRow[]>([]);
-  let pieActivities = $state<Activity[]>([]);
+  let pieActivities = $state.raw<Activity[]>([]);
   let pieRange = $state(getWeekRangeFor(window.moment()));
   let unrecordedTime = $state(window.moment.duration(0));
   let weekLabel = $state("");
@@ -214,20 +214,24 @@
       now,
     );
 
-    const allActivities = activityApi.getAllActivities();
+    const allActivities = createActivityRangeIndex(
+      activityApi.getAllActivities(),
+    )(weekStart, weekEnd);
     const dailyDurationsByActivity = getDailyDurationsForWeek(
       allActivities,
       weekStart,
       weekEnd,
     );
 
-    const totals = calculateWeeklyActivityDurations(allActivities, now);
+    const { totals, unrecordedTime: elapsedUnrecordedTime } =
+      calculateActivitySummaryForRange(
+        allActivities,
+        weekStart,
+        window.moment.min(weekEnd, now),
+      );
     pieActivities = allActivities;
     pieRange = { start: weekStart, end: weekEnd };
-    unrecordedTime = calculateWeeklyUnrecordedActivityDuration(
-      allActivities,
-      now,
-    );
+    unrecordedTime = elapsedUnrecordedTime;
     const withGoals: Array<
       ActivityDuration & { goal?: import("moment").Duration }
     > = mergeActivityDurationsWithGoals(totals, goals);

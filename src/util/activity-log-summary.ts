@@ -29,6 +29,38 @@ export function getWeekRangeFor(date: Moment) {
   return { start, end };
 }
 
+type ActivityLog = NonNullable<Activity["log"]>[number];
+const parsedLogs = new WeakMap<
+  ActivityLog,
+  {
+    sourceStart: string;
+    sourceEnd?: string;
+    start: number;
+    end?: number;
+  }
+>();
+
+/** Reuse parsed timestamps while preserving updates to mutable log entries. */
+export function getActivityLogTimes(log: ActivityLog) {
+  const cached = parsedLogs.get(log);
+  if (
+    cached &&
+    cached.sourceStart === log.start &&
+    cached.sourceEnd === log.end
+  )
+    return cached;
+  const parsed = {
+    sourceStart: log.start,
+    sourceEnd: log.end,
+    start: window.moment(log.start, window.moment.ISO_8601, true).valueOf(),
+    end: log.end
+      ? window.moment(log.end, window.moment.ISO_8601, true).valueOf()
+      : undefined,
+  };
+  parsedLogs.set(log, parsed);
+  return parsed;
+}
+
 type ActivityLogInterval = {
   activity: Activity;
   logIndex: number;
@@ -60,19 +92,17 @@ export function* activityTimeSlices(
   for (const activity of activities) {
     const activityKey = normalizeActivityName(activity.activity);
     for (const [logIndex, log] of (activity.log ?? []).entries()) {
-      const start = window.moment(log.start, window.moment.ISO_8601, true);
-      const end = log.end
-        ? window.moment(log.end, window.moment.ISO_8601, true)
-        : window.moment(now);
-      if (!start.isValid() || !end.isValid()) continue;
+      const { start, end: loggedEnd } = getActivityLogTimes(log);
+      const end = loggedEnd ?? now;
+      if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
       const interval: ActivityLogInterval = {
         activity,
         logIndex,
         activityKey,
         priority: getActivityDefinition(activity.activity)?.priority ?? 0,
-        originalStart: start.valueOf(),
-        start: Math.max(start.valueOf(), rangeStart.valueOf()),
-        end: Math.min(end.valueOf(), limit),
+        originalStart: start,
+        start: Math.max(start, rangeStart.valueOf()),
+        end: Math.min(end, limit),
       };
       if (interval.end <= interval.start) continue;
       events.push({ time: interval.start, interval, start: true });
@@ -104,7 +134,7 @@ export function* activityTimeSlices(
   }
 }
 
-export function calculateActivityDurationsForRange(
+export function calculateActivitySummaryForRange(
   activities: Activity[],
   rangeStart: Moment,
   rangeEnd: Moment,
@@ -113,7 +143,7 @@ export function calculateActivityDurationsForRange(
     getGroupKey?: (activityEntry: Activity) => string;
     includeActivity?: (activityEntry: Activity) => boolean;
   },
-): ActivityDuration[] {
+) {
   const totals = new Map<
     string,
     {
@@ -123,10 +153,12 @@ export function calculateActivityDurationsForRange(
       total: number;
     }
   >();
+  let recordedMilliseconds = 0;
   const groupKey = (entry: Activity) =>
     options?.getGroupKey?.(entry) ?? normalizeActivityName(entry.activity);
   for (const slice of activityTimeSlices(activities, rangeStart, rangeEnd)) {
     const milliseconds = slice.end - slice.start;
+    recordedMilliseconds += milliseconds;
     const seen = new Set<string>();
     for (const { activity, activityKey } of slice.logs) {
       if (options?.includeActivity && !options.includeActivity(activity))
@@ -153,7 +185,7 @@ export function calculateActivityDurationsForRange(
       totals.set(key, total);
     }
   }
-  return [...totals.values()]
+  const rows = [...totals.values()]
     .map(({ activity, activityKey, counted, total }) => ({
       activity,
       activityKey,
@@ -163,6 +195,26 @@ export function calculateActivityDurationsForRange(
     .sort((a, b) =>
       a.activity.localeCompare(b.activity, undefined, { sensitivity: "base" }),
     );
+  return {
+    totals: rows,
+    unrecordedTime: window.moment.duration(
+      Math.max(0, rangeEnd.diff(rangeStart) - recordedMilliseconds),
+    ),
+  };
+}
+
+export function calculateActivityDurationsForRange(
+  activities: Activity[],
+  rangeStart: Moment,
+  rangeEnd: Moment,
+  options?: Parameters<typeof calculateActivitySummaryForRange>[3],
+): ActivityDuration[] {
+  return calculateActivitySummaryForRange(
+    activities,
+    rangeStart,
+    rangeEnd,
+    options,
+  ).totals;
 }
 
 export function calculateUnrecordedActivityDurationForRange(

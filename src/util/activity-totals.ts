@@ -33,12 +33,19 @@ export type DayPlannerActivityApi = {
   ) => ActivityDuration[];
 };
 
+const activitySnapshots = new WeakMap<PathToListProps, Activity[]>();
+
+/** listProps is an immutable Redux snapshot; reuse its flattened activity view. */
 export function getAllActivitiesFromListProps(listProps: PathToListProps) {
-  return Object.values(listProps).flatMap((lineToProps) =>
+  const cached = activitySnapshots.get(listProps);
+  if (cached) return cached;
+  const activities = Object.values(listProps).flatMap((lineToProps) =>
     Object.values(lineToProps).flatMap(
       ({ parsed }) => (parsed.activities as Activity[]) ?? [],
     ),
   );
+  activitySnapshots.set(listProps, activities);
+  return activities;
 }
 
 export function filterActivitiesByMainKey(

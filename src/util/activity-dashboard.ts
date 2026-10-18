@@ -1,10 +1,11 @@
-import { clockFormat } from "../constants";
-
 import {
   normalizeActivityName,
   type ActivityDefinition,
 } from "./activity-definitions";
-import { activityTimeSlices } from "./activity-log-summary";
+import {
+  activityTimeSlices,
+  getActivityLogTimes,
+} from "./activity-log-summary";
 import type { Activity } from "./props";
 
 export type ActivityDashboardRow = {
@@ -76,17 +77,35 @@ export type ActivityDashboardWeek = {
   items: ActivityDashboardItem[];
 };
 
+type DashboardCalendar = Array<{
+  start: string;
+  end: string;
+  month: string;
+  dates: string[];
+}>;
+
+function createCalendar(year: number): DashboardCalendar {
+  const firstWeek = window.moment(`${year}-01-04`).startOf("isoWeek");
+  return Array.from({ length: 52 }, (_, index) => {
+    const start = firstWeek.clone().add(index, "weeks");
+    return {
+      start: start.format("YYYY-MM-DD"),
+      end: start.clone().add(6, "days").format("YYYY-MM-DD"),
+      month: start.clone().add(3, "days").format("MMM"),
+      dates: Array.from({ length: 7 }, (_, day) =>
+        start.clone().add(day, "days").format("YYYY-MM-DD"),
+      ),
+    };
+  });
+}
+
 function buildWeeks(
   timesByDay: Map<string, TimeTotal>,
   itemsByDay: Map<string, Map<string, TimeTotal>>,
-  year: number,
+  calendar: DashboardCalendar,
 ) {
-  // January 4 is always in the first ISO week assigned to a calendar year.
-  const firstWeek = window.moment(`${year}-01-04`).startOf("isoWeek");
-  const weeks = Array.from({ length: 52 }, (_, index) => {
-    const start = firstWeek.clone().add(index, "weeks");
-    const days = Array.from({ length: 7 }, (_, dayIndex) => {
-      const date = start.clone().add(dayIndex, "days").format("YYYY-MM-DD");
+  const weeks = calendar.map(({ dates, ...week }) => {
+    const days = dates.map((date) => {
       const total = timesByDay.get(date);
       const minutes = total?.minutes ?? 0;
       return {
@@ -115,10 +134,7 @@ function buildWeeks(
       0,
     );
     return {
-      start: start.format("YYYY-MM-DD"),
-      end: start.clone().add(6, "days").format("YYYY-MM-DD"),
-      // A week's Thursday determines its month, giving that month at least four days.
-      month: start.clone().add(3, "days").format("MMM"),
+      ...week,
       minutes,
       ...(totalMinutes > minutes ? { totalMinutes } : {}),
       intensity: 0,
@@ -141,170 +157,232 @@ function buildWeeks(
   }));
 }
 
-function parseClock(timestamp?: string) {
-  if (!timestamp) return null;
+export type ActivityDashboard = {
+  weeks: ActivityDashboardWeek[];
+  rows: ActivityDashboardRow[];
+  groups: ActivityDashboardGroup[];
+};
 
-  const clock = window.moment(timestamp, clockFormat, true);
-  if (clock.isValid()) return clock;
+type DashboardAccumulator = {
+  definition: ActivityDefinition;
+  rows: ActivityDashboardRow[];
+  groups: Map<string, ActivityDashboardGroup>;
+  groupTimes: Map<string, TimeTotal>;
+  timesByDay: Map<string, TimeTotal>;
+  itemsByDay: Map<string, Map<string, TimeTotal>>;
+};
 
-  const isoClock = window.moment(timestamp, window.moment.ISO_8601, true);
-  return isoClock.isValid() ? isoClock : null;
-}
-
-export function buildActivityDashboard(
+/** Resolve overlaps once for all frequency rows, instead of once per activity.
+ * includeHistory=false limits work to the displayed year and omits log/group tables.
+ */
+export function buildActivityDashboards(
   activities: Activity[],
-  definition: ActivityDefinition,
+  definitions: ActivityDefinition[],
   year = window.moment().year(),
-) {
-  const attributes = definition.attributes;
-  const startFields = attributes?.start ?? [];
-  const endFields = attributes?.end ?? [];
-  const ranges = attributes?.ranges ?? [];
-  const groups = new Map<string, ActivityDashboardGroup>();
-  const rows: ActivityDashboardRow[] = [];
-
-  const selectedKey = normalizeActivityName(definition.name);
-  const matches = (activity: Activity) =>
-    normalizeActivityName(activity.activity) === selectedKey;
-  function mainValueFor(activity: Activity) {
-    const details = attributes?.key ? activity[attributes.key] : undefined;
-    const value =
-      attributes?.mainKey && details && typeof details === "object"
-        ? (details as Record<string, unknown>)[attributes.mainKey]
-        : undefined;
-    return value == null || String(value).trim() === ""
-      ? "(empty)"
-      : String(value);
-  }
-  const countedByLog = new Map<Activity, Map<number, number>>();
-  const groupTimes = new Map<
-    string,
-    { minutes: number; totalMinutes: number }
+  options: { includeHistory?: boolean } = {},
+): Map<string, ActivityDashboard> {
+  const now = window.moment();
+  const includeHistory = options.includeHistory !== false;
+  const calendar = createCalendar(year);
+  const rangeStart = includeHistory
+    ? window.moment("0001-01-01")
+    : window.moment(calendar[0].start);
+  const rangeEnd = includeHistory
+    ? now
+    : window.moment.min(now, window.moment(calendar.at(-1)!.end).add(1, "day"));
+  const accumulators = new Map<string, DashboardAccumulator>(
+    definitions.map((definition) => [
+      normalizeActivityName(definition.name),
+      {
+        definition,
+        rows: [],
+        groups: new Map(),
+        groupTimes: new Map(),
+        timesByDay: new Map(),
+        itemsByDay: new Map(),
+      },
+    ]),
+  );
+  const info = new Map<
+    Activity,
+    {
+      accumulator: DashboardAccumulator;
+      mainValue: string;
+      details: Record<string, unknown>;
+    }
   >();
-  const timesByDay = new Map<string, TimeTotal>();
-  const itemsByDay = new Map<string, Map<string, TimeTotal>>();
-  for (const slice of activityTimeSlices(
-    activities,
-    window.moment("0001-01-01"),
-    window.moment(),
-  )) {
-    // This dashboard lists completed logs; open logs still compete for time.
-    const logs = slice.logs.filter(
-      ({ activity, logIndex }) =>
-        matches(activity) && activity.log?.[logIndex].end,
+  for (const activity of activities) {
+    const accumulator = accumulators.get(
+      normalizeActivityName(activity.activity),
     );
-    if (logs.length === 0) continue;
-    const minutes = (slice.end - slice.start) / 60_000;
-    const credited =
-      matches(slice.winner.activity) &&
-      Boolean(slice.winner.activity.log?.[slice.winner.logIndex].end);
-    if (credited) {
-      const byLog =
-        countedByLog.get(slice.winner.activity) ?? new Map<number, number>();
-      byLog.set(
-        slice.winner.logIndex,
-        (byLog.get(slice.winner.logIndex) ?? 0) + minutes,
-      );
-      countedByLog.set(slice.winner.activity, byLog);
-    }
-    const names = new Set(logs.map(({ activity }) => mainValueFor(activity)));
-    const creditedName = credited
-      ? mainValueFor(slice.winner.activity)
+    if (!accumulator) continue;
+    const attributes = accumulator.definition.attributes;
+    const candidate = attributes?.key ? activity[attributes.key] : undefined;
+    const details =
+      candidate && typeof candidate === "object"
+        ? (candidate as Record<string, unknown>)
+        : {};
+    const value = attributes?.mainKey ? details[attributes.mainKey] : undefined;
+    const mainValue =
+      value == null || String(value).trim() === "" ? "(empty)" : String(value);
+    info.set(activity, { accumulator, mainValue, details });
+  }
+
+  const countedByLog = new Map<Activity, Map<number, number>>();
+  for (const slice of activityTimeSlices(activities, rangeStart, rangeEnd)) {
+    const winner = slice.winner.activity.log?.[slice.winner.logIndex].end
+      ? info.get(slice.winner.activity)
       : undefined;
-    for (const value of names) {
-      addTime(groupTimes, value, creditedName === value ? minutes : 0, minutes);
+    const minutes = (slice.end - slice.start) / 60_000;
+    if (winner && includeHistory) {
+      const logs =
+        countedByLog.get(slice.winner.activity) ?? new Map<number, number>();
+      logs.set(
+        slice.winner.logIndex,
+        (logs.get(slice.winner.logIndex) ?? 0) + minutes,
+      );
+      countedByLog.set(slice.winner.activity, logs);
     }
+    const namesByActivity = new Map<DashboardAccumulator, Set<string>>();
+    for (const { activity, logIndex } of slice.logs) {
+      // Frequencies list completed logs; open clocks still compete for time.
+      if (!activity.log?.[logIndex].end) continue;
+      const entry = info.get(activity);
+      if (!entry) continue;
+      const names = namesByActivity.get(entry.accumulator) ?? new Set<string>();
+      names.add(entry.mainValue);
+      namesByActivity.set(entry.accumulator, names);
+    }
+    if (namesByActivity.size === 0) continue;
+    const parts: Array<{ date: string; minutes: number }> = [];
     let cursor = window.moment(slice.start);
     while (cursor.valueOf() < slice.end) {
       const end = Math.min(
         cursor.clone().startOf("day").add(1, "day").valueOf(),
         slice.end,
       );
-      const part = (end - cursor.valueOf()) / 60_000;
-      const date = cursor.format("YYYY-MM-DD");
-      addTime(timesByDay, date, credited ? part : 0, part);
-      if (attributes?.mainKey) {
-        const items = itemsByDay.get(date) ?? new Map<string, TimeTotal>();
-        for (const name of names)
-          addTime(items, name, creditedName === name ? part : 0, part);
-        itemsByDay.set(date, items);
-      }
+      parts.push({
+        date: cursor.format("YYYY-MM-DD"),
+        minutes: (end - cursor.valueOf()) / 60_000,
+      });
       cursor = window.moment(end);
     }
-  }
-
-  for (const activity of activities) {
-    if (
-      normalizeActivityName(activity.activity) !==
-      normalizeActivityName(definition.name)
-    ) {
-      continue;
-    }
-
-    const detailsCandidate = attributes?.key
-      ? activity[attributes.key]
-      : undefined;
-    const details =
-      detailsCandidate && typeof detailsCandidate === "object"
-        ? (detailsCandidate as Record<string, unknown>)
-        : {};
-    const mainValue = mainValueFor(activity);
-
-    for (const [logIndex, log] of (activity.log ?? []).entries()) {
-      const start = parseClock(log.start);
-      const end = parseClock(log.end);
-      if (!start || !end || !end.isAfter(start)) continue;
-
-      const totalMinutes = Math.max(
-        0,
-        window.moment.min(end, window.moment()).diff(start) / 60_000,
-      );
-      if (totalMinutes === 0) continue;
-      const minutes = countedByLog.get(activity)?.get(logIndex) ?? 0;
-      const day = start.format("YYYY-MM-DD");
-      const rangeValues = ranges.map(({ start: startKey, end: endKey }) => {
-        const rangeStart = Number(details[startKey]);
-        const rangeEnd = Number(details[endKey]);
-        return Number.isFinite(rangeStart) && Number.isFinite(rangeEnd)
-          ? rangeEnd - rangeStart + 1
-          : "";
-      });
-
-      rows.push({
-        day,
-        minutes,
-        ...(totalMinutes > minutes ? { totalMinutes } : {}),
-        notes: activity.notes ?? "",
-        quality: typeof activity.quality === "number" ? activity.quality : "",
-        startValues: startFields.map(({ key }) => details[key] ?? ""),
-        endValues: endFields.map(({ key }) => details[key] ?? ""),
-        rangeValues,
-        rangeValuesPerHour: rangeValues.map((value) =>
-          typeof value === "number" ? value / (totalMinutes / 60) : "-",
-        ),
-      });
-
-      if (attributes?.mainKey) {
-        const current = groups.get(mainValue) ?? {
-          value: mainValue,
-          minutes: 0,
-          earliest: day,
-          latest: day,
-        };
-        const total = groupTimes.get(mainValue)!;
-        current.minutes = total.minutes;
-        if (total.totalMinutes > total.minutes)
-          current.totalMinutes = total.totalMinutes;
-        if (day < current.earliest) current.earliest = day;
-        if (day > current.latest) current.latest = day;
-        groups.set(mainValue, current);
+    for (const [accumulator, names] of namesByActivity) {
+      const credited = winner?.accumulator === accumulator;
+      if (includeHistory)
+        for (const name of names)
+          addTime(
+            accumulator.groupTimes,
+            name,
+            credited && winner?.mainValue === name ? minutes : 0,
+            minutes,
+          );
+      for (const part of parts) {
+        addTime(
+          accumulator.timesByDay,
+          part.date,
+          credited ? part.minutes : 0,
+          part.minutes,
+        );
+        if (!accumulator.definition.attributes?.mainKey) continue;
+        const items =
+          accumulator.itemsByDay.get(part.date) ?? new Map<string, TimeTotal>();
+        for (const name of names)
+          addTime(
+            items,
+            name,
+            credited && winner?.mainValue === name ? part.minutes : 0,
+            part.minutes,
+          );
+        accumulator.itemsByDay.set(part.date, items);
       }
     }
   }
 
-  return {
-    weeks: buildWeeks(timesByDay, itemsByDay, year),
-    rows: rows.sort((a, b) => b.day.localeCompare(a.day)),
-    groups: [...groups.values()].sort((a, b) => b.minutes - a.minutes),
-  };
+  if (includeHistory)
+    for (const [activity, { accumulator, mainValue, details }] of info) {
+      const attributes = accumulator.definition.attributes;
+      for (const [logIndex, log] of (activity.log ?? []).entries()) {
+        const { start, end } = getActivityLogTimes(log);
+        if (
+          end === undefined ||
+          !Number.isFinite(start) ||
+          !Number.isFinite(end) ||
+          end <= start
+        )
+          continue;
+        const totalMinutes =
+          Math.max(0, Math.min(end, now.valueOf()) - start) / 60_000;
+        if (totalMinutes === 0) continue;
+        const minutes = countedByLog.get(activity)?.get(logIndex) ?? 0;
+        const day = window.moment(start).format("YYYY-MM-DD");
+        const rangeValues = (attributes?.ranges ?? []).map(
+          ({ start: startKey, end: endKey }) => {
+            const from = Number(details[startKey]);
+            const until = Number(details[endKey]);
+            return Number.isFinite(from) && Number.isFinite(until)
+              ? until - from + 1
+              : "";
+          },
+        );
+        accumulator.rows.push({
+          day,
+          minutes,
+          ...(totalMinutes > minutes ? { totalMinutes } : {}),
+          notes: activity.notes ?? "",
+          quality: typeof activity.quality === "number" ? activity.quality : "",
+          startValues: (attributes?.start ?? []).map(
+            ({ key }) => details[key] ?? "",
+          ),
+          endValues: (attributes?.end ?? []).map(
+            ({ key }) => details[key] ?? "",
+          ),
+          rangeValues,
+          rangeValuesPerHour: rangeValues.map((value) =>
+            typeof value === "number" ? value / (totalMinutes / 60) : "-",
+          ),
+        });
+        if (attributes?.mainKey) {
+          const group = accumulator.groups.get(mainValue) ?? {
+            value: mainValue,
+            minutes: 0,
+            earliest: day,
+            latest: day,
+          };
+          const time = accumulator.groupTimes.get(mainValue)!;
+          group.minutes = time.minutes;
+          if (time.totalMinutes > time.minutes)
+            group.totalMinutes = time.totalMinutes;
+          if (day < group.earliest) group.earliest = day;
+          if (day > group.latest) group.latest = day;
+          accumulator.groups.set(mainValue, group);
+        }
+      }
+    }
+  return new Map(
+    [...accumulators].map(([key, accumulator]) => [
+      key,
+      {
+        weeks: buildWeeks(
+          accumulator.timesByDay,
+          accumulator.itemsByDay,
+          calendar,
+        ),
+        rows: accumulator.rows.sort((a, b) => b.day.localeCompare(a.day)),
+        groups: [...accumulator.groups.values()].sort(
+          (a, b) => b.minutes - a.minutes,
+        ),
+      },
+    ]),
+  );
+}
+
+export function buildActivityDashboard(
+  activities: Activity[],
+  definition: ActivityDefinition,
+  year = window.moment().year(),
+): ActivityDashboard {
+  return buildActivityDashboards(activities, [definition], year).get(
+    normalizeActivityName(definition.name),
+  )!;
 }

@@ -1,8 +1,15 @@
+import type { App } from "obsidian";
 import { describe, expect, it } from "vitest";
 
-import { buildActivityDashboard } from "../src/util/activity-dashboard";
+import {
+  buildActivityDashboard,
+  buildActivityDashboards,
+} from "../src/util/activity-dashboard";
 import type { ActivityDefinition } from "../src/util/activity-definitions";
-import { calculateActivityMainKeyProgress } from "../src/util/activity-progress";
+import {
+  calculateActivityMainKeyProgress,
+  getInProgressMainKeys,
+} from "../src/util/activity-progress";
 import type { Activity } from "../src/util/props";
 
 const readDefinition: ActivityDefinition = {
@@ -24,7 +31,7 @@ const readDefinition: ActivityDefinition = {
 
 describe("buildActivityDashboard", () => {
   it("keeps daily and item breakdowns consistent with priority-adjusted weekly totals", () => {
-    const dashboard = buildActivityDashboard(
+    const dashboards = buildActivityDashboards(
       [
         {
           activity: "read",
@@ -41,9 +48,19 @@ describe("buildActivityDashboard", () => {
           log: [{ start: "2026-08-25T00:00:00Z", end: "2026-08-25T01:00:00Z" }],
         },
       ] as Activity[],
-      readDefinition,
+      [
+        readDefinition,
+        { name: "deep work", label: "Deep Work", group: "work" },
+      ],
       2026,
+      { includeHistory: false },
     );
+    const dashboard = dashboards.get("read")!;
+    expect(
+      dashboards
+        .get("deep work")!
+        .weeks.find(({ start }) => start === "2026-08-24")?.minutes,
+    ).toBe(60);
     const week = dashboard.weeks.find(({ start }) => start === "2026-08-24")!;
     expect(week).toMatchObject({ minutes: 90, totalMinutes: 150 });
     expect(week.days[0]).toMatchObject({ minutes: 30 });
@@ -256,6 +273,49 @@ describe("buildActivityDashboard", () => {
 });
 
 describe("calculateActivityMainKeyProgress", () => {
+  it("shares progress calculations while merging overlapping logs across resource aliases", () => {
+    const file = { path: "Books/Dune.md", basename: "Dune", name: "Dune.md" };
+    const app = {
+      vault: { getMarkdownFiles: () => [file] },
+      metadataCache: {
+        getFileCache: () => ({
+          frontmatter: {
+            tags: ["book"],
+            aliases: ["Dune alias"],
+            status: "in progress",
+          },
+        }),
+      },
+    } as unknown as App;
+    const progress = getInProgressMainKeys(
+      app,
+      [
+        {
+          activity: "read",
+          read: { book: "Dune" },
+          log: [{ start: "2026-08-25 09:00:00", end: "2026-08-25 11:00:00" }],
+        },
+        {
+          activity: "read",
+          read: { book: "Dune alias" },
+          log: [{ start: "2026-08-25 10:00:00", end: "2026-08-25 12:00:00" }],
+        },
+        {
+          activity: "deep work",
+          log: [{ start: "2026-08-25 10:30:00", end: "2026-08-25 11:30:00" }],
+        },
+      ] as Activity[],
+      readDefinition,
+    );
+    expect(progress).toHaveLength(1);
+    expect(progress[0]).toMatchObject({
+      value: "Dune",
+      minutes: 180,
+      countedMinutes: 120,
+      filePath: file.path,
+    });
+  });
+
   it("calculates completion, pace, and estimated remaining time", () => {
     const progress = calculateActivityMainKeyProgress({
       activities: [

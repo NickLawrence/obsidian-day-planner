@@ -1,9 +1,8 @@
 <script lang="ts">
-  import type { EventRef } from "obsidian";
   import { onDestroy, onMount } from "svelte";
 
   import { getObsidianContext } from "../../../context/obsidian-context";
-  import { buildActivityDashboard } from "../../../util/activity-dashboard";
+  import { buildActivityDashboards } from "../../../util/activity-dashboard";
   import {
     getActivityDefinitions,
     getActivityGroup,
@@ -12,23 +11,22 @@
   import ActivityPie from "../activity-pie.svelte";
   import WeeklyActivityHeatmap from "../weekly-activity-heatmap.svelte";
 
-  const { app, getAllActivities } = getObsidianContext();
+  const { plannerData, getAllActivities } = getObsidianContext();
   const definitions = getActivityDefinitions();
-  let activities = $state(getAllActivities());
+  let activities = $state.raw(getAllActivities());
   let now = $state(window.moment());
-  const yearStart = $derived(now.clone().startOf("year"));
-  const yearEnd = $derived(yearStart.clone().add(1, "year"));
+  const year = $derived(now.year());
+  const yearStart = $derived(window.moment({ year }).startOf("year"));
   let refreshTimer: ReturnType<typeof setInterval> | undefined;
-  let metadataChangeRef: EventRef | undefined;
+  let stopPlannerListener: (() => void) | undefined;
 
-  const activityRows = $derived(
-    definitions
+  const activityRows = $derived.by(() => {
+    const dashboards = buildActivityDashboards(activities, definitions, year, {
+      includeHistory: false,
+    });
+    return definitions
       .map((definition) => {
-        const dashboard = buildActivityDashboard(
-          activities,
-          definition,
-          now.year(),
-        );
+        const dashboard = dashboards.get(definition.name)!;
         return {
           definition,
           weeks: dashboard.weeks,
@@ -50,8 +48,8 @@
         (left, right) =>
           right.minutes - left.minutes ||
           left.definition.label.localeCompare(right.definition.label),
-      ),
-  );
+      );
+  });
 
   function refresh() {
     now = window.moment();
@@ -59,13 +57,13 @@
   }
 
   onMount(() => {
-    refreshTimer = setInterval(refresh, 2_000);
-    metadataChangeRef = app.metadataCache.on("changed", refresh);
+    refreshTimer = setInterval(refresh, 60_000);
+    stopPlannerListener = plannerData.onChange(refresh);
   });
 
   onDestroy(() => {
     if (refreshTimer) clearInterval(refreshTimer);
-    if (metadataChangeRef) app.metadataCache.offref(metadataChangeRef);
+    stopPlannerListener?.();
   });
 </script>
 
@@ -94,7 +92,7 @@
     <ActivityPie
       {activities}
       periodLabel={`so far in ${now.year()}`}
-      rangeEnd={yearEnd}
+      rangeEnd={now}
       rangeStart={yearStart}
       title="Yearly activity time"
     />

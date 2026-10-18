@@ -1,5 +1,6 @@
 import type { Moment } from "moment";
 
+import { getActivityLogTimes } from "./activity-log-summary";
 import type { Activity } from "./props";
 
 /** Parse history once per data update, rather than once per calendar cell. */
@@ -8,10 +9,7 @@ export function createActivityRangeIndex(activities: Activity[]) {
     activity,
     entries: (activity.log ?? []).map((entry) => ({
       entry,
-      start: window.moment(entry.start, window.moment.ISO_8601, true).valueOf(),
-      end: entry.end
-        ? window.moment(entry.end, window.moment.ISO_8601, true).valueOf()
-        : undefined,
+      ...getActivityLogTimes(entry),
     })),
   }));
 
