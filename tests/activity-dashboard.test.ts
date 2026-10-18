@@ -23,6 +23,174 @@ const readDefinition: ActivityDefinition = {
 };
 
 describe("buildActivityDashboard", () => {
+  it("keeps daily and item breakdowns consistent with priority-adjusted weekly totals", () => {
+    const dashboard = buildActivityDashboard(
+      [
+        {
+          activity: "read",
+          read: { book: "Dune" },
+          log: [{ start: "2026-08-24T23:30:00Z", end: "2026-08-25T01:30:00Z" }],
+        },
+        {
+          activity: "read",
+          read: { book: "Arrival" },
+          log: [{ start: "2026-08-25T00:30:00Z", end: "2026-08-25T02:00:00Z" }],
+        },
+        {
+          activity: "deep work",
+          log: [{ start: "2026-08-25T00:00:00Z", end: "2026-08-25T01:00:00Z" }],
+        },
+      ] as Activity[],
+      readDefinition,
+      2026,
+    );
+    const week = dashboard.weeks.find(({ start }) => start === "2026-08-24")!;
+    expect(week).toMatchObject({ minutes: 90, totalMinutes: 150 });
+    expect(week.days[0]).toMatchObject({ minutes: 30 });
+    expect(week.days[1]).toMatchObject({ minutes: 60, totalMinutes: 120 });
+    expect(week.days[1].items).toEqual([
+      { name: "Arrival", minutes: 30, totalMinutes: 90 },
+      { name: "Dune", minutes: 30, totalMinutes: 90 },
+    ]);
+    expect(week.items).toEqual([
+      { name: "Dune", minutes: 60, totalMinutes: 120 },
+      { name: "Arrival", minutes: 30, totalMinutes: 90 },
+    ]);
+    expect(week.days.reduce((total, day) => total + day.minutes, 0)).toBe(
+      week.minutes,
+    );
+    expect(week.items.reduce((total, item) => total + item.minutes, 0)).toBe(
+      week.minutes,
+    );
+  });
+
+  it("aggregates main-key tooltip breakdowns per day and week across midnight", () => {
+    const dashboard = buildActivityDashboard(
+      [
+        {
+          activity: "read",
+          read: { book: "Dune" },
+          log: [
+            { start: "2026-08-24 10:00:00", end: "2026-08-24 10:30:00" },
+            { start: "2026-08-24 23:30:00", end: "2026-08-25 00:30:00" },
+          ],
+        },
+        {
+          activity: "read",
+          read: { book: "Arrival" },
+          log: [{ start: "2026-08-24 11:00:00", end: "2026-08-24 11:15:00" }],
+        },
+        {
+          activity: "read",
+          log: [{ start: "2026-08-25 11:00:00", end: "2026-08-25 11:15:00" }],
+        },
+      ] as unknown as Activity[],
+      readDefinition,
+      2026,
+    );
+    const week = dashboard.weeks.find(({ start }) => start === "2026-08-24")!;
+    expect(week.days[0].items).toEqual([
+      { name: "Dune", minutes: 60 },
+      { name: "Arrival", minutes: 15 },
+    ]);
+    expect(week.days[1].items).toEqual([
+      { name: "Dune", minutes: 30 },
+      { name: "(empty)", minutes: 15 },
+    ]);
+    expect(week.items).toEqual([
+      { name: "Dune", minutes: 90 },
+      { name: "(empty)", minutes: 15 },
+      { name: "Arrival", minutes: 15 },
+    ]);
+    expect(week.items.reduce((total, item) => total + item.minutes, 0)).toBe(
+      week.minutes,
+    );
+    expect(week.days[2].items).toEqual([]);
+  });
+
+  it("aggregates daily time and scales daily shading independently of weekly totals", () => {
+    const dashboard = buildActivityDashboard(
+      [
+        {
+          activity: "read",
+          log: [
+            { start: "2026-08-24 10:00:00", end: "2026-08-24 11:00:00" },
+            { start: "2026-08-24 12:00:00", end: "2026-08-24 12:30:00" },
+            { start: "2026-08-25 10:00:00", end: "2026-08-25 10:30:00" },
+            { start: "2026-08-26 10:00:00" },
+          ],
+        },
+        {
+          activity: "piano",
+          log: [{ start: "2026-08-26 10:00:00", end: "2026-08-26 12:00:00" }],
+        },
+      ] as Activity[],
+      readDefinition,
+      2026,
+    );
+    const week = dashboard.weeks.find(({ start }) => start === "2026-08-24")!;
+    expect(week.days).toHaveLength(7);
+    expect(week.days[0]).toMatchObject({
+      date: "2026-08-24",
+      minutes: 90,
+      intensity: 1,
+    });
+    expect(week.days[1].minutes).toBe(30);
+    expect(week.days[1].intensity).toBeCloseTo(1 / 3);
+    expect(week.days[2]).toMatchObject({
+      date: "2026-08-26",
+      minutes: 0,
+      intensity: 0,
+    });
+    expect(week.minutes).toBe(120);
+    expect(week.days[6].date).toBe("2026-08-30");
+  });
+
+  it("splits overnight logs at midnight and across week boundaries", () => {
+    const dashboard = buildActivityDashboard(
+      [
+        {
+          activity: "read",
+          log: [{ start: "2026-08-30 23:30:00", end: "2026-08-31 01:00:00" }],
+        },
+      ] as Activity[],
+      readDefinition,
+      2026,
+    );
+    const sundayWeek = dashboard.weeks.find(
+      ({ start }) => start === "2026-08-24",
+    )!;
+    const mondayWeek = dashboard.weeks.find(
+      ({ start }) => start === "2026-08-31",
+    )!;
+    expect(sundayWeek.days[6]).toMatchObject({
+      date: "2026-08-30",
+      minutes: 30,
+      intensity: 0.5,
+    });
+    expect(mondayWeek.days[0]).toMatchObject({
+      date: "2026-08-31",
+      minutes: 60,
+      intensity: 1,
+    });
+    expect(sundayWeek.minutes).toBe(30);
+    expect(mondayWeek.minutes).toBe(60);
+  });
+
+  it("provides empty daily squares across the year boundary without invalid intensities", () => {
+    const dashboard = buildActivityDashboard([], readDefinition, 2026);
+    expect(dashboard.weeks[0].days[0].date).toBe("2025-12-29");
+    expect(dashboard.weeks[0].days[6].date).toBe("2026-01-04");
+    expect(dashboard.weeks.flatMap(({ days }) => days)).toHaveLength(364);
+    expect(
+      dashboard.weeks.every(({ days }) =>
+        days.every(
+          ({ minutes, intensity }) => minutes === 0 && intensity === 0,
+        ),
+      ),
+    ).toBe(true);
+  });
+
   it("creates log rows and aggregates closed logs by the main key", () => {
     const dashboard = buildActivityDashboard(
       [

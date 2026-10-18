@@ -7,6 +7,7 @@ import {
   extractActivityGoals,
   extractActivityPlanEntries,
   mergeActivityDurationsWithGoals,
+  sortActivityPlanItemsByRecordedTime,
   upsertActivityPlanEntryInMarkdown,
 } from "../src/util/weekly-activity-goals";
 
@@ -38,6 +39,61 @@ function createDataviewApp(lists: unknown[]) {
 const weeklyFile = { path: "Weekly/2026-W20.md" } as TFile;
 const activityGoalsSection = { subpath: "Activity Goals" };
 const otherSection = { subpath: "Other" };
+
+describe("activity plan ordering", () => {
+  it("sorts by all vault history, combines normalized names, and alphabetizes ties", () => {
+    const items = ["zebra", "piano", "reading", "alpha"].map((name) => ({
+      name,
+    }));
+    const activities = [
+      {
+        activity: "Reading",
+        log: [{ start: "2020-01-01T00:00:00Z", end: "2020-01-01T02:00:00Z" }],
+      },
+      {
+        activity: " reading ",
+        log: [{ start: "2020-01-02T00:00:00Z", end: "2020-01-02T02:00:00Z" }],
+      },
+      {
+        activity: "piano",
+        log: [{ start: "2026-05-11T00:00:00Z", end: "2026-05-11T03:00:00Z" }],
+      },
+    ];
+    const sorted = sortActivityPlanItemsByRecordedTime(
+      items,
+      activities,
+      moment("2026-05-12"),
+    );
+    expect(sorted.map(({ name }) => name)).toEqual([
+      "reading",
+      "piano",
+      "alpha",
+      "zebra",
+    ]);
+    expect(items[0].name).toBe("zebra");
+  });
+
+  it("counts running logs up to now and ignores invalid or future logs", () => {
+    const items = [{ name: "reading" }, { name: "piano" }];
+    const activities = [
+      { activity: "piano", log: [{ start: "2026-05-12T00:00:00Z" }] },
+      {
+        activity: "reading",
+        log: [
+          { start: "invalid", end: "2026-05-12T03:00:00Z" },
+          { start: "2027-01-01T00:00:00Z", end: "2027-01-02T00:00:00Z" },
+        ],
+      },
+    ];
+    expect(
+      sortActivityPlanItemsByRecordedTime(
+        items,
+        activities,
+        moment("2026-05-12T02:00:00Z"),
+      ).map(({ name }) => name),
+    ).toEqual(["piano", "reading"]);
+  });
+});
 
 describe("extractActivityGoals", () => {
   it("extracts Dataview list item goals under the Activity Goals heading", () => {

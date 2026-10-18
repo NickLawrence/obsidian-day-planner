@@ -27,6 +27,44 @@ export type ActivityDashboardGroup = {
   latest: string;
 };
 
+type TimeTotal = { minutes: number; totalMinutes: number };
+
+export type ActivityDashboardItem = {
+  name: string;
+  minutes: number;
+  totalMinutes?: number;
+};
+
+export type ActivityDashboardDay = {
+  date: string;
+  minutes: number;
+  totalMinutes?: number;
+  intensity: number;
+  items: ActivityDashboardItem[];
+};
+
+function addTime(
+  times: Map<string, TimeTotal>,
+  key: string,
+  minutes: number,
+  totalMinutes: number,
+) {
+  const total = times.get(key) ?? { minutes: 0, totalMinutes: 0 };
+  total.minutes += minutes;
+  total.totalMinutes += totalMinutes;
+  times.set(key, total);
+}
+
+function sortedItems(items: Map<string, TimeTotal>): ActivityDashboardItem[] {
+  return [...items]
+    .map(([name, { minutes, totalMinutes }]) => ({
+      name,
+      minutes,
+      ...(totalMinutes > minutes ? { totalMinutes } : {}),
+    }))
+    .sort((a, b) => b.minutes - a.minutes || a.name.localeCompare(b.name));
+}
+
 export type ActivityDashboardWeek = {
   start: string;
   end: string;
@@ -34,36 +72,72 @@ export type ActivityDashboardWeek = {
   minutes: number;
   totalMinutes?: number;
   intensity: number;
+  days: ActivityDashboardDay[];
+  items: ActivityDashboardItem[];
 };
 
 function buildWeeks(
-  minutesByWeek: Map<string, { minutes: number; totalMinutes: number }>,
+  timesByDay: Map<string, TimeTotal>,
+  itemsByDay: Map<string, Map<string, TimeTotal>>,
   year: number,
 ) {
   // January 4 is always in the first ISO week assigned to a calendar year.
   const firstWeek = window.moment(`${year}-01-04`).startOf("isoWeek");
   const weeks = Array.from({ length: 52 }, (_, index) => {
     const start = firstWeek.clone().add(index, "weeks");
-    const total = minutesByWeek.get(start.format("YYYY-MM-DD"));
-    const minutes = total?.minutes ?? 0;
-
+    const days = Array.from({ length: 7 }, (_, dayIndex) => {
+      const date = start.clone().add(dayIndex, "days").format("YYYY-MM-DD");
+      const total = timesByDay.get(date);
+      const minutes = total?.minutes ?? 0;
+      return {
+        date,
+        minutes,
+        ...(total && total.totalMinutes > minutes
+          ? { totalMinutes: total.totalMinutes }
+          : {}),
+        intensity: 0,
+        items: sortedItems(itemsByDay.get(date) ?? new Map()),
+      };
+    });
+    const weekItems = new Map<string, TimeTotal>();
+    for (const day of days) {
+      for (const item of day.items)
+        addTime(
+          weekItems,
+          item.name,
+          item.minutes,
+          item.totalMinutes ?? item.minutes,
+        );
+    }
+    const minutes = days.reduce((sum, day) => sum + day.minutes, 0);
+    const totalMinutes = days.reduce(
+      (sum, day) => sum + (day.totalMinutes ?? day.minutes),
+      0,
+    );
     return {
       start: start.format("YYYY-MM-DD"),
       end: start.clone().add(6, "days").format("YYYY-MM-DD"),
       // A week's Thursday determines its month, giving that month at least four days.
       month: start.clone().add(3, "days").format("MMM"),
       minutes,
-      ...(total && total.totalMinutes > minutes
-        ? { totalMinutes: total.totalMinutes }
-        : {}),
+      ...(totalMinutes > minutes ? { totalMinutes } : {}),
       intensity: 0,
+      days,
+      items: sortedItems(weekItems),
     };
   });
   const maximum = Math.max(0, ...weeks.map(({ minutes }) => minutes));
-
+  const dailyMaximum = Math.max(
+    0,
+    ...weeks.flatMap(({ days }) => days.map(({ minutes }) => minutes)),
+  );
   return weeks.map((week) => ({
     ...week,
     intensity: maximum === 0 ? 0 : week.minutes / maximum,
+    days: week.days.map((day) => ({
+      ...day,
+      intensity: dailyMaximum === 0 ? 0 : day.minutes / dailyMaximum,
+    })),
   }));
 }
 
@@ -107,10 +181,8 @@ export function buildActivityDashboard(
     string,
     { minutes: number; totalMinutes: number }
   >();
-  const weekTimes = new Map<
-    string,
-    { minutes: number; totalMinutes: number }
-  >();
+  const timesByDay = new Map<string, TimeTotal>();
+  const itemsByDay = new Map<string, Map<string, TimeTotal>>();
   for (const slice of activityTimeSlices(
     activities,
     window.moment("0001-01-01"),
@@ -135,25 +207,28 @@ export function buildActivityDashboard(
       );
       countedByLog.set(slice.winner.activity, byLog);
     }
-    for (const value of new Set(
-      logs.map(({ activity }) => mainValueFor(activity)),
-    )) {
-      const total = groupTimes.get(value) ?? { minutes: 0, totalMinutes: 0 };
-      total.totalMinutes += minutes;
-      if (credited && mainValueFor(slice.winner.activity) === value)
-        total.minutes += minutes;
-      groupTimes.set(value, total);
+    const names = new Set(logs.map(({ activity }) => mainValueFor(activity)));
+    const creditedName = credited
+      ? mainValueFor(slice.winner.activity)
+      : undefined;
+    for (const value of names) {
+      addTime(groupTimes, value, creditedName === value ? minutes : 0, minutes);
     }
     let cursor = window.moment(slice.start);
     while (cursor.valueOf() < slice.end) {
-      const week = cursor.clone().startOf("isoWeek");
-      const end = Math.min(week.clone().add(1, "week").valueOf(), slice.end);
+      const end = Math.min(
+        cursor.clone().startOf("day").add(1, "day").valueOf(),
+        slice.end,
+      );
       const part = (end - cursor.valueOf()) / 60_000;
-      const key = week.format("YYYY-MM-DD");
-      const total = weekTimes.get(key) ?? { minutes: 0, totalMinutes: 0 };
-      total.totalMinutes += part;
-      if (credited) total.minutes += part;
-      weekTimes.set(key, total);
+      const date = cursor.format("YYYY-MM-DD");
+      addTime(timesByDay, date, credited ? part : 0, part);
+      if (attributes?.mainKey) {
+        const items = itemsByDay.get(date) ?? new Map<string, TimeTotal>();
+        for (const name of names)
+          addTime(items, name, creditedName === name ? part : 0, part);
+        itemsByDay.set(date, items);
+      }
       cursor = window.moment(end);
     }
   }
@@ -228,7 +303,7 @@ export function buildActivityDashboard(
   }
 
   return {
-    weeks: buildWeeks(weekTimes, year),
+    weeks: buildWeeks(timesByDay, itemsByDay, year),
     rows: rows.sort((a, b) => b.day.localeCompare(a.day)),
     groups: [...groups.values()].sort((a, b) => b.minutes - a.minutes),
   };

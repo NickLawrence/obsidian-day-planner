@@ -5,6 +5,38 @@ import {
   getActivityLabel,
   normalizeActivityName,
 } from "./activity-definitions";
+import { calculateActivityDurationsForRange } from "./activity-log-summary";
+import type { Activity } from "./props";
+
+export function sortActivityPlanItemsByRecordedTime<T extends { name: string }>(
+  items: T[],
+  activities: Activity[],
+  now = window.moment(),
+) {
+  const totals = new Map(
+    calculateActivityDurationsForRange(
+      activities,
+      window.moment("0001-01-01", "YYYY-MM-DD", true),
+      now,
+    ).map(({ activityKey, duration }) => [
+      activityKey,
+      duration.asMilliseconds(),
+    ]),
+  );
+  return [...items].sort((a, b) => {
+    const difference =
+      (totals.get(normalizeActivityName(b.name)) ?? 0) -
+      (totals.get(normalizeActivityName(a.name)) ?? 0);
+    return (
+      difference ||
+      getActivityLabel(a.name).localeCompare(
+        getActivityLabel(b.name),
+        undefined,
+        { sensitivity: "base" },
+      )
+    );
+  });
+}
 
 export type ActivityGoal = {
   activity: string;

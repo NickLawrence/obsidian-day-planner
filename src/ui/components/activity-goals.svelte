@@ -3,10 +3,7 @@
   import { onDestroy, onMount } from "svelte";
 
   import type { PlannerData } from "../../service/planner-data";
-  import {
-    getActivityDefinition,
-    normalizeActivityName,
-  } from "../../util/activity-definitions";
+  import { getActivityDefinition } from "../../util/activity-definitions";
   import {
     calculateDailyActivityDurations,
     calculateWeeklyActivityDurations,
@@ -290,47 +287,23 @@
           }
         : null;
 
-    const estimateKeys = new Set(
-      planEntries
-        .filter((entry) => entry.kind === "estimate")
-        .map((entry) => normalizeActivityName(entry.activity)),
-    );
-    const otherRowsByActivity = new Map<string, OtherActivityRow>(
-      withGoals
-        .filter((entry) => !entry.goal)
-        .filter(
-          (entry) =>
-            (entry.totalDuration ?? entry.duration).asMilliseconds() > 0 ||
-            estimateKeys.has(entry.activityKey),
-        )
-        .map((entry) => [entry.activityKey, entry] as const),
-    );
-
-    for (const entry of planEntries) {
-      if (entry.kind !== "estimate") continue;
-
-      const activityKey = normalizeActivityName(entry.activity);
-      if (!otherRowsByActivity.has(activityKey)) {
-        otherRowsByActivity.set(activityKey, {
-          activity: entry.activity,
-          activityKey,
-          duration: window.moment.duration(0),
-        });
-      }
-    }
-
-    otherActivityRows = [...otherRowsByActivity.values()].sort((a, b) => {
-      const durationDiff =
-        b.duration.asMilliseconds() - a.duration.asMilliseconds();
-
-      if (durationDiff !== 0) {
-        return durationDiff;
-      }
-
-      return a.activity.localeCompare(b.activity, undefined, {
-        sensitivity: "base",
+    otherActivityRows = withGoals
+      .filter(
+        (entry) =>
+          !entry.goal &&
+          (entry.totalDuration ?? entry.duration).asMilliseconds() > 0,
+      )
+      .map((entry) => ({ ...entry }))
+      .sort((a, b) => {
+        const durationDiff =
+          b.duration.asMilliseconds() - a.duration.asMilliseconds();
+        return (
+          durationDiff ||
+          a.activity.localeCompare(b.activity, undefined, {
+            sensitivity: "base",
+          })
+        );
       });
-    });
   }
 
   function progressPercent(
@@ -371,6 +344,15 @@
       No goals found for this week under the “Activity goals” heading.
     </div>
   {:else}
+    <div class="legend" aria-label="Weekly day color legend">
+      {#each legendDays as day}
+        <div class="legend-item">
+          <span style={`--legend-color:${day.color};`} class="legend-swatch"
+          ></span>
+          <span>{day.shortLabel}</span>
+        </div>
+      {/each}
+    </div>
     <div class="goal-list">
       {#each rows as row (row.activityKey)}
         {@const definition = getActivityDefinition(row.activityKey)}
@@ -471,15 +453,6 @@
           >{formatDuration(unrecordedTime)}</span
         >
       </div>
-    </div>
-    <div class="legend" aria-label="Weekly day color legend">
-      {#each legendDays as day}
-        <div class="legend-item">
-          <span style={`--legend-color:${day.color};`} class="legend-swatch"
-          ></span>
-          <span>{day.shortLabel}</span>
-        </div>
-      {/each}
     </div>
     <ActivityPie
       activities={pieActivities}
