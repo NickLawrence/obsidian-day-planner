@@ -1,14 +1,19 @@
-import type { Duration } from "moment";
+import type { Duration, Moment } from "moment";
 
 import {
   getActivityDefinition,
   getActivityGroup,
 } from "./activity-definitions";
-import type { ActivityDuration } from "./activity-log-summary";
+import {
+  calculateActivityDurationsForRange,
+  calculateUnrecordedActivityDurationForRange,
+  type ActivityDuration,
+} from "./activity-log-summary";
 import { applyActivityColorVariant } from "./color";
 import { formatActivityDuration, formatDuration } from "./duration";
+import type { Activity } from "./props";
 
-export type WeeklyActivityPieSlice = {
+export type ActivityPieSlice = {
   key: string;
   label: string;
   emoji: string;
@@ -18,10 +23,10 @@ export type WeeklyActivityPieSlice = {
 };
 
 /** Chart values use credited time only; full logged time is tooltip context. */
-export function buildWeeklyActivityPieSlices(
+export function buildActivityPieSlices(
   totals: ActivityDuration[],
   unrecordedTime: Duration,
-): WeeklyActivityPieSlice[] {
+): ActivityPieSlice[] {
   const slices = totals
     .filter(
       ({ duration }) =>
@@ -56,4 +61,23 @@ export function buildWeeklyActivityPieSlices(
     });
   }
   return slices;
+}
+
+/** Build a priority-adjusted chart for any half-open range, through now at most. */
+export function calculateActivityPieForRange(
+  activities: Activity[],
+  rangeStart: Moment,
+  rangeEnd: Moment,
+): ActivityPieSlice[] {
+  if (!rangeStart.isValid() || !rangeEnd.isValid()) return [];
+  const elapsedEnd = window.moment.min(rangeEnd, window.moment());
+  if (!elapsedEnd.isAfter(rangeStart)) return [];
+  return buildActivityPieSlices(
+    calculateActivityDurationsForRange(activities, rangeStart, elapsedEnd),
+    calculateUnrecordedActivityDurationForRange(
+      activities,
+      rangeStart,
+      elapsedEnd,
+    ),
+  );
 }

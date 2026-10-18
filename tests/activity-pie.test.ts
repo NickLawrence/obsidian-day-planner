@@ -4,12 +4,144 @@ import {
   calculateWeeklyActivityDurations,
   calculateWeeklyUnrecordedActivityDuration,
 } from "../src/util/activity-log-summary";
-import { buildWeeklyActivityPieSlices } from "../src/util/activity-pie";
+import {
+  buildActivityPieSlices,
+  calculateActivityPieForRange,
+} from "../src/util/activity-pie";
 import type { Activity } from "../src/util/props";
 
 afterEach(() => vi.useRealTimers());
 
-describe("weekly activity pie", () => {
+describe("activity pie", () => {
+  test("clips overlapping logs to an arbitrary range with partial hours", () => {
+    const activities: Activity[] = [
+      {
+        activity: "tv",
+        taskIds: [],
+        log: [{ start: "2024-09-09T09:00:00Z", end: "2024-09-09T12:00:00Z" }],
+      },
+      {
+        activity: "deep work",
+        taskIds: [],
+        log: [{ start: "2024-09-09T10:00:00Z", end: "2024-09-09T11:00:00Z" }],
+      },
+    ];
+    const start = window.moment("2024-09-09T09:30:00Z");
+    const end = window.moment("2024-09-09T11:30:00Z");
+    const slices = calculateActivityPieForRange(activities, start, end);
+    expect(slices).toHaveLength(2);
+    expect(slices.find(({ key }) => key === "tv")).toMatchObject({
+      value: 3_600_000,
+      durationLabel: "1h (2h)",
+    });
+    expect(slices.find(({ key }) => key === "deep work")?.value).toBe(
+      3_600_000,
+    );
+    expect(slices.reduce((sum, { value }) => sum + value, 0)).toBe(
+      end.diff(start),
+    );
+    expect(start.toISOString()).toBe("2024-09-09T09:30:00.000Z");
+    expect(end.toISOString()).toBe("2024-09-09T11:30:00.000Z");
+  });
+
+  test("covers a complete calendar year, including leap day and clipped year boundaries", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2025-01-10T12:00:00Z"));
+    const slices = calculateActivityPieForRange(
+      [
+        {
+          activity: "tv",
+          taskIds: [],
+          log: [{ start: "2023-12-31T23:00:00Z", end: "2024-01-01T02:00:00Z" }],
+        },
+        {
+          activity: "deep work",
+          taskIds: [],
+          log: [
+            { start: "2024-01-01T01:00:00Z", end: "2024-01-01T03:00:00Z" },
+            { start: "2024-12-31T23:00:00Z", end: "2025-01-01T01:00:00Z" },
+          ],
+        },
+        {
+          activity: "social",
+          taskIds: [],
+          log: [{ start: "2025-01-01T00:00:00Z", end: "2025-01-02T00:00:00Z" }],
+        },
+      ],
+      window.moment("2024-01-01T00:00:00Z"),
+      window.moment("2025-01-01T00:00:00Z"),
+    );
+    expect(slices.find(({ key }) => key === "tv")?.value).toBe(3_600_000);
+    expect(slices.find(({ key }) => key === "deep work")?.value).toBe(
+      3 * 3_600_000,
+    );
+    expect(slices.find(({ key }) => key === "social")).toBeUndefined();
+    expect(slices.find(({ key }) => key === "__unrecorded__")?.value).toBe(
+      (366 * 24 - 4) * 3_600_000,
+    );
+    expect(slices.reduce((sum, { value }) => sum + value, 0)).toBe(
+      366 * 24 * 3_600_000,
+    );
+  });
+
+  test("limits the current year to elapsed time, including active clocks", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-05-15T12:00:00Z"));
+    const start = window.moment("2024-01-01T00:00:00Z");
+    const slices = calculateActivityPieForRange(
+      [
+        {
+          activity: "tv",
+          taskIds: [],
+          log: [{ start: "2024-05-15T09:00:00Z" }],
+        },
+        {
+          activity: "deep work",
+          taskIds: [],
+          log: [{ start: "2024-05-15T10:00:00Z", end: "2024-05-15T13:00:00Z" }],
+        },
+        {
+          activity: "social",
+          taskIds: [],
+          log: [{ start: "2024-05-15T13:00:00Z", end: "2024-05-15T14:00:00Z" }],
+        },
+      ],
+      start,
+      start.clone().add(1, "year"),
+    );
+    expect(slices.find(({ key }) => key === "tv")?.value).toBe(3_600_000);
+    expect(slices.find(({ key }) => key === "deep work")?.value).toBe(
+      2 * 3_600_000,
+    );
+    expect(slices.find(({ key }) => key === "social")).toBeUndefined();
+    expect(slices.reduce((sum, { value }) => sum + value, 0)).toBe(
+      window.moment().diff(start),
+    );
+  });
+
+  test("returns no slices for future, invalid, empty, or reversed periods", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-09-09T12:00:00Z"));
+    const now = window.moment();
+    expect(
+      calculateActivityPieForRange(
+        [],
+        now.clone().add(1, "day"),
+        now.clone().add(2, "days"),
+      ),
+    ).toEqual([]);
+    expect(
+      calculateActivityPieForRange([], window.moment.invalid(), now),
+    ).toEqual([]);
+    expect(
+      calculateActivityPieForRange([], now, window.moment.invalid()),
+    ).toEqual([]);
+    expect(calculateActivityPieForRange([], now, now)).toEqual([]);
+    expect(
+      calculateActivityPieForRange([], now, now.clone().subtract(1, "day")),
+    ).toEqual([]);
+  });
+
   test("partitions the elapsed week using credited time, including unrecorded time", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2024-09-09T12:00:00Z"));
@@ -36,7 +168,7 @@ describe("weekly activity pie", () => {
       activities,
       now,
     );
-    const slices = buildWeeklyActivityPieSlices(totals, unrecorded);
+    const slices = buildActivityPieSlices(totals, unrecorded);
 
     expect(
       slices.map(({ key, value }) => ({ key, hours: value / 3_600_000 })),
@@ -56,7 +188,7 @@ describe("weekly activity pie", () => {
   });
 
   test("uses activity group colors and activity-specific variants", () => {
-    const slices = buildWeeklyActivityPieSlices(
+    const slices = buildActivityPieSlices(
       ["light work", "deep work", "read"].map((activityKey) => ({
         activity: activityKey,
         activityKey,
@@ -79,14 +211,12 @@ describe("weekly activity pie", () => {
   });
 
   test("handles empty weeks, only unrecorded time, and custom activities", () => {
-    expect(buildWeeklyActivityPieSlices([], window.moment.duration(0))).toEqual(
-      [],
-    );
+    expect(buildActivityPieSlices([], window.moment.duration(0))).toEqual([]);
     expect(
-      buildWeeklyActivityPieSlices([], window.moment.duration(1, "hour")),
+      buildActivityPieSlices([], window.moment.duration(1, "hour")),
     ).toMatchObject([{ key: "__unrecorded__", value: 3_600_000, emoji: "◷" }]);
     expect(
-      buildWeeklyActivityPieSlices(
+      buildActivityPieSlices(
         [
           {
             activity: "Custom activity",

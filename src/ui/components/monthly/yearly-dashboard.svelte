@@ -9,18 +9,26 @@
     getActivityGroup,
   } from "../../../util/activity-definitions";
   import { applyActivityColorVariant } from "../../../util/color";
+  import ActivityPie from "../activity-pie.svelte";
   import WeeklyActivityHeatmap from "../weekly-activity-heatmap.svelte";
 
   const { app, getAllActivities } = getObsidianContext();
   const definitions = getActivityDefinitions();
   let activities = $state(getAllActivities());
+  let now = $state(window.moment());
+  const yearStart = $derived(now.clone().startOf("year"));
+  const yearEnd = $derived(yearStart.clone().add(1, "year"));
   let refreshTimer: ReturnType<typeof setInterval> | undefined;
   let metadataChangeRef: EventRef | undefined;
 
   const activityRows = $derived(
     definitions
       .map((definition) => {
-        const dashboard = buildActivityDashboard(activities, definition);
+        const dashboard = buildActivityDashboard(
+          activities,
+          definition,
+          now.year(),
+        );
         return {
           definition,
           weeks: dashboard.weeks,
@@ -46,6 +54,7 @@
   );
 
   function refresh() {
+    now = window.moment();
     activities = getAllActivities();
   }
 
@@ -63,14 +72,14 @@
 <section class="yearly-dashboard" aria-labelledby="yearly-dashboard-heading">
   <header>
     <div>
-      <h2 id="yearly-dashboard-heading">{window.moment().year()} Activity</h2>
+      <h2 id="yearly-dashboard-heading">{now.year()} Activity</h2>
       <p>Weekly activity totals for the year</p>
     </div>
   </header>
 
   <div class="activity-grid">
     <WeeklyActivityHeatmap
-      label={`${window.moment().year()} activity by week`}
+      label={`${now.year()} activity by week`}
       rows={activityRows.map((row) => ({
         key: row.definition.name,
         label: row.definition.emoji
@@ -81,6 +90,13 @@
         color: row.color,
         weeks: row.weeks,
       }))}
+    />
+    <ActivityPie
+      {activities}
+      periodLabel={`so far in ${now.year()}`}
+      rangeEnd={yearEnd}
+      rangeStart={yearStart}
+      title="Yearly activity time"
     />
   </div>
 </section>
@@ -100,7 +116,12 @@
   }
 
   .activity-grid {
+    display: flex;
+    flex-direction: column;
+    gap: var(--size-4-4);
+
     padding: var(--size-4-3);
+
     background: var(--background-primary);
     border: 1px solid var(--background-modifier-border);
     border-radius: var(--radius-m);

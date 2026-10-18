@@ -181,6 +181,13 @@ whole week. Filters keep the same credited totals even when competing activities
 are hidden. Goal progress uses credited time, while pace and remaining-time
 estimates use full elapsed time.
 
+Weekly and yearly dashboards include a pie chart of credited activity time and
+unrecorded time. The yearly chart covers January 1 through now. The reusable
+`ActivityPie` component accepts `activities`, `rangeStart`, and `rangeEnd` for
+other time frames; the end is exclusive and future time is excluded. The chart
+grows to fill available space, with a compact legend beside it or below it in
+narrow panels.
+
 ## Note on the old plugin version
 
 0.7.0 significantly changes what the plugin looks like and what it does. If you like to have some of the old behaviors back, [consider creating an issue](https://github.com/ivan-lednev/obsidian-day-planner/issues).

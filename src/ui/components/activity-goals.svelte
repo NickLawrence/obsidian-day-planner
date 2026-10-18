@@ -19,7 +19,7 @@
   import type { Activity } from "../../util/props";
   import { mergeActivityDurationsWithGoals } from "../../util/weekly-activity-goals";
 
-  import WeeklyActivityPie from "./weekly-activity-pie.svelte";
+  import ActivityPie from "./activity-pie.svelte";
 
   type GoalProgressRow = ActivityDuration & {
     goal: import("moment").Duration;
@@ -53,7 +53,8 @@
   let rows = $state<GoalProgressRow[]>([]);
   let totalRow = $state<GoalProgressRow | null>(null);
   let otherActivityRows = $state<OtherActivityRow[]>([]);
-  let weeklyTotals = $state<ActivityDuration[]>([]);
+  let pieActivities = $state<Activity[]>([]);
+  let pieRange = $state(getWeekRangeFor(window.moment()));
   let unrecordedTime = $state(window.moment.duration(0));
   let weekLabel = $state("");
   let weekProgressPercent = $state(0);
@@ -224,7 +225,8 @@
     );
 
     const totals = calculateWeeklyActivityDurations(allActivities, now);
-    weeklyTotals = totals;
+    pieActivities = allActivities;
+    pieRange = { start: weekStart, end: weekEnd };
     unrecordedTime = calculateWeeklyUnrecordedActivityDuration(
       allActivities,
       now,
@@ -479,7 +481,13 @@
         </div>
       {/each}
     </div>
-    <WeeklyActivityPie totals={weeklyTotals} {unrecordedTime} />
+    <ActivityPie
+      activities={pieActivities}
+      periodLabel="so far this week"
+      rangeEnd={pieRange.end}
+      rangeStart={pieRange.start}
+      title="Weekly activity time"
+    />
   {/if}
 </div>
 

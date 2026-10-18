@@ -7,21 +7,32 @@
     type ChartOptions,
   } from "chart.js";
   import ChartDataLabels from "chartjs-plugin-datalabels";
-  import type { Duration } from "moment";
+  import type { Moment } from "moment";
   import { Pie } from "svelte-chartjs";
 
-  import type { ActivityDuration } from "../../util/activity-log-summary";
-  import { buildWeeklyActivityPieSlices } from "../../util/activity-pie";
+  import { calculateActivityPieForRange } from "../../util/activity-pie";
   import { formatDuration } from "../../util/duration";
+  import type { Activity } from "../../util/props";
 
   ChartJS.register(ArcElement, Tooltip);
 
   let {
-    totals,
-    unrecordedTime,
-  }: { totals: ActivityDuration[]; unrecordedTime: Duration } = $props();
+    activities,
+    rangeStart,
+    rangeEnd,
+    title = "Activity time",
+    periodLabel = "in this period",
+  }: {
+    activities: Activity[];
+    rangeStart: Moment;
+    rangeEnd: Moment;
+    title?: string;
+    periodLabel?: string;
+  } = $props();
 
-  const slices = $derived(buildWeeklyActivityPieSlices(totals, unrecordedTime));
+  const slices = $derived(
+    calculateActivityPieForRange(activities, rangeStart, rangeEnd),
+  );
   const total = $derived(slices.reduce((sum, slice) => sum + slice.value, 0));
   const data: ChartData<"pie", number[], string> = $derived({
     labels: slices.map((slice) => `${slice.emoji} ${slice.label}`),
@@ -96,16 +107,16 @@
   }
 </script>
 
-<figure class="weekly-activity-pie">
+<figure class="activity-pie">
   <figcaption>
-    <h3>Weekly activity time</h3>
-    <p>{displayTime(total)} so far this week</p>
+    <h3>{title}</h3>
+    <p>{displayTime(total)} {periodLabel}</p>
   </figcaption>
   {#if total > 0}
     <div class="chart-layout">
       <div class="pie-canvas">
         <Pie
-          aria-label="Weekly activity time, including unrecorded time. Values are listed in the chart legend."
+          aria-label={`${title}, including unrecorded time. Values are listed in the chart legend.`}
           {data}
           {options}
           plugins={[ChartDataLabels]}
@@ -113,7 +124,7 @@
           updateMode="none"
         />
       </div>
-      <ul class="chart-legend" aria-label="Weekly activity time breakdown">
+      <ul class="chart-legend" aria-label={`${title} breakdown`}>
         {#each slices as slice (slice.key)}
           <li title={`${slice.label}: ${slice.durationLabel}`}>
             <span
@@ -131,12 +142,13 @@
       </ul>
     </div>
   {:else}
-    <p class="empty-state">No elapsed time yet this week.</p>
+    <p class="empty-state">No elapsed time in this period.</p>
   {/if}
 </figure>
 
 <style>
-  .weekly-activity-pie {
+  .activity-pie {
+    container-type: inline-size;
     margin: 0;
     padding-top: var(--size-4-3);
     border-top: 1px solid var(--background-modifier-border);
@@ -156,7 +168,6 @@
 
   .chart-layout {
     display: flex;
-    flex-wrap: wrap;
     gap: var(--size-4-4);
     align-items: center;
     justify-content: center;
@@ -165,12 +176,12 @@
   .pie-canvas {
     position: relative;
 
-    flex: 0 1 auto;
+    flex: 1 1 0;
 
     aspect-ratio: 1;
-    width: min(100%, 22rem);
+    width: 100%;
     min-width: 0;
-    max-width: 22rem;
+    max-width: 52rem;
   }
 
   .pie-canvas :global(canvas) {
@@ -180,10 +191,12 @@
 
   .chart-legend {
     display: grid;
-    flex: 1 1 15rem;
+    flex: 0 1 auto;
     gap: var(--size-2-3);
 
+    width: max-content;
     min-width: 0;
+    max-width: 40%;
     margin: 0;
     padding: 0;
 
@@ -219,5 +232,20 @@
     margin-left: var(--size-2-2);
     font-size: var(--font-ui-smaller);
     color: var(--text-muted);
+  }
+
+  @container (width < 40rem) {
+    .chart-layout {
+      flex-direction: column;
+    }
+
+    .pie-canvas {
+      flex: none;
+      max-width: 36rem;
+    }
+
+    .chart-legend {
+      max-width: 100%;
+    }
   }
 </style>
