@@ -1,15 +1,26 @@
 <script lang="ts">
   import { getHourSize } from "../../global-store/derived-settings";
-  import { settings } from "../../global-store/settings";
+  import { settingsSignal } from "../../global-store/settings";
   import { hoursToMoment } from "../../util/moment";
 
-  export let visibleHours: number[];
+  import CurrentTimeLabel from "./current-time-label.svelte";
+
+  const {
+    visibleHours,
+    showCurrentTime = false,
+  }: { visibleHours: number[]; showCurrentTime?: boolean } = $props();
 </script>
 
 <div class="hours-container">
+  {#if showCurrentTime}
+    <CurrentTimeLabel />
+  {/if}
   {#each visibleHours as hour}
-    <div style:flex-basis="{getHourSize($settings)}px" class="hour">
-      {hoursToMoment(hour).format($settings.hourFormat)}
+    <div
+      style:flex-basis="{getHourSize(settingsSignal.current)}px"
+      class="hour"
+    >
+      {hoursToMoment(hour).format(settingsSignal.current.hourFormat)}
     </div>
   {/each}
 </div>

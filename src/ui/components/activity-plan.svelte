@@ -8,6 +8,7 @@
     normalizeActivityName,
   } from "../../util/activity-definitions";
   import { getWeekRangeFor } from "../../util/activity-log-summary";
+  import { formatDuration } from "../../util/duration";
   import {
     type ActivityPlanEntryKind,
     sortActivityPlanItemsByRecordedTime,
