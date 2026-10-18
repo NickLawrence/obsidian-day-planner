@@ -76,10 +76,15 @@
   }
 
   .content {
-    --time-block-highlight: rgb(255 255 255 / 88%);
-    --time-block-tint: 25%;
-    --time-block-edge-shadow: inset 0 1px 0 #fff,
-      inset 1px 0 0 rgb(255 255 255 / 70%);
+    --time-block-shine-strength: 0.3333;
+    --time-block-highlight: rgb(
+      255 255 255 / calc(88% * var(--time-block-shine-strength))
+    );
+    --time-block-tint: calc(25% * var(--time-block-shine-strength));
+    --time-block-edge-shadow: inset 0 1px 0
+        rgb(255 255 255 / var(--time-block-shine-strength)),
+      inset 1px 0 0
+        rgb(255 255 255 / calc(70% * var(--time-block-shine-strength)));
     --time-block-drop-shadow: 2px 3px 4px rgb(0 0 0 / 16%),
       3px 7px 10px -2px rgb(0 0 0 / 12%);
 
@@ -114,14 +119,20 @@
   }
 
   .custom-colors {
-    --time-block-highlight: rgb(255 255 255 / 12%);
+    --time-block-highlight: rgb(
+      255 255 255 / calc(12% * var(--time-block-shine-strength))
+    );
   }
 
   .dark {
-    --time-block-highlight: rgb(255 255 255 / 12%);
-    --time-block-tint: 24%;
-    --time-block-edge-shadow: inset 0 1px 0 rgb(255 255 255 / 27%),
-      inset 1px 0 0 rgb(255 255 255 / 8%);
+    --time-block-highlight: rgb(
+      255 255 255 / calc(12% * var(--time-block-shine-strength))
+    );
+    --time-block-tint: calc(24% * var(--time-block-shine-strength));
+    --time-block-edge-shadow: inset 0 1px 0
+        rgb(255 255 255 / calc(27% * var(--time-block-shine-strength))),
+      inset 1px 0 0
+        rgb(255 255 255 / calc(8% * var(--time-block-shine-strength)));
     --time-block-drop-shadow: 2px 3px 4px rgb(0 0 0 / 35%),
       3px 7px 10px -2px rgb(0 0 0 / 26%);
   }
