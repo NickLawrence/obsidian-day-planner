@@ -16,8 +16,13 @@
     onpointerup?: (event: PointerEvent) => void;
   }
 
-  const { oncontextmenu, onpointerup, children, task, use = [] }: Props =
-    $props();
+  const {
+    oncontextmenu,
+    onpointerup,
+    children,
+    task,
+    use = [],
+  }: Props = $props();
 
   const { isDarkMode, settingsSignal } = getObsidianContext();
 
@@ -42,6 +47,8 @@
     )}
     class={[
       "content",
+      isDarkMode.current && "dark",
+      normal !== "inherit" && "custom-colors",
       task.truncated?.includes("left") && "truncated-left",
       task.truncated?.includes("right") && "truncated-right",
       task.truncated?.includes("bottom") && "truncated-bottom",
@@ -69,7 +76,17 @@
   }
 
   .content {
-    --default-box-shadow: 1px 1px 2px 0 #0000001f;
+    --time-block-shine-strength: 0.3333;
+    --time-block-highlight: rgb(
+      255 255 255 / calc(88% * var(--time-block-shine-strength))
+    );
+    --time-block-tint: calc(25% * var(--time-block-shine-strength));
+    --time-block-edge-shadow: inset 0 1px 0
+        rgb(255 255 255 / var(--time-block-shine-strength)),
+      inset 1px 0 0
+        rgb(255 255 255 / calc(70% * var(--time-block-shine-strength)));
+    --time-block-drop-shadow: 2px 3px 4px rgb(0 0 0 / 16%),
+      3px 7px 10px -2px rgb(0 0 0 / 12%);
 
     position: relative;
 
@@ -80,9 +97,44 @@
     overflow-wrap: anywhere;
     white-space: normal;
 
+    background-image: radial-gradient(
+        ellipse at 0 0,
+        var(--time-block-highlight),
+        transparent 72%
+      ),
+      linear-gradient(
+        120deg,
+        color-mix(
+          in srgb,
+          var(--time-block-border-color) var(--time-block-tint),
+          transparent
+        ),
+        transparent 75%
+      );
+    backdrop-filter: blur(10px);
     border: 1px solid var(--time-block-border-color, var(--color-base-50));
-    border-radius: var(--radius-s);
-    box-shadow: var(--time-block-box-shadow, var(--default-box-shadow));
+    border-radius: 10px;
+    box-shadow: var(--time-block-box-shadow, var(--time-block-edge-shadow)),
+      var(--time-block-drop-shadow);
+  }
+
+  .custom-colors {
+    --time-block-highlight: rgb(
+      255 255 255 / calc(12% * var(--time-block-shine-strength))
+    );
+  }
+
+  .dark {
+    --time-block-highlight: rgb(
+      255 255 255 / calc(12% * var(--time-block-shine-strength))
+    );
+    --time-block-tint: calc(24% * var(--time-block-shine-strength));
+    --time-block-edge-shadow: inset 0 1px 0
+        rgb(255 255 255 / calc(27% * var(--time-block-shine-strength))),
+      inset 1px 0 0
+        rgb(255 255 255 / calc(8% * var(--time-block-shine-strength)));
+    --time-block-drop-shadow: 2px 3px 4px rgb(0 0 0 / 35%),
+      3px 7px 10px -2px rgb(0 0 0 / 26%);
   }
 
   .truncated-left {

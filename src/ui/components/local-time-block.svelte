@@ -11,6 +11,7 @@
 
   import RenderedMarkdown from "./rendered-markdown.svelte";
   import TimeBlockBase from "./time-block-base.svelte";
+  import TimeBlockDuration from "./time-block-duration.svelte";
 
   type ClockActivityDisplay = {
     title?: string;
@@ -106,9 +107,9 @@
   {/if}
   {@render bottomDecoration?.()}
   {#if showDuration && completedActivityDuration}
-    <span class="activity-duration">
+    <TimeBlockDuration>
       {completedActivityDuration}
-    </span>
+    </TimeBlockDuration>
   {/if}
   {#if task.clockActivity?.resourcePath}
     <button
@@ -195,25 +196,6 @@
     word-break: break-word;
     overflow-wrap: anywhere;
     white-space: normal;
-  }
-
-  .activity-duration {
-    position: absolute;
-    z-index: 1;
-    bottom: -1px;
-    left: -1px;
-
-    padding: 0 4px;
-
-    font-size: var(--font-ui-smaller);
-    line-height: 1.2;
-    color: var(--text-faint);
-
-    background: var(--time-block-bg-color);
-    border: 1px solid var(--text-faint);
-    border-radius: var(--radius-s);
-    border-top-left-radius: 0;
-    border-bottom-right-radius: 0;
   }
 
   .activity-resource-link {

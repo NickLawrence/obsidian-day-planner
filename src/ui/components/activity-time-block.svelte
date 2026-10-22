@@ -7,6 +7,7 @@
 
   import LocalTimeBlock from "./local-time-block.svelte";
   import Selectable from "./selectable.svelte";
+  import TimeBlockDuration from "./time-block-duration.svelte";
 
   const { task }: { task: LocalTask & { clockActivity?: Activity } } = $props();
 
@@ -36,32 +37,13 @@
     >
       {#snippet bottomDecoration()}
         {#if task.clockActivity?.log?.[0]?.end}
-          <span class="activity-duration">
+          <TimeBlockDuration>
             {formatDuration(
               window.moment.duration(task.durationMinutes, "minutes"),
             )}
-          </span>
+          </TimeBlockDuration>
         {/if}
       {/snippet}
     </LocalTimeBlock>
   {/snippet}
 </Selectable>
-
-<style>
-  .activity-duration {
-    position: absolute;
-    bottom: -1px;
-    left: -1px;
-
-    padding: 0 4px;
-
-    font-size: var(--font-ui-smaller);
-    line-height: 1.2;
-    color: var(--text-faint);
-
-    border-top: 1px solid color-mix(in srgb, var(--text-faint) 50%, transparent);
-    border-right: 1px solid
-      color-mix(in srgb, var(--text-faint) 50%, transparent);
-    border-top-right-radius: var(--radius-s);
-  }
-</style>

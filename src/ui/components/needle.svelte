@@ -39,8 +39,14 @@
 
 <style>
   .needle {
+    pointer-events: none;
+
+    z-index: 4;
+
     height: 2px;
+
     background-color: var(--color-accent);
+    box-shadow: 0 2px 3px rgb(0 0 0 / 16%);
   }
 
   .ball {

@@ -3,6 +3,7 @@
 
   import { getDateRangeContext } from "../../context/date-range-context";
   import { getObsidianContext } from "../../context/obsidian-context";
+  import { currentTimeSignal } from "../../global-store/current-time";
   import { getVisibleHours } from "../../global-store/derived-settings";
   import { settings } from "../../global-store/settings";
   import type { Task } from "../../task-types";
@@ -108,7 +109,13 @@
     {/snippet}
     <Scroller class={["planner-timeline-scroller", "planner-flex-scrollable"]}>
       {#snippet children(isUnderCursor)}
-        <Ruler visibleHours={getVisibleHours($settings)} />
+        <Ruler
+          showCurrentTime={firstDayInRange.isSame(
+            currentTimeSignal.current,
+            "day",
+          )}
+          visibleHours={getVisibleHours($settings)}
+        />
         <Timeline day={firstDayInRange} {isUnderCursor} />
       {/snippet}
     </Scroller>
