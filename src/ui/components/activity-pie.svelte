@@ -137,7 +137,7 @@
                 class="color-swatch"
                 aria-hidden="true"
               ></span>
-              <h4 class="slice-name">{group.label}</h4>
+              <strong class="slice-name">{group.label}</strong>
               <span class="slice-value">
                 {displayTime(group.value)}
                 <span class="slice-percentage">{percentage(group.value)}</span>
@@ -249,11 +249,6 @@
     grid-template-columns: 0.65rem minmax(0, 1fr) auto;
     gap: var(--size-2-3);
     align-items: center;
-  }
-
-  .group-heading h4 {
-    margin: 0;
-    font-size: inherit;
   }
 
   .group-activities {
