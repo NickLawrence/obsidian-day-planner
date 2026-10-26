@@ -8,8 +8,10 @@
   } from "chart.js";
   import ChartDataLabels from "chartjs-plugin-datalabels";
   import type { Moment } from "moment";
+  import { onMount } from "svelte";
   import { Pie } from "svelte-chartjs";
 
+  import { normalizeActivityName } from "../../util/activity-definitions";
   import {
     calculateActivityPieForRange,
     groupActivityPieSlices,
@@ -25,14 +27,18 @@
     rangeEnd,
     title = "Activity time",
     periodLabel = "in this period",
+    goalActivities = [],
   }: {
     activities: Activity[];
     rangeStart: Moment;
     rangeEnd: Moment;
     title?: string;
     periodLabel?: string;
+    goalActivities?: string[];
   } = $props();
 
+  let chart = $state.raw<ChartJS<"pie", unknown, unknown> | null>(null);
+  const goalKeys = $derived(new Set(goalActivities.map(normalizeActivityName)));
   const slices = $derived(
     calculateActivityPieForRange(activities, rangeStart, rangeEnd),
   );
@@ -44,11 +50,12 @@
       {
         data: slices.map((slice) => slice.value),
         backgroundColor: slices.map((slice) => slice.color),
-        borderColor: () =>
-          getComputedStyle(document.body)
-            .getPropertyValue("--background-primary")
-            .trim() || "#ffffff",
-        borderWidth: 2,
+        borderColor: ({ dataIndex }) =>
+          isGoal(slices[dataIndex]?.key)
+            ? themeColor("--interactive-accent", "#7856c8")
+            : themeColor("--background-primary", "#ffffff"),
+        borderWidth: slices.map((slice) => (isGoal(slice.key) ? 4 : 2)),
+        borderAlign: "inner",
         hoverOffset: 6,
       },
     ],
@@ -93,6 +100,29 @@
     },
   });
 
+  onMount(() => {
+    // Canvas colors need a redraw when Obsidian changes its theme or accent.
+    const observer = new MutationObserver(() => chart?.update("none"));
+    for (const element of [document.body, document.documentElement]) {
+      observer.observe(element, {
+        attributes: true,
+        attributeFilter: ["class", "style"],
+      });
+    }
+    return () => observer.disconnect();
+  });
+
+  function isGoal(key: string | undefined) {
+    return key !== undefined && key !== "__unrecorded__" && goalKeys.has(key);
+  }
+
+  function themeColor(variable: string, fallback: string) {
+    return (
+      getComputedStyle(document.body).getPropertyValue(variable).trim() ||
+      fallback
+    );
+  }
+
   function labelWidth(chart: ChartJS, dataIndex: number) {
     const arc = chart.getDatasetMeta(0).data[dataIndex];
     return arc instanceof ArcElement
@@ -126,6 +156,7 @@
           plugins={[ChartDataLabels]}
           role="img"
           updateMode="none"
+          bind:chart
         />
       </div>
       <ul class="chart-legend" aria-label={`${title} breakdown`}>
@@ -148,6 +179,7 @@
                 {#each group.slices as slice (slice.key)}
                   <li
                     class="legend-activity"
+                    class:goal-match={isGoal(slice.key)}
                     title={`${slice.label}: ${slice.durationLabel}`}
                   >
                     <span
@@ -259,6 +291,22 @@
     padding: 0 0 0 var(--size-4-3);
 
     list-style: none;
+  }
+
+  .legend-activity.goal-match {
+    padding: 2px 6px;
+    background: color-mix(
+      in srgb,
+      var(--interactive-accent) 18%,
+      var(--background-primary)
+    );
+    border: 1px solid
+      color-mix(
+        in srgb,
+        var(--interactive-accent) 28%,
+        var(--background-modifier-border)
+      );
+    border-radius: var(--radius-l);
   }
 
   .color-swatch {

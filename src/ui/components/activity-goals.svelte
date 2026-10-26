@@ -460,6 +460,7 @@
     </div>
     <ActivityPie
       activities={pieActivities}
+      goalActivities={rows.map((row) => row.activityKey)}
       periodLabel="so far this week"
       rangeEnd={pieRange.end}
       rangeStart={pieRange.start}

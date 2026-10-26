@@ -187,7 +187,9 @@ estimates use full elapsed time.
 Weekly and yearly dashboards include a pie chart of credited activity time and
 unrecorded time. Slices from the same activity group sit together. The legend has
 sections with credited group totals and individual activities underneath, ordered
-by credited time. Custom activities appear under Other activities; unrecorded time
+by credited time. Activities saved as goals for the current week have an Obsidian
+accent border around their slice and an accent-tinted legend pill, on both charts.
+Custom activities appear under Other activities; unrecorded time
 appears separately at the end. The yearly chart covers January 1 through now. The
 reusable `ActivityPie` component accepts `activities`, `rangeStart`, and `rangeEnd` for
 other time frames; the end is exclusive and future time is excluded. The chart

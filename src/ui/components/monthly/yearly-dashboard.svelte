@@ -15,6 +15,9 @@
   const definitions = getActivityDefinitions();
   let activities = $state.raw(getAllActivities());
   let now = $state(window.moment());
+  let goalActivities = $state<string[]>([]);
+  let goalWeek: string | undefined;
+  let goalRequest = 0;
   const year = $derived(now.year());
   const yearStart = $derived(window.moment({ year }).startOf("year"));
   let refreshTimer: ReturnType<typeof setInterval> | undefined;
@@ -51,17 +54,41 @@
       );
   });
 
-  function refresh() {
+  function refresh(forceGoals = false) {
     now = window.moment();
     activities = getAllActivities();
+    void refreshGoals(forceGoals);
+  }
+
+  async function refreshGoals(force = false) {
+    const weekStart = window.moment().startOf("isoWeek");
+    const weekKey = weekStart.format("YYYY-MM-DD");
+    if (!force && goalWeek === weekKey) return;
+    if (goalWeek !== weekKey) goalActivities = [];
+    goalWeek = weekKey;
+    const request = ++goalRequest;
+    try {
+      const entries = await plannerData.readPlanEntries(weekStart);
+      if (request !== goalRequest) return;
+      goalActivities = entries
+        .filter((entry) => entry.kind === "goal")
+        .map((entry) => entry.activity);
+    } catch (error) {
+      if (request !== goalRequest) return;
+      goalWeek = undefined;
+      goalActivities = [];
+      console.error("Failed to load weekly goals for the activity pie", error);
+    }
   }
 
   onMount(() => {
+    void refreshGoals();
     refreshTimer = setInterval(refresh, 60_000);
-    stopPlannerListener = plannerData.onChange(refresh);
+    stopPlannerListener = plannerData.onChange(() => refresh(true));
   });
 
   onDestroy(() => {
+    goalRequest++;
     if (refreshTimer) clearInterval(refreshTimer);
     stopPlannerListener?.();
   });
@@ -91,6 +118,7 @@
     />
     <ActivityPie
       {activities}
+      {goalActivities}
       periodLabel={`so far in ${now.year()}`}
       rangeEnd={now}
       rangeStart={yearStart}
