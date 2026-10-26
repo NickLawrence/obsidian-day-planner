@@ -5,6 +5,7 @@ import {
   getActivityFieldOptions,
   getActivityStartSuggestions,
   getActivityResourcePath,
+  getResourceCover,
   getAvailableResourceNamesForField,
   getResourceFilesForField,
 } from "../src/util/activity-resources";
@@ -343,5 +344,61 @@ describe("getActivityFieldOptions", () => {
         activities,
       ),
     ).toEqual({ name: ["Severance"] });
+  });
+});
+
+describe("getResourceCover", () => {
+  it.each([
+    "Images/cover.png",
+    "[[Images/cover.png]]",
+    "![[Images/cover.png|200]]",
+    "![Cover](Images/cover.png)",
+  ])("resolves %s relative to the resource page", (cover) => {
+    const file = { path: "Books/Dune.md" };
+    let resolvedSource = "";
+    const app = {
+      metadataCache: {
+        getFileCache: () => ({ frontmatter: { cover } }),
+        getFirstLinkpathDest: (link: string, source: string) => {
+          resolvedSource = source;
+          return link === "Images/cover.png"
+            ? { path: "Images/cover.png" }
+            : null;
+        },
+      },
+      vault: {
+        getResourcePath: (image: { path: string }) =>
+          `app://vault/${image.path}`,
+      },
+    };
+    expect(getResourceCover(app as never, file as never)).toBe(
+      "app://vault/Images/cover.png",
+    );
+    expect(resolvedSource).toBe(file.path);
+  });
+
+  it.each([undefined, "", 123, ["cover.png"], "missing.png"])(
+    "ignores absent, invalid or missing covers: %s",
+    (cover) => {
+      const app = {
+        metadataCache: {
+          getFileCache: () => ({ frontmatter: { cover } }),
+          getFirstLinkpathDest: () => null,
+        },
+      };
+      expect(getResourceCover(app as never, {} as never)).toBeUndefined();
+    },
+  );
+
+  it.each([
+    "https://example.com/cover.png",
+    "![Cover](https://example.com/cover.png)",
+  ])("supports an external image: %s", (cover) => {
+    const app = {
+      metadataCache: { getFileCache: () => ({ frontmatter: { cover } }) },
+    };
+    expect(getResourceCover(app as never, {} as never)).toBe(
+      "https://example.com/cover.png",
+    );
   });
 });

@@ -3,9 +3,12 @@
   import { onDestroy, onMount } from "svelte";
 
   import type { PlannerData } from "../../service/planner-data";
-  import { buildActivityDashboard } from "../../util/activity-dashboard";
+  import {
+    buildActivityDashboard,
+    type ActivityDashboardRow,
+  } from "../../util/activity-dashboard";
   import type { ActivityDefinition } from "../../util/activity-definitions";
-  import { getInProgressMainKeys } from "../../util/activity-progress";
+  import { getActivityDashboardEntries } from "../../util/activity-progress";
   import type { DayPlannerActivityApi } from "../../util/activity-totals";
   import { formatActivityDuration } from "../../util/duration";
 
@@ -39,9 +42,15 @@
       ? buildActivityDashboard(activities, definition, year)
       : { rows: [], groups: [], weeks: [] },
   );
-  const inProgress = $derived(
+  const entries = $derived(
     definition
-      ? getInProgressMainKeys(app, activities, definition, progressTime)
+      ? getActivityDashboardEntries(
+          app,
+          activities,
+          definition,
+          dashboard.groups,
+          progressTime,
+        )
       : [],
   );
 
@@ -93,6 +102,52 @@
   });
 </script>
 
+{#snippet logTable(rows: ActivityDashboardRow[])}
+  {#if definition}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Day / Start</th><th>Time</th><th>Notes</th><th>Quality</th>
+            {#each definition.attributes?.start ?? [] as field}<th
+                >{field.label}</th
+              >{/each}
+            {#each definition.attributes?.end ?? [] as field}<th
+                >{field.label}</th
+              >{/each}
+            {#each definition.attributes?.ranges ?? [] as range}<th
+                >{range.key}</th
+              >{/each}
+            {#each definition.attributes?.ranges ?? [] as range}<th
+                >{range.key} per Hour</th
+              >{/each}
+          </tr>
+        </thead>
+        <tbody>
+          {#each rows as row}
+            <tr>
+              <td
+                ><time datetime={window.moment(row.start).toISOString()}
+                  >{row.day} {window.moment(row.start).format("HH:mm")}</time
+                ></td
+              >
+              <td>{displayTime(row.minutes, row.totalMinutes)}</td><td
+                >{row.notes}</td
+              ><td>{row.quality}</td>
+              {#each row.startValues as value}<td>{String(value)}</td>{/each}
+              {#each row.endValues as value}<td>{String(value)}</td>{/each}
+              {#each row.rangeValues as value}<td>{value}</td>{/each}
+              {#each row.rangeValuesPerHour as value}<td
+                  >{typeof value === "number" ? value.toFixed(1) : value}</td
+                >{/each}
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+  {/if}
+{/snippet}
+
 <div class="activity-dashboard">
   <nav class="activity-toggle" aria-label="Select activity">
     {#each definitions as activity (activity.name)}
@@ -110,60 +165,6 @@
   </nav>
 
   {#if definition}
-    <section class="in-progress">
-      <h3>▶️ In Progress</h3>
-      {#if inProgress.length === 0}
-        <p class="empty">None</p>
-      {:else}
-        <div class="progress-list">
-          {#each inProgress as item (item.value)}
-            <article>
-              <div class="progress-heading">
-                <strong>{item.value}</strong>
-                {#if item.percent !== undefined}
-                  <span>{item.percent.toFixed(0)}%</span>
-                {:else}
-                  <span
-                    >{displayTime(
-                      item.countedMinutes ?? item.minutes,
-                      item.minutes,
-                    )} spent</span
-                  >
-                {/if}
-              </div>
-              {#if item.percent !== undefined}
-                <progress max="100" value={item.percent}
-                  >{item.percent.toFixed(0)}%</progress
-                >
-                <div class="progress-details">
-                  <span>{item.current} / {item.maximum} {item.rangeKey}</span>
-                  <span
-                    >{displayTime(
-                      item.countedMinutes ?? item.minutes,
-                      item.minutes,
-                    )} spent</span
-                  >
-                  {#if item.minutesPerUnit !== undefined}
-                    <span
-                      >{item.minutesPerUnit.toFixed(1)} min/{item.rangeKey?.replace(
-                        /s$/,
-                        "",
-                      )}</span
-                    >
-                  {/if}
-                  {#if item.estimatedMinutesRemaining !== undefined}
-                    <span
-                      >About {displayTime(item.estimatedMinutesRemaining)} remaining</span
-                    >
-                  {/if}
-                </div>
-              {/if}
-            </article>
-          {/each}
-        </div>
-      {/if}
-    </section>
-
     <WeeklyActivityHeatmap
       allowDaily
       label={definition.label}
@@ -171,71 +172,110 @@
     />
 
     <section>
-      <h3>{definition.emoji ?? ""} {definition.label} — Activity Logs</h3>
-      {#if dashboard.rows.length === 0}
-        <p class="empty">No closed {definition.label} activity logs found.</p>
-      {:else}
-        <div class="table-wrap">
-          <table>
-            <thead
-              ><tr>
-                <th>Day</th><th>Time</th><th>Notes</th><th>Quality</th>
-                {#each definition.attributes?.start ?? [] as field}<th
-                    >{field.label}</th
-                  >{/each}
-                {#each definition.attributes?.end ?? [] as field}<th
-                    >{field.label}</th
-                  >{/each}
-                {#each definition.attributes?.ranges ?? [] as range}<th
-                    >{range.key}</th
-                  >{/each}
-                {#each definition.attributes?.ranges ?? [] as range}<th
-                    >{range.key} per Hour</th
-                  >{/each}
-              </tr></thead
-            >
-            <tbody>
-              {#each dashboard.rows as row}
-                <tr>
-                  <td>{row.day}</td><td
-                    >{displayTime(row.minutes, row.totalMinutes)}</td
-                  ><td>{row.notes}</td><td>{row.quality}</td>
-                  {#each row.startValues as value}<td>{String(value)}</td
-                    >{/each}
-                  {#each row.endValues as value}<td>{String(value)}</td>{/each}
-                  {#each row.rangeValues as value}<td>{value}</td>{/each}
-                  {#each row.rangeValuesPerHour as value}<td
-                      >{typeof value === "number"
-                        ? value.toFixed(1)
-                        : value}</td
-                    >{/each}
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-
-        {#if definition.attributes?.mainKey}
-          <h3>By {definition.attributes.mainKey} — Total Time</h3>
-          <div class="table-wrap compact">
-            <table>
-              <thead
-                ><tr
-                  ><th>{definition.attributes.mainKey}</th><th>Total</th><th
-                    >Earliest</th
-                  ><th>Most Recent</th></tr
-                ></thead
-              >
-              <tbody
-                >{#each dashboard.groups as group}<tr
-                    ><td>{group.value}</td><td
-                      >{displayTime(group.minutes, group.totalMinutes)}</td
-                    ><td>{group.earliest}</td><td>{group.latest}</td></tr
-                  >{/each}</tbody
-              >
-            </table>
+      <h3>
+        {definition.emoji ?? ""}
+        {definition.label} — {definition.attributes?.mainKey
+          ? "Activity"
+          : "Activity Logs"}
+      </h3>
+      {#if definition.attributes?.mainKey}
+        {#if entries.length === 0}
+          <p class="empty">No {definition.label} activity found.</p>
+        {:else}
+          <div class="progress-list">
+            {#each entries as item (item.value)}
+              <article class="activity-entry">
+                <div class="entry-overview">
+                  {#if item.cover}
+                    <img
+                      class="cover"
+                      alt={`Cover for ${item.value}`}
+                      loading="lazy"
+                      src={item.cover}
+                    />
+                  {/if}
+                  <div class="entry-info">
+                    <div class="progress-heading">
+                      <strong>
+                        {#if item.filePath}
+                          <a
+                            class="internal-link"
+                            href={item.filePath}
+                            onclick={(event) => {
+                              event.preventDefault();
+                              void app.workspace.openLinkText(
+                                item.filePath!,
+                                "",
+                                event.ctrlKey || event.metaKey,
+                              );
+                            }}>{item.value}</a
+                          >
+                        {:else}
+                          {item.value}
+                        {/if}
+                      </strong>
+                      {#if item.inProgress}<span class="status"
+                          >In Progress</span
+                        >{/if}
+                      {#if item.percent !== undefined}<span
+                          >{item.percent.toFixed(0)}%</span
+                        >{/if}
+                    </div>
+                    <div class="progress-details">
+                      <span
+                        >{displayTime(
+                          item.countedMinutes ?? item.minutes,
+                          item.minutes,
+                        )} spent</span
+                      >
+                      <span>Earliest: {item.earliest ?? "—"}</span>
+                      <span>Most recent: {item.latest ?? "—"}</span>
+                    </div>
+                    {#if item.percent !== undefined}
+                      <progress
+                        aria-label={`${item.value} progress`}
+                        max="100"
+                        value={item.percent}
+                        >{item.percent.toFixed(0)}%</progress
+                      >
+                      <div class="progress-details">
+                        <span
+                          >{item.current} / {item.maximum} {item.rangeKey}</span
+                        >
+                        {#if item.minutesPerUnit !== undefined}
+                          <span
+                            >{item.minutesPerUnit.toFixed(1)} min/{item.rangeKey?.replace(
+                              /s$/,
+                              "",
+                            )}</span
+                          >
+                        {/if}
+                        {#if item.estimatedMinutesRemaining !== undefined}
+                          <span
+                            >About {displayTime(item.estimatedMinutesRemaining)}
+                            remaining</span
+                          >
+                        {/if}
+                      </div>
+                    {/if}
+                  </div>
+                </div>
+                <details>
+                  <summary>Activity logs ({item.rows.length})</summary>
+                  {#if item.rows.length}
+                    {@render logTable(item.rows)}
+                  {:else}
+                    <p class="empty">No closed activity logs yet.</p>
+                  {/if}
+                </details>
+              </article>
+            {/each}
           </div>
         {/if}
+      {:else if dashboard.rows.length === 0}
+        <p class="empty">No closed {definition.label} activity logs found.</p>
+      {:else}
+        {@render logTable(dashboard.rows)}
       {/if}
     </section>
   {/if}
@@ -345,9 +385,41 @@
     background: var(--background-secondary-alt);
   }
 
-  .compact table {
-    width: auto;
-    min-width: 32rem;
+  .entry-overview {
+    display: flex;
+    gap: var(--size-4-3);
+    align-items: flex-start;
+  }
+
+  .entry-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .cover {
+    flex: 0 0 auto;
+
+    width: 4rem;
+    max-height: 6rem;
+
+    object-fit: contain;
+    border-radius: var(--radius-s);
+  }
+
+  .status {
+    font-size: var(--font-ui-smaller);
+    color: var(--text-accent);
+  }
+
+  details {
+    margin-top: var(--size-4-2);
+  }
+
+  summary {
+    cursor: pointer;
+    width: fit-content;
+    padding: var(--size-2-2) 0;
+    color: var(--text-muted);
   }
 
   .empty {

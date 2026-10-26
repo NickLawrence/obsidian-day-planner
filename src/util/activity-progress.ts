@@ -1,6 +1,10 @@
 import type { Moment } from "moment";
 import type { App } from "obsidian";
 
+import type {
+  ActivityDashboardGroup,
+  ActivityDashboardRow,
+} from "./activity-dashboard";
 import type { ActivityDefinition } from "./activity-definitions";
 import {
   getActivityAttributeFields,
@@ -11,7 +15,10 @@ import {
   activityTimeSlices,
   getActivityLogTimes,
 } from "./activity-log-summary";
-import { getResourceFilesForField } from "./activity-resources";
+import {
+  getResourceCover,
+  getResourceFilesForField,
+} from "./activity-resources";
 import type { Activity } from "./props";
 
 export type ActivityMainKeyProgress = {
@@ -26,6 +33,125 @@ export type ActivityMainKeyProgress = {
   minutesPerUnit?: number;
   estimatedMinutesRemaining?: number;
 };
+
+export type ActivityDashboardEntry = ActivityMainKeyProgress & {
+  rows: ActivityDashboardRow[];
+  earliest?: string;
+  latest?: string;
+  cover?: string;
+  inProgress: boolean;
+};
+
+/** Combine historical totals with resource metadata and the in-progress queue. */
+export function getActivityDashboardEntries(
+  app: App,
+  activities: Activity[],
+  definition: ActivityDefinition,
+  groups: ActivityDashboardGroup[],
+  now: Moment = window.moment(),
+): ActivityDashboardEntry[] {
+  const mainKey = definition.attributes?.mainKey;
+  if (!mainKey) return [];
+  const field = definition.attributes?.start.find(
+    (candidate) => candidate.key === mainKey && candidate.resourceTag,
+  );
+  const resources = field ? getResourceFilesForField(app, field) : [];
+  const byName = new Map(
+    resources.flatMap((resource) =>
+      [resource.name, ...resource.aliases].map(
+        (name) => [name.trim().toLowerCase(), resource] as const,
+      ),
+    ),
+  );
+  const entries = new Map<
+    string,
+    {
+      value: string;
+      resource?: (typeof resources)[number];
+      rows: ActivityDashboardRow[];
+    }
+  >();
+  for (const group of groups) {
+    const resource = byName.get(group.value.trim().toLowerCase());
+    const key = resource?.file.path ?? group.value;
+    const entry = entries.get(key) ?? {
+      value: resource?.name ?? group.value,
+      resource,
+      rows: [],
+    };
+    entry.rows.push(...group.rows);
+    entries.set(key, entry);
+  }
+  // Keep resources in progress visible even before their first completed log.
+  for (const resource of resources) {
+    if (resource.status === "in progress" && !entries.has(resource.file.path))
+      entries.set(resource.file.path, {
+        value: resource.name,
+        resource,
+        rows: [],
+      });
+  }
+  for (const activity of activities) {
+    if (
+      normalizeActivityName(activity.activity) !==
+      normalizeActivityName(definition.name)
+    )
+      continue;
+    const candidate = getActivityAttributeValues(definition.name, activity)[
+      mainKey
+    ];
+    if (typeof candidate !== "string" && typeof candidate !== "number")
+      continue;
+    const value = String(candidate).trim();
+    if (value && !byName.has(value.toLowerCase()) && !entries.has(value))
+      entries.set(value, { value, rows: [] });
+  }
+  const lookup = createProgressLookup(activities, definition, now);
+  return [...entries.values()]
+    .map(({ value, resource, rows }) => {
+      const progress = calculateActivityMainKeyProgress(
+        {
+          activities,
+          definition,
+          value,
+          aliases: resource?.aliases,
+          rangeMaximums: resource?.frontmatter,
+        },
+        lookup,
+      );
+      rows.sort((a, b) => b.start - a.start);
+      // Alias logs can overlap. Count their elapsed time as a union, just as
+      // the total-time table does for logs sharing a single main-key value.
+      let totalMinutes = 0;
+      let until = Number.NEGATIVE_INFINITY;
+      for (const row of [...rows].sort((a, b) => a.start - b.start)) {
+        totalMinutes +=
+          Math.max(0, row.end - Math.max(row.start, until)) / 60_000;
+        until = Math.max(until, row.end);
+      }
+      const counted = rows.reduce((sum, row) => sum + row.minutes, 0);
+      return {
+        ...progress,
+        ...(rows.length
+          ? {
+              minutes: totalMinutes,
+              countedMinutes: counted < totalMinutes ? counted : undefined,
+              earliest: rows.at(-1)!.day,
+              latest: rows[0].day,
+            }
+          : {}),
+        rows,
+        filePath: resource?.file.path,
+        cover: resource ? getResourceCover(app, resource.file) : undefined,
+        inProgress: resource?.status === "in progress",
+      };
+    })
+    .sort(
+      (a, b) =>
+        (b.rows[0]?.start ?? 0) - (a.rows[0]?.start ?? 0) ||
+        a.value.localeCompare(b.value),
+    );
+}
 
 function createProgressLookup(
   activities: Activity[],

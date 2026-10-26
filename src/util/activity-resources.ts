@@ -75,6 +75,22 @@ export function getResourceFilesForField(
     .map((resource) => ({ ...resource, hasResourceTag: true }));
 }
 
+/** Resolve a frontmatter cover relative to its page, including Obsidian links. */
+export function getResourceCover(app: App, file: TFile): string | undefined {
+  const cover = app.metadataCache.getFileCache(file)?.frontmatter?.cover;
+  if (typeof cover !== "string" || !cover.trim()) return undefined;
+  const value = cover.trim();
+  if (/^https?:\/\//i.test(value)) return value;
+  const wiki = value.match(/^!?\[\[([^\]]+)\]\]$/);
+  const markdown = value.match(/^!?\[[^\]]*\]\((.+)\)$/);
+  const link = (wiki?.[1].split("|")[0] ?? markdown?.[1] ?? value)
+    .split("#")[0]
+    .trim();
+  if (/^https?:\/\//i.test(link)) return link;
+  const image = app.metadataCache.getFirstLinkpathDest(link, file.path);
+  return image ? app.vault.getResourcePath(image) : undefined;
+}
+
 export function getAvailableResourceNamesForField(
   app: App,
   field: ActivityAttributeField,

@@ -8,6 +8,7 @@ import {
 import type { ActivityDefinition } from "../src/util/activity-definitions";
 import {
   calculateActivityMainKeyProgress,
+  getActivityDashboardEntries,
   getInProgressMainKeys,
 } from "../src/util/activity-progress";
 import type { Activity } from "../src/util/props";
@@ -246,6 +247,7 @@ describe("buildActivityDashboard", () => {
         minutes: 120,
         earliest: "2026-08-25",
         latest: "2026-08-26",
+        rows: dashboard.rows,
       },
     ]);
     expect(dashboard.weeks).toHaveLength(52);
@@ -256,6 +258,64 @@ describe("buildActivityDashboard", () => {
       minutes: 120,
       intensity: 1,
     });
+  });
+
+  it("sorts groups and their logs by timestamp, including logs on the same day", () => {
+    const activities = [
+      {
+        activity: "read",
+        read: { book: "Older" },
+        notes: "older",
+        log: [{ start: "2026-08-24T22:00:00Z", end: "2026-08-25T04:00:00Z" }],
+      },
+      {
+        activity: "read",
+        read: { book: "Dune" },
+        notes: "morning",
+        log: [{ start: "2026-08-25T09:00:00Z", end: "2026-08-25T09:30:00Z" }],
+      },
+      {
+        activity: "read",
+        read: { book: "Newest" },
+        notes: "newest",
+        log: [{ start: "2026-08-25T20:00:00Z", end: "2026-08-25T20:15:00Z" }],
+      },
+      {
+        activity: "read",
+        read: { book: "Dune" },
+        notes: "evening",
+        log: [
+          { start: "2026-08-25T18:00:00Z", end: "2026-08-25T18:30:00Z" },
+          { start: "2026-08-25T19:00:00Z", end: "2026-08-25T19:30:00Z" },
+        ],
+      },
+    ] as Activity[];
+    const dashboard = buildActivityDashboard(activities, readDefinition, 2026);
+    expect(dashboard.rows.map(({ notes }) => notes)).toEqual([
+      "newest",
+      "evening",
+      "evening",
+      "morning",
+      "older",
+    ]);
+    expect(dashboard.groups.map(({ value }) => value)).toEqual([
+      "Newest",
+      "Dune",
+      "Older",
+    ]);
+    expect(dashboard.groups[1].rows.map(({ start }) => start)).toEqual([
+      Date.parse("2026-08-25T19:00:00Z"),
+      Date.parse("2026-08-25T18:00:00Z"),
+      Date.parse("2026-08-25T09:00:00Z"),
+    ]);
+    const ungrouped = buildActivityDashboard(activities, {
+      ...readDefinition,
+      attributes: undefined,
+    });
+    expect(ungrouped.groups).toEqual([]);
+    expect(ungrouped.rows.map(({ start }) => start)).toEqual(
+      dashboard.rows.map(({ start }) => start),
+    );
   });
 
   it("labels a week with the month containing at least four of its days", () => {
@@ -365,5 +425,160 @@ describe("calculateActivityMainKeyProgress", () => {
         value: "Dune",
       }),
     ).toEqual({ value: "Dune", minutes: 30 });
+  });
+});
+
+describe("getActivityDashboardEntries", () => {
+  function resourceApp() {
+    const resources = [
+      {
+        path: "Books/Dune.md",
+        basename: "Dune",
+        frontmatter: {
+          tags: ["book"],
+          aliases: ["Dune alias"],
+          status: "complete",
+          pages: 400,
+          cover: "[[../Images/dune.png]]",
+        },
+      },
+      {
+        path: "Books/New.md",
+        basename: "New",
+        frontmatter: { tags: ["book"], status: "in progress", pages: 100 },
+      },
+      {
+        path: "Books/Backlog.md",
+        basename: "Backlog",
+        frontmatter: { tags: ["book"], status: "backlog" },
+      },
+    ];
+    return {
+      vault: {
+        getMarkdownFiles: () => resources,
+        getResourcePath: (file: { path: string }) => `app://vault/${file.path}`,
+      },
+      metadataCache: {
+        getFileCache: (file: { path: string }) =>
+          resources.find(({ path }) => path === file.path),
+        getFirstLinkpathDest: (link: string, source: string) =>
+          link === "../Images/dune.png" && source === "Books/Dune.md"
+            ? { path: "Images/dune.png" }
+            : null,
+      },
+    } as unknown as App;
+  }
+  const definition = {
+    ...readDefinition,
+    attributes: {
+      ...readDefinition.attributes!,
+      start: [
+        {
+          key: "book",
+          label: "Book",
+          type: "text" as const,
+          resourceTag: "book",
+        },
+      ],
+    },
+  };
+
+  it("merges resource aliases, preserves historical and in-progress entries, covers, progress and overlapping totals", () => {
+    const activities = [
+      {
+        activity: "read",
+        read: { book: "Dune", "start-page": 1, "end-page": 50 },
+        notes: "first",
+        log: [{ start: "2026-08-25T09:00:00Z", end: "2026-08-25T11:00:00Z" }],
+      },
+      {
+        activity: "read",
+        read: { book: "Dune alias", "start-page": 51, "end-page": 100 },
+        notes: "second",
+        log: [{ start: "2026-08-25T10:00:00Z", end: "2026-08-25T12:00:00Z" }],
+      },
+      {
+        activity: "deep work",
+        log: [{ start: "2026-08-25T10:30:00Z", end: "2026-08-25T11:30:00Z" }],
+      },
+      {
+        activity: "read",
+        read: { book: "No page" },
+        log: [{ start: "2026-08-26T09:00:00Z", end: "2026-08-26T09:30:00Z" }],
+      },
+      {
+        activity: "read",
+        log: [{ start: "2026-08-24T09:00:00Z", end: "2026-08-24T09:30:00Z" }],
+      },
+    ] as Activity[];
+    const dashboard = buildActivityDashboard(activities, definition, 2026);
+    const entries = getActivityDashboardEntries(
+      resourceApp(),
+      activities,
+      definition,
+      dashboard.groups,
+    );
+    expect(entries.map(({ value }) => value)).toEqual([
+      "No page",
+      "Dune",
+      "(empty)",
+      "New",
+    ]);
+    expect(entries[1]).toMatchObject({
+      value: "Dune",
+      minutes: 180,
+      countedMinutes: 120,
+      percent: 25,
+      current: 100,
+      maximum: 400,
+      earliest: "2026-08-25",
+      latest: "2026-08-25",
+      inProgress: false,
+      filePath: "Books/Dune.md",
+      cover: "app://vault/Images/dune.png",
+    });
+    expect(entries[1].rows.map(({ notes }) => notes)).toEqual([
+      "second",
+      "first",
+    ]);
+    expect(entries[3]).toMatchObject({
+      value: "New",
+      inProgress: true,
+      minutes: 0,
+      percent: 0,
+      rows: [],
+    });
+    expect(entries[0].cover).toBeUndefined();
+  });
+
+  it("keeps an unlinked main key with only an open clock visible", () => {
+    const activities = [
+      {
+        activity: "read",
+        read: { book: "Unlinked" },
+        log: [{ start: "2026-08-25T09:00:00Z" }],
+      },
+    ] as Activity[];
+    const now = window.moment("2026-08-25T10:00:00Z");
+    const entries = getActivityDashboardEntries(
+      resourceApp(),
+      activities,
+      definition,
+      [],
+      now,
+    );
+    expect(entries.find(({ value }) => value === "Unlinked")).toMatchObject({
+      minutes: 60,
+      rows: [],
+    });
+    expect(
+      getActivityDashboardEntries(
+        resourceApp(),
+        activities,
+        { ...definition, attributes: undefined },
+        [],
+        now,
+      ),
+    ).toEqual([]);
   });
 });

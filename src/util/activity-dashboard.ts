@@ -9,6 +9,8 @@ import {
 import type { Activity } from "./props";
 
 export type ActivityDashboardRow = {
+  start: number;
+  end: number;
   day: string;
   minutes: number;
   totalMinutes?: number;
@@ -26,6 +28,7 @@ export type ActivityDashboardGroup = {
   totalMinutes?: number;
   earliest: string;
   latest: string;
+  rows: ActivityDashboardRow[];
 };
 
 type TimeTotal = { minutes: number; totalMinutes: number };
@@ -325,7 +328,9 @@ export function buildActivityDashboards(
               : "";
           },
         );
-        accumulator.rows.push({
+        const row: ActivityDashboardRow = {
+          start,
+          end: Math.min(end, now.valueOf()),
           day,
           minutes,
           ...(totalMinutes > minutes ? { totalMinutes } : {}),
@@ -341,13 +346,15 @@ export function buildActivityDashboards(
           rangeValuesPerHour: rangeValues.map((value) =>
             typeof value === "number" ? value / (totalMinutes / 60) : "-",
           ),
-        });
+        };
+        accumulator.rows.push(row);
         if (attributes?.mainKey) {
           const group = accumulator.groups.get(mainValue) ?? {
             value: mainValue,
             minutes: 0,
             earliest: day,
             latest: day,
+            rows: [],
           };
           const time = accumulator.groupTimes.get(mainValue)!;
           group.minutes = time.minutes;
@@ -355,6 +362,7 @@ export function buildActivityDashboards(
             group.totalMinutes = time.totalMinutes;
           if (day < group.earliest) group.earliest = day;
           if (day > group.latest) group.latest = day;
+          group.rows.push(row);
           accumulator.groups.set(mainValue, group);
         }
       }
@@ -368,10 +376,13 @@ export function buildActivityDashboards(
           accumulator.itemsByDay,
           calendar,
         ),
-        rows: accumulator.rows.sort((a, b) => b.day.localeCompare(a.day)),
-        groups: [...accumulator.groups.values()].sort(
-          (a, b) => b.minutes - a.minutes,
-        ),
+        rows: accumulator.rows.sort((a, b) => b.start - a.start),
+        groups: [...accumulator.groups.values()]
+          .map((group) => ({
+            ...group,
+            rows: group.rows.sort((a, b) => b.start - a.start),
+          }))
+          .sort((a, b) => b.rows[0].start - a.rows[0].start),
       },
     ]),
   );
