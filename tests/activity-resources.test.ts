@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import type { ActivityAttributeField } from "../src/util/activity-definitions";
 import {
   getActivityFieldOptions,
+  getActivityStartSuggestions,
   getActivityResourcePath,
   getAvailableResourceNamesForField,
   getResourceFilesForField,
 } from "../src/util/activity-resources";
+import type { Activity } from "../src/util/props";
 
 function getFileName(path: string) {
   return path.split("/").at(-1);
@@ -44,6 +46,144 @@ const bookField: ActivityAttributeField = {
   type: "text",
   resourceTag: "book",
 };
+
+describe("getActivityStartSuggestions", () => {
+  function history(activity: string, values: Record<string, string>): Activity {
+    return { activity, taskIds: [], log: [], [activity]: values };
+  }
+
+  it("hides completed files and aliases only in the main picker, keeping activity types and field history", () => {
+    const app = createApp([
+      {
+        path: "Books/Finished Book.md",
+        metadata: {
+          frontmatter: {
+            tags: ["book"],
+            aliases: ["Finished Alias"],
+            status: " Complete ",
+          },
+        },
+      },
+      {
+        path: "Games/Finished Game.md",
+        metadata: {
+          frontmatter: {
+            tag: "#game",
+            alias: "Done Game Alias",
+            status: "COMPLETED",
+          },
+        },
+      },
+      {
+        path: "Books/Current Book.md",
+        metadata: { frontmatter: { tags: ["book"], status: "In Progress" } },
+      },
+    ]);
+    const activities = [
+      history("read", { book: "Finished Book" }),
+      history("read", { book: " finished ALIAS " }),
+      history("read", { book: "Current Book" }),
+      history("game", { name: "Done Game Alias" }),
+    ];
+    const suggestions = getActivityStartSuggestions(app as never, activities);
+    expect(
+      suggestions
+        .filter(({ activityName }) => activityName === "read")
+        .map(({ text }) => text),
+    ).toEqual(["read", "read - Current Book"]);
+    expect(
+      suggestions
+        .filter(({ activityName }) => activityName === "game")
+        .map(({ text }) => text),
+    ).toEqual(["game"]);
+    expect(
+      getActivityFieldOptions(app as never, "read", [bookField], activities)
+        .book,
+    ).toEqual(
+      expect.arrayContaining([
+        "Finished Book",
+        "finished ALIAS",
+        "Current Book",
+      ]),
+    );
+  });
+
+  it("preserves unlinked history, unfinished resources, and values associated with a different file type", () => {
+    const app = createApp([
+      {
+        path: "Books/Dune.md",
+        metadata: { frontmatter: { tags: ["book"], status: "Complete" } },
+      },
+      {
+        path: "Games/Portal.md",
+        metadata: { frontmatter: { tags: ["game"], status: "Backlog" } },
+      },
+      {
+        path: "Books/Unknown Status.md",
+        metadata: { tags: [{ tag: "#book" }] },
+      },
+    ]);
+    const suggestions = getActivityStartSuggestions(app as never, [
+      history("read", { book: "Unknown Status" }),
+      history("read", { book: "Unlinked Book" }),
+      history("game", { name: "Dune" }),
+      history("game", { name: "Portal" }),
+      history("tv", { name: "Dune" }),
+    ]);
+    expect(suggestions.map(({ text }) => text)).toEqual(
+      expect.arrayContaining([
+        "read - Unknown Status",
+        "read - Unlinked Book",
+        "game - Dune",
+        "game - Portal",
+        "tv - Dune",
+      ]),
+    );
+  });
+
+  it("fills the suggestion limit from unfinished history after excluding completed files", () => {
+    const app = createApp([
+      {
+        path: "Books/Finished Book.md",
+        metadata: { frontmatter: { tags: ["book"], status: "Complete" } },
+      },
+    ]);
+    const activities = [
+      ...Array.from({ length: 6 }, (_, index) =>
+        history("read", { book: `Book ${index}` }),
+      ),
+      history("read", { book: "Finished Book" }),
+    ];
+    const suggestions = getActivityStartSuggestions(app as never, activities);
+    expect(
+      suggestions
+        .filter(
+          ({ activityName, initialValues }) =>
+            activityName === "read" && initialValues,
+        )
+        .map(({ initialValues }) => initialValues?.book),
+    ).toEqual(["Book 5", "Book 4", "Book 3", "Book 2", "Book 1"]);
+  });
+
+  it("uses current file status each time the picker opens", () => {
+    const frontmatter = { tags: ["book"], status: "Complete" };
+    const app = createApp([
+      { path: "Books/Dune.md", metadata: { frontmatter } },
+    ]);
+    const activities = [history("read", { book: "Dune" })];
+    expect(
+      getActivityStartSuggestions(app as never, activities).some(
+        ({ text }) => text === "read - Dune",
+      ),
+    ).toBe(false);
+    frontmatter.status = "In Progress";
+    expect(
+      getActivityStartSuggestions(app as never, activities).some(
+        ({ text }) => text === "read - Dune",
+      ),
+    ).toBe(true);
+  });
+});
 
 describe("getAvailableResourceNamesForField", () => {
   it("includes resource file aliases from frontmatter", () => {

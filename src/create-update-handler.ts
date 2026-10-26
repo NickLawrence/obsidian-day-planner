@@ -15,8 +15,8 @@ import type { OnUpdateFn } from "./types";
 import { type ConfirmationModalProps } from "./ui/confirmation-modal";
 import { EditMode } from "./ui/hooks/use-edit/types";
 import { SingleSuggestModal } from "./ui/SingleSuggestModal";
+import { getActivityStartSuggestions } from "./util/activity-resources";
 import {
-  getActivitySuggestionsWithHistory,
   filterActivitySuggestions,
   type ActivityNameSuggestion,
   type ActivitySelection,
@@ -49,7 +49,7 @@ export async function getActivityNameFromUser(
   activities: Activity[],
 ): Promise<ActivitySelection | undefined> {
   return new Promise((resolve) => {
-    const suggestions = getActivitySuggestionsWithHistory(activities);
+    const suggestions = getActivityStartSuggestions(app, activities);
 
     new SingleSuggestModal<ActivityNameSuggestion>({
       app,

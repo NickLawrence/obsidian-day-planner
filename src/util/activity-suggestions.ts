@@ -5,6 +5,12 @@ import {
   getActivitySuggestions,
   normalizeActivityName,
 } from "./activity-definitions";
+import {
+  getResourceAliases,
+  normalizeResourceStatus,
+  resourceHasTag,
+  type ActivityResourceMetadata,
+} from "./activity-field-options";
 import type { Activity } from "./activity-schema";
 
 export type ActivityNameSuggestion = {
@@ -62,7 +68,11 @@ function getActivitiesByRecency(activities: Activity[]) {
     .map(({ activity }) => activity);
 }
 
-function getRecentMainKeyValues(activityName: string, activities: Activity[]) {
+function getRecentMainKeyValues(
+  activityName: string,
+  activities: Activity[],
+  completedResources: ActivityResourceMetadata[],
+) {
   const definition = getActivityDefinition(activityName);
   const mainKey = definition?.attributes?.mainKey;
 
@@ -78,6 +88,24 @@ function getRecentMainKeyValues(activityName: string, activities: Activity[]) {
     return [];
   }
 
+  const resourceTag = mainKeyField?.resourceTag;
+  const completedNames = new Set(
+    resourceTag
+      ? completedResources
+          .filter((resource) =>
+            resourceHasTag(
+              resource.frontmatter,
+              resource.tags ?? [],
+              resourceTag,
+            ),
+          )
+          .flatMap((resource) => [
+            resource.name,
+            ...getResourceAliases(resource.frontmatter),
+          ])
+          .map(normalizeActivityName)
+      : [],
+  );
   const normalizedActivityName = normalizeActivityName(activityName);
   const uniqueValues = new Set<string | number>();
   const values: Array<string | number> = [];
@@ -94,6 +122,7 @@ function getRecentMainKeyValues(activityName: string, activities: Activity[]) {
 
     if (
       (typeof value !== "string" && typeof value !== "number") ||
+      completedNames.has(normalizeActivityName(String(value))) ||
       uniqueValues.has(value)
     ) {
       continue;
@@ -163,7 +192,14 @@ function getSuggestedRangeStartValues(
   return updates;
 }
 
-export function getActivitySuggestionsWithHistory(activities: Activity[]) {
+export function getActivitySuggestionsWithHistory(
+  activities: Activity[],
+  resources: ActivityResourceMetadata[] = [],
+) {
+  const completedResources = resources.filter(({ frontmatter }) => {
+    const status = normalizeResourceStatus(frontmatter?.status);
+    return status === "complete" || status === "completed";
+  });
   return getActivitySuggestions().flatMap((definition) => {
     const baseLabel = definition.emoji
       ? `${definition.emoji} ${definition.label}`
@@ -174,7 +210,11 @@ export function getActivitySuggestionsWithHistory(activities: Activity[]) {
       activityName: definition.name,
     };
 
-    const recentValues = getRecentMainKeyValues(definition.name, activities);
+    const recentValues = getRecentMainKeyValues(
+      definition.name,
+      activities,
+      completedResources,
+    );
     const mainKey = getActivityDefinition(definition.name)?.attributes?.mainKey;
 
     if (recentValues.length === 0 || !mainKey) {

@@ -14,6 +14,7 @@ import {
   getResourceNamesByFieldKey,
 } from "./activity-field-options";
 import type { Activity } from "./activity-schema";
+import { getActivitySuggestionsWithHistory } from "./activity-suggestions";
 export {
   getAvailableResourceNames,
   mergeActivityFieldOptions,
@@ -47,6 +48,14 @@ function getResourceMetadata(app: App) {
 
 function getFileDisplayName(file: TFile) {
   return file.basename ?? file.name?.replace(/\.md$/i, "") ?? file.path;
+}
+
+/** Only the initial activity picker hides completed resources; field history stays intact. */
+export function getActivityStartSuggestions(app: App, activities: Activity[]) {
+  return getActivitySuggestionsWithHistory(
+    activities,
+    getResourceMetadata(app),
+  );
 }
 
 export function getResourceFilesForField(

@@ -173,6 +173,13 @@ tab with weekly goal progress above the editable activity plan, and an Activity
 Dashboard tab for individual activity history and progress. The `activitygoals`,
 `activityplan`, and `activitydashboard` code blocks remain available in notes.
 
+## Activity suggestions
+
+The Start Activity picker excludes recent items linked to files with a `Complete`
+or `Completed` status, including their aliases. The activity type remains available,
+and previously used values still appear in the field suggestions after selecting
+the activity type.
+
 ## Activity priorities
 
 Activities define a numeric `priority` in `src/util/activity-definitions.ts`.
