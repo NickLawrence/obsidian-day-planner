@@ -10,7 +10,10 @@
   import type { Moment } from "moment";
   import { Pie } from "svelte-chartjs";
 
-  import { calculateActivityPieForRange } from "../../util/activity-pie";
+  import {
+    calculateActivityPieForRange,
+    groupActivityPieSlices,
+  } from "../../util/activity-pie";
   import { formatDuration } from "../../util/duration";
   import type { Activity } from "../../util/props";
 
@@ -34,6 +37,7 @@
     calculateActivityPieForRange(activities, rangeStart, rangeEnd),
   );
   const total = $derived(slices.reduce((sum, slice) => sum + slice.value, 0));
+  const groups = $derived(groupActivityPieSlices(slices));
   const data: ChartData<"pie", number[], string> = $derived({
     labels: slices.map((slice) => `${slice.emoji} ${slice.label}`),
     datasets: [
@@ -125,18 +129,43 @@
         />
       </div>
       <ul class="chart-legend" aria-label={`${title} breakdown`}>
-        {#each slices as slice (slice.key)}
-          <li title={`${slice.label}: ${slice.durationLabel}`}>
-            <span
-              style:background-color={slice.color}
-              class="color-swatch"
-              aria-hidden="true"
-            ></span>
-            <span class="slice-name">{slice.emoji} {slice.label}</span>
-            <span class="slice-value">
-              {displayTime(slice.value)}
-              <span class="slice-percentage">{percentage(slice.value)}</span>
-            </span>
+        {#each groups as group (group.key)}
+          <li class="legend-group">
+            <div class="group-heading">
+              <span
+                style:background-color={group.color}
+                class="color-swatch"
+                aria-hidden="true"
+              ></span>
+              <h4 class="slice-name">{group.label}</h4>
+              <span class="slice-value">
+                {displayTime(group.value)}
+                <span class="slice-percentage">{percentage(group.value)}</span>
+              </span>
+            </div>
+            {#if group.key !== "__unrecorded__"}
+              <ul class="group-activities" aria-label={group.label}>
+                {#each group.slices as slice (slice.key)}
+                  <li
+                    class="legend-activity"
+                    title={`${slice.label}: ${slice.durationLabel}`}
+                  >
+                    <span
+                      style:background-color={slice.color}
+                      class="color-swatch"
+                      aria-hidden="true"
+                    ></span>
+                    <span class="slice-name">{slice.emoji} {slice.label}</span>
+                    <span class="slice-value">
+                      {slice.durationLabel}
+                      <span class="slice-percentage">
+                        {percentage(slice.value)}
+                      </span>
+                    </span>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
           </li>
         {/each}
       </ul>
@@ -192,7 +221,7 @@
   .chart-legend {
     display: grid;
     flex: 0 1 auto;
-    gap: var(--size-2-3);
+    gap: var(--size-4-3);
 
     width: max-content;
     min-width: 0;
@@ -203,13 +232,38 @@
     list-style: none;
   }
 
-  .chart-legend li {
+  .legend-group {
+    padding-bottom: var(--size-2-3);
+    font-size: var(--font-ui-small);
+    border-bottom: 1px solid var(--background-modifier-border);
+  }
+
+  .legend-group:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
+  .group-heading,
+  .legend-activity {
     display: grid;
     grid-template-columns: 0.65rem minmax(0, 1fr) auto;
     gap: var(--size-2-3);
     align-items: center;
+  }
 
-    font-size: var(--font-ui-small);
+  .group-heading h4 {
+    margin: 0;
+    font-size: inherit;
+  }
+
+  .group-activities {
+    display: grid;
+    gap: var(--size-2-3);
+
+    margin: var(--size-2-3) 0 0;
+    padding: 0 0 0 var(--size-4-3);
+
+    list-style: none;
   }
 
   .color-swatch {

@@ -3,6 +3,7 @@ import type { Duration, Moment } from "moment";
 import {
   getActivityDefinition,
   getActivityGroup,
+  type ActivityGroupDefinition,
 } from "./activity-definitions";
 import {
   calculateActivitySummaryForRange,
@@ -19,9 +20,45 @@ export type ActivityPieSlice = {
   color: string;
   value: number;
   durationLabel: string;
+  group: ActivityGroupDefinition;
 };
 
-/** Chart values use credited time only; full logged time is tooltip context. */
+export type ActivityPieGroup = {
+  key: string;
+  label: string;
+  color: string;
+  value: number;
+  slices: ActivityPieSlice[];
+};
+
+/** Keep group wedges adjacent and use the same order for the legend. */
+export function groupActivityPieSlices(
+  slices: ActivityPieSlice[],
+): ActivityPieGroup[] {
+  const groups = new Map<string, ActivityPieGroup>();
+  for (const slice of slices) {
+    const { name: key, label, color } = slice.group;
+    let group = groups.get(key);
+    if (!group) {
+      group = { key, label, color, value: 0, slices: [] };
+      groups.set(key, group);
+    }
+    group.value += slice.value;
+    group.slices.push(slice);
+  }
+  for (const group of groups.values()) {
+    group.slices.sort(
+      (a, b) => b.value - a.value || a.label.localeCompare(b.label),
+    );
+  }
+  return [...groups.values()].sort((a, b) => {
+    if (a.key === "__unrecorded__") return 1;
+    if (b.key === "__unrecorded__") return -1;
+    return b.value - a.value || a.label.localeCompare(b.label);
+  });
+}
+
+/** Chart values use credited time; full logged time stays in labels and tooltips. */
 export function buildActivityPieSlices(
   totals: ActivityDuration[],
   unrecordedTime: Duration,
@@ -34,19 +71,21 @@ export function buildActivityPieSlices(
     )
     .map((total) => {
       const definition = getActivityDefinition(total.activityKey);
+      const group = getActivityGroup(total.activityKey) ?? {
+        name: "__other__",
+        label: "Other activities",
+        color: "#808080",
+      };
       return {
         key: total.activityKey,
         label: definition?.label ?? total.activity,
         emoji: definition?.emoji ?? "•",
-        color: applyActivityColorVariant(
-          getActivityGroup(total.activityKey)?.color ?? "#808080",
-          definition?.color,
-        ),
+        color: applyActivityColorVariant(group.color, definition?.color),
         value: total.duration.asMilliseconds(),
         durationLabel: formatActivityDuration(total),
+        group,
       };
-    })
-    .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+    });
 
   const unrecorded = unrecordedTime.asMilliseconds();
   if (Number.isFinite(unrecorded) && unrecorded > 0) {
@@ -57,9 +96,14 @@ export function buildActivityPieSlices(
       color: "#9ca3af",
       value: unrecorded,
       durationLabel: formatDuration(unrecordedTime),
+      group: {
+        name: "__unrecorded__",
+        label: "Unrecorded time",
+        color: "#9ca3af",
+      },
     });
   }
-  return slices;
+  return groupActivityPieSlices(slices).flatMap((group) => group.slices);
 }
 
 /** Build a priority-adjusted chart for any half-open range, through now at most. */

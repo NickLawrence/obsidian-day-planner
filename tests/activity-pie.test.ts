@@ -7,12 +7,113 @@ import {
 import {
   buildActivityPieSlices,
   calculateActivityPieForRange,
+  groupActivityPieSlices,
 } from "../src/util/activity-pie";
 import type { Activity } from "../src/util/props";
 
 afterEach(() => vi.useRealTimers());
 
 describe("activity pie", () => {
+  test("keeps group slices adjacent and orders sections by credited group time", () => {
+    const totals = [
+      ["tv", 1],
+      ["light work", 3],
+      ["game", 2],
+      ["exercise", 4],
+      ["deep work", 3],
+      ["read", 4],
+    ].map(([activity, hours]) => ({
+      activity: String(activity),
+      activityKey: String(activity),
+      duration: window.moment.duration(Number(hours), "hours"),
+    }));
+    const slices = buildActivityPieSlices(
+      totals,
+      window.moment.duration(100, "hours"),
+    );
+    expect(slices.map(({ key }) => key)).toEqual([
+      "read",
+      "game",
+      "tv",
+      "deep work",
+      "light work",
+      "exercise",
+      "__unrecorded__",
+    ]);
+    const groups = groupActivityPieSlices(slices);
+    expect(
+      groups.map(({ key, label, value }) => ({
+        key,
+        label,
+        hours: value / 3_600_000,
+      })),
+    ).toEqual([
+      { key: "media", label: "Media", hours: 7 },
+      { key: "work", label: "Work", hours: 6 },
+      { key: "exercise", label: "Exercise", hours: 4 },
+      { key: "__unrecorded__", label: "Unrecorded time", hours: 100 },
+    ]);
+    expect(groups.flatMap(({ slices }) => slices)).toEqual(slices);
+    expect(
+      buildActivityPieSlices(
+        [...totals].reverse(),
+        window.moment.duration(100, "hours"),
+      ),
+    ).toEqual(slices);
+  });
+
+  test("group totals use credited time and keep custom activities separate from unrecorded time", () => {
+    const slices = buildActivityPieSlices(
+      [
+        {
+          activity: "tv",
+          activityKey: "tv",
+          duration: window.moment.duration(1, "hour"),
+          totalDuration: window.moment.duration(3, "hours"),
+        },
+        {
+          activity: "read",
+          activityKey: "read",
+          duration: window.moment.duration(2, "hours"),
+        },
+        {
+          activity: "Custom activity",
+          activityKey: "custom activity",
+          duration: window.moment.duration(1, "hour"),
+        },
+        {
+          activity: "Another activity",
+          activityKey: "another activity",
+          duration: window.moment.duration(1, "hour"),
+        },
+        {
+          activity: "game",
+          activityKey: "game",
+          duration: window.moment.duration(0),
+        },
+      ],
+      window.moment.duration(1, "hour"),
+    );
+    const groups = groupActivityPieSlices(slices);
+    expect(groups.map(({ key, value }) => [key, value / 3_600_000])).toEqual([
+      ["media", 3],
+      ["__other__", 2],
+      ["__unrecorded__", 1],
+    ]);
+    expect(
+      groups[0].slices.find(({ key }) => key === "tv")?.durationLabel,
+    ).toBe("1h (3h)");
+    expect(groups[1]).toMatchObject({
+      label: "Other activities",
+      color: "#808080",
+    });
+    expect(groups[1].slices).toHaveLength(2);
+    expect(groups.reduce((sum, { value }) => sum + value, 0)).toBe(
+      6 * 3_600_000,
+    );
+    expect(groupActivityPieSlices([])).toEqual([]);
+  });
+
   test("clips overlapping logs to an arbitrary range with partial hours", () => {
     const activities: Activity[] = [
       {
