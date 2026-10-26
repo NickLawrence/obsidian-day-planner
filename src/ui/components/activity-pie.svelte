@@ -54,7 +54,7 @@
           isGoal(slices[dataIndex]?.key)
             ? themeColor("--interactive-accent", "#7856c8")
             : themeColor("--background-primary", "#ffffff"),
-        borderWidth: slices.map((slice) => (isGoal(slice.key) ? 4 : 2)),
+        borderWidth: slices.map((slice) => (isGoal(slice.key) ? 2 : 0.5)),
         borderAlign: "inner",
         hoverOffset: 6,
       },
