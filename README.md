@@ -166,6 +166,13 @@ A right click on an active clock will bring the control menu:
 
 - For now clock time blocks are read-only. This is going to be addressed in the future.
 
+## Planner dashboard
+
+The Planner Dashboard includes yearly and monthly views, a Weekly Goals & Plan
+tab with weekly goal progress above the editable activity plan, and an Activity
+Dashboard tab for individual activity history and progress. The `activitygoals`,
+`activityplan`, and `activitydashboard` code blocks remain available in notes.
+
 ## Activity priorities
 
 Activities define a numeric `priority` in `src/util/activity-definitions.ts`.
