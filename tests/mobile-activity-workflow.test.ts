@@ -105,6 +105,45 @@ describe("mobile activity compatibility", () => {
     });
   });
 
+  it.each([
+    { endPage: -3, nextPage: -2 },
+    { endPage: -1, nextPage: 0 },
+    { endPage: 0, nextPage: 1 },
+  ])(
+    "saves an intro session ending at $endPage and suggests $nextPage",
+    ({ endPage, nextPage }) => {
+      const start = createActivityRecord(
+        "read",
+        parseActivityValues(getActivityAttributeFields("read", "start"), {
+          book: "Book",
+          "start-page": "-6",
+        }),
+      );
+      vi.advanceTimersByTime(30 * 60_000);
+      const finish = finishActivityRecord(
+        start,
+        parseActivityValues(getActivityFinishFields("read"), {
+          "end-page": String(endPage),
+        }),
+      );
+      const [{ contents }] = serializeActivityWeeks([
+        { id: "read-intro", record: finish },
+      ]);
+      const records = parseActivityFile(contents);
+      expect(records[0].read).toEqual({
+        book: "Book",
+        "start-page": -6,
+        "end-page": endPage,
+      });
+      expect(getActivitySuggestionsWithHistory(records)).toContainEqual(
+        expect.objectContaining({
+          activityName: "read",
+          initialValues: { book: "Book", "start-page": nextPage },
+        }),
+      );
+    },
+  );
+
   it("honors TV's ten-item limit, other activities' five-item limit and movie history suppression", () => {
     const records = Array.from({ length: 12 }, (_, index) => [
       createActivityRecord("tv", { name: `Show ${index}`, episodes: "1" }),
@@ -132,6 +171,11 @@ describe("mobile activity compatibility", () => {
     expect(() =>
       parseActivityValues(getActivityFinishFields("read"), {}),
     ).toThrow("End page is required.");
+    expect(() =>
+      parseActivityValues(getActivityFinishFields("read"), {
+        "end-page": "-Infinity",
+      }),
+    ).toThrow("End page must be a number.");
     expect(() =>
       parseActivityValues(getActivityFinishFields("walk"), { quality: "11" }),
     ).toThrow("Quality (1-10) must be at most 10.");

@@ -346,6 +346,41 @@ describe("calculateActivityMainKeyProgress", () => {
     });
   });
 
+  it.each([
+    { startPage: -6, endPage: -2, percent: 0, remainingMinutes: 612 },
+    { startPage: -4, endPage: 0, percent: 0, remainingMinutes: 600 },
+    { startPage: -2, endPage: 2, percent: 2, remainingMinutes: 588 },
+  ])(
+    "calculates reading stats for pages $startPage through $endPage",
+    ({ startPage, endPage, percent, remainingMinutes }) => {
+      const activities: Activity[] = [
+        {
+          activity: "Read",
+          read: { book: "Dune", "start-page": startPage, "end-page": endPage },
+          log: [{ start: "2026-08-25 10:00:00", end: "2026-08-25 10:30:00" }],
+        },
+      ];
+
+      expect(
+        buildActivityDashboard(activities, readDefinition, 2026).rows[0],
+      ).toMatchObject({ rangeValues: [5], rangeValuesPerHour: [10] });
+      expect(
+        calculateActivityMainKeyProgress({
+          activities,
+          definition: readDefinition,
+          value: "Dune",
+          rangeMaximums: { pages: 100 },
+        }),
+      ).toMatchObject({
+        current: endPage,
+        maximum: 100,
+        percent,
+        minutesPerUnit: 6,
+        estimatedMinutesRemaining: remainingMinutes,
+      });
+    },
+  );
+
   it("returns time spent when no range maximum is available", () => {
     expect(
       calculateActivityMainKeyProgress({

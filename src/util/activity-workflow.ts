@@ -42,7 +42,7 @@ export function parseActivityValues(
       continue;
     }
     const value = Number(rawValue);
-    if (Number.isNaN(value))
+    if (!Number.isFinite(value))
       throw new Error(`${field.label} must be a number.`);
     if (typeof field.min === "number" && value < field.min)
       throw new Error(`${field.label} must be at least ${field.min}.`);

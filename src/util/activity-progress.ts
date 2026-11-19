@@ -135,7 +135,7 @@ export function calculateActivityMainKeyProgress(
   if (!range) return { value, ...time };
 
   const maximum = Number(rangeMaximums[range.key]);
-  let current = 0;
+  let furthestEnd: number | undefined;
   let units = 0;
 
   for (const activity of matching) {
@@ -143,12 +143,13 @@ export function calculateActivityMainKeyProgress(
     const start = Number(values[range.start]);
     const end = Number(values[range.end]);
 
-    if (Number.isFinite(end)) current = Math.max(current, end);
+    if (Number.isFinite(end)) furthestEnd = Math.max(furthestEnd ?? end, end);
     if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
       units += end - start + 1;
     }
   }
 
+  const current = furthestEnd ?? 0;
   const minutesPerUnit = units > 0 ? minutes / units : undefined;
   const estimatedMinutesRemaining =
     minutesPerUnit === undefined
