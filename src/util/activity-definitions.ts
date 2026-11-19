@@ -89,7 +89,6 @@ const activityDefinitions: ActivityDefinition[] = [
           label: "Start page",
           type: "number",
           required: true,
-          min: 1,
         },
       ],
       end: [
@@ -456,6 +455,14 @@ const activityDefinitions: ActivityDefinition[] = [
     group: "bed",
     emoji: "🛏️",
     plan: { defaultHours: 56, maxHours: 70 },
+  },
+  {
+    name: "relax",
+    priority: -10,
+    label: "Relax",
+    group: "bed",
+    emoji: "🛋️",
+    plan: { defaultHours: 4, maxHours: 20 },
   },
   {
     name: "ride",
