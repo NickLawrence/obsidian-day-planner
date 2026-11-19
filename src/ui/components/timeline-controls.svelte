@@ -24,7 +24,7 @@
     initWeeklyView,
     dataviewLoaded,
     reSync,
-    reSyncFitbit,
+    reSyncGoogleHealth,
     periodicNotes,
   } = getObsidianContext();
   const dateRange = getDateRangeContext();
@@ -69,12 +69,14 @@
         .onClick(reSync),
     );
 
-    menu.addItem((item) =>
-      item
-        .setTitle("Re-sync Fitbit")
-        .setIcon("heart-pulse")
-        .onClick(reSyncFitbit),
-    );
+    if (reSyncGoogleHealth) {
+      menu.addItem((item) =>
+        item
+          .setTitle("Re-sync Google Health")
+          .setIcon("heart-pulse")
+          .onClick(reSyncGoogleHealth),
+      );
+    }
 
     menu.addItem((item) =>
       item

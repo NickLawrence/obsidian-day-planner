@@ -67,15 +67,6 @@ export interface DayPlannerSettings {
   firstDayOfWeek: (typeof firstDaysOfWeek)[number];
   multiDayRange: "full-week" | "work-week" | "3-days";
   timelineColumns: TimelineColumns;
-  fitbitClientId: string;
-  fitbitClientSecret: string;
-  fitbitCodeVerifier: string;
-  fitbitAccessToken: string;
-  fitbitRefreshToken: string;
-  fitbitTokenExpiresAt: number;
-  fitbitUserId: string;
-  fitbitLastSyncAt: number;
-  fitbitLastDateSynced: string;
 }
 
 export interface Cache {
@@ -124,16 +115,31 @@ export const defaultSettings: DayPlannerSettings = {
   showActiveClocks: false,
   showTimelineInSidebar: true,
   timelineColumns: { planner: true, timeTracker: false, combined: false },
-  fitbitClientId: "",
-  fitbitClientSecret: "",
-  fitbitCodeVerifier: "",
-  fitbitAccessToken: "",
-  fitbitRefreshToken: "",
-  fitbitTokenExpiresAt: 0,
-  fitbitUserId: "",
-  fitbitLastSyncAt: 0,
-  fitbitLastDateSynced: "",
 };
+
+export function loadPluginData(
+  saved: (Partial<PluginData> & Record<string, unknown>) | null,
+) {
+  const data: PluginData & Record<string, unknown> = {
+    ...defaultSettings,
+    rawIcals: [],
+    ...saved,
+  };
+  for (const key of [
+    "fitbitClientId",
+    "fitbitClientSecret",
+    "fitbitCodeVerifier",
+    "fitbitAccessToken",
+    "fitbitRefreshToken",
+    "fitbitTokenExpiresAt",
+    "fitbitUserId",
+    "fitbitLastSyncAt",
+    "fitbitLastDateSynced",
+  ]) {
+    delete data[key];
+  }
+  return data;
+}
 
 export const defaultSettingsForTests = {
   ...defaultSettings,

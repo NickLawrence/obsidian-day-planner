@@ -6,6 +6,7 @@ import { isOneOf } from "typed-assert";
 
 import { icons } from "../constants";
 import type DayPlanner from "../main";
+import { GoogleHealthError } from "../service/google-health";
 import {
   type DayPlannerSettings,
   eventFormats,
@@ -13,7 +14,8 @@ import {
 } from "../settings";
 
 export class DayPlannerSettingsTab extends PluginSettingTab {
-  private fitbitAuthorizationCode = "";
+  private googleHealthClientId = "";
+  private googleHealthClientSecret = "";
 
   constructor(
     private readonly plugin: DayPlanner,
@@ -286,114 +288,7 @@ export class DayPlannerSettingsTab extends PluginSettingTab {
       }),
     );
 
-    containerEl.createEl("h2", { text: "Fitbit" });
-
-    new Setting(containerEl)
-      .setName("Fitbit client ID")
-      .setDesc(
-        "From your Fitbit app settings (OAuth 2.0 Application Type: Personal).",
-      )
-      .addText((el) =>
-        el
-          .setPlaceholder("Fitbit client ID")
-          .setValue(this.plugin.settings().fitbitClientId)
-          .onChange((value: string) => {
-            this.update({ fitbitClientId: value.trim() });
-          }),
-      );
-
-    new Setting(containerEl)
-      .setName("Fitbit client secret")
-      .setDesc("Required by Fitbit token exchange for many app configurations.")
-      .addText((el) =>
-        el
-          .setPlaceholder("Fitbit client secret")
-          .setValue(this.plugin.settings().fitbitClientSecret)
-          .onChange((value: string) => {
-            this.update({ fitbitClientSecret: value.trim() });
-          }),
-      );
-
-    new Setting(containerEl)
-      .setName("Link Fitbit account")
-      .setDesc(
-        "Click to authorize with Fitbit. After approving, copy the `code` from the redirect URL and paste it below.",
-      )
-      .addButton((button) =>
-        button.setButtonText("Start Fitbit authorization").onClick(async () => {
-          await this.plugin.beginFitbitLink();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName("Authorization code")
-      .setDesc(
-        "Paste the `code` query parameter value from Fitbit's redirect URL.",
-      )
-      .addText((text) =>
-        text
-          .setPlaceholder("Authorization code")
-          .setValue(this.fitbitAuthorizationCode)
-          .onChange((value) => {
-            this.fitbitAuthorizationCode = value.trim();
-          }),
-      )
-      .addButton((button) =>
-        button.setButtonText("Complete linking").onClick(async () => {
-          if (!this.fitbitAuthorizationCode) {
-            new Notice("Paste a Fitbit authorization code first.");
-
-            return;
-          }
-
-          try {
-            await this.plugin.completeFitbitLink(this.fitbitAuthorizationCode);
-            this.fitbitAuthorizationCode = "";
-            new Notice("Fitbit account linked.");
-            this.display();
-          } catch (error) {
-            console.error(error);
-            new Notice(
-              "Failed to link Fitbit account. Check client ID, client secret, and authorization code.",
-            );
-          }
-        }),
-      );
-
-    const isLinked = Boolean(this.plugin.settings().fitbitRefreshToken);
-
-    new Setting(containerEl)
-      .setName("Linked Fitbit account")
-      .setDesc(
-        isLinked
-          ? `Linked user: ${this.plugin.settings().fitbitUserId || "(unknown)"}`
-          : "No linked Fitbit account.",
-      )
-      .addButton((button) =>
-        button
-          .setButtonText("Re-sync Fitbit now")
-          .setDisabled(!isLinked)
-          .onClick(async () => {
-            try {
-              await this.plugin.reSyncFitbit();
-              new Notice("Fitbit data synced to _Data/Fitbit/.");
-            } catch (error) {
-              console.error(error);
-              new Notice("Fitbit sync failed.");
-            }
-          }),
-      )
-      .addButton((button) =>
-        button
-          .setWarning()
-          .setButtonText("Unlink Fitbit")
-          .setDisabled(!isLinked)
-          .onClick(() => {
-            this.plugin.unlinkFitbit();
-            new Notice("Fitbit account unlinked.");
-            this.display();
-          }),
-      );
+    this.displayGoogleHealth(containerEl);
 
     containerEl.createEl("h2", { text: "Date & Time Formats" });
 
@@ -749,6 +644,97 @@ export class DayPlannerSettingsTab extends PluginSettingTab {
             this.update({ timelineEndColor: value });
           });
       });
+  }
+
+  private displayGoogleHealth(containerEl: HTMLElement) {
+    containerEl.createEl("h2", { text: "Google Health" });
+    const integration = this.plugin.googleHealth;
+    if (!integration) {
+      containerEl.createEl("p", {
+        text: "Google Health sync requires Obsidian 1.11.5 or later on desktop.",
+      });
+      return;
+    }
+
+    new Setting(containerEl)
+      .setName("Google OAuth client ID")
+      .setDesc(
+        "Create a Desktop app OAuth client in a Google Cloud project with the Google Health API enabled.",
+      )
+      .addText((input) =>
+        input.setValue(this.googleHealthClientId).onChange((value) => {
+          this.googleHealthClientId = value.trim();
+        }),
+      );
+
+    new Setting(containerEl)
+      .setName("Google OAuth client secret")
+      .addText((input) => {
+        input.inputEl.type = "password";
+        input.setValue(this.googleHealthClientSecret).onChange((value) => {
+          this.googleHealthClientSecret = value.trim();
+        });
+      });
+
+    new Setting(containerEl)
+      .setName("Google Health account")
+      .setDesc(
+        integration.connected
+          ? "Connected on this device."
+          : "Connect Google Health to sync heart rate, steps, sleep, and profile data. Previously linked Fitbit accounts need to connect again.",
+      )
+      .addButton((button) =>
+        button
+          .setButtonText(integration.connected ? "Reconnect" : "Connect")
+          .onClick(async () => {
+            button.setDisabled(true);
+            try {
+              await integration.connect({
+                clientId: this.googleHealthClientId,
+                clientSecret: this.googleHealthClientSecret,
+              });
+              this.googleHealthClientId = "";
+              this.googleHealthClientSecret = "";
+              this.display();
+              await this.plugin.reSyncGoogleHealth();
+            } catch (error) {
+              new Notice(
+                error instanceof GoogleHealthError
+                  ? error.message
+                  : "Google Health sign-in failed.",
+              );
+            } finally {
+              button.setDisabled(false);
+            }
+          }),
+      )
+      .addButton((button) =>
+        button
+          .setButtonText("Sync now")
+          .setDisabled(!integration.connected)
+          .onClick(this.plugin.reSyncGoogleHealth),
+      )
+      .addButton((button) =>
+        button
+          .setWarning()
+          .setButtonText("Disconnect")
+          .setDisabled(!integration.connected)
+          .onClick(async () => {
+            button.setDisabled(true);
+            try {
+              await integration.disconnect();
+              new Notice("Google Health disconnected.");
+            } catch (error) {
+              new Notice(
+                error instanceof GoogleHealthError
+                  ? error.message
+                  : "Google Health disconnect failed.",
+              );
+            } finally {
+              this.display();
+            }
+          }),
+      );
   }
 
   private update(patch: Partial<DayPlannerSettings>) {

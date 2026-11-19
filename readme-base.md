@@ -20,6 +20,7 @@ Day Planner is a community plugin for [Obsidian](https://obsidian.md/). It adds 
     - [Clocks in timelines](#clocks-in-timelines)
     - [Active clocks](#active-clocks)
     - [Limitations](#limitations)
+  - [5. Google Health sync](#5-google-health-sync)
 - [Note on the old plugin version](#note-on-the-old-plugin-version)
 - [Acknowledgements](#acknowledgements)
 
@@ -157,6 +158,18 @@ A right click on an active clock will bring the control menu:
 #### Limitations
 
 - For now clock time blocks are read-only. This is going to be addressed in the future.
+
+### 5. Google Health sync
+
+Google Health sync brings data from your Fitbit or other Google Health sources into Day Planner. It requires Obsidian 1.11.5 or later on desktop, which stores OAuth credentials in Obsidian Secret Storage.
+
+1. Use the Google Health mobile app to link your Fitbit data to the Google Account you want to connect.
+2. Enable the Google Health API in a Google Cloud project. Create an OAuth client of type **Desktop app** and add your Google account as a test user if the OAuth app is in testing. Enable the read-only scopes for activity and fitness, health metrics and measurements, sleep, and profile. [Google Cloud setup](https://developers.google.com/health/setup)
+3. In **Day Planner settings → Google Health**, enter the OAuth client ID and secret. Click **Connect** and grant all four permissions in your browser.
+
+Sync writes to `_Data/GoogleHealth/<health-user-id>/` in the current vault. It exports the profile, sleep sessions ending today, and daily files containing one-minute step counts and average heart rates. Each daily file uses the computer's local timezone and carries the UTC timestamp of each minute. Sync refreshes today's file and backfills up to 30 older days each run.
+
+Former Fitbit Web API connections require a new Google sign-in. Earlier exports remain available in `_Data/Fitbit/`.
 
 ## Note on the old plugin version
 

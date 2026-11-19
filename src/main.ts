@@ -1,7 +1,9 @@
 import {
   MarkdownView,
   Notice,
+  Platform,
   Plugin,
+  requireApiVersion,
   TFile,
   WorkspaceLeaf,
   type MarkdownFileInfo,
@@ -63,23 +65,18 @@ import { createUseSelector } from "./redux/use-selector";
 import { ActivityEditor } from "./service/activity-editor";
 import { DataviewFacade } from "./service/dataview-facade";
 import { TransactionWriter } from "./service/diff-writer";
+import { GoogleHealthError } from "./service/google-health";
 import {
-  completeFitbitLinking,
-  shouldAutoSyncFitbit,
-  startFitbitAuthorization,
-  syncFitbitData,
-} from "./service/fitbit";
+  GoogleHealthIntegration,
+  type GoogleHealthSecretStorage,
+} from "./service/google-health-integration";
 import { ListPropsParser } from "./service/list-props-parser";
 import { PeriodicNotes } from "./service/periodic-notes";
 import { PlannerData } from "./service/planner-data";
 import { PlannerDataWatcher } from "./service/planner-data-watcher";
 import { VaultFacade } from "./service/vault-facade";
 import { WorkspaceFacade } from "./service/workspace-facade";
-import {
-  type DayPlannerSettings,
-  defaultSettings,
-  type PluginData,
-} from "./settings";
+import { type DayPlannerSettings, loadPluginData } from "./settings";
 import type { RemoteTask } from "./task-types";
 import { createGetTasksApi } from "./tasks-plugin";
 import type { ObsidianContext, OnUpdateFn, PointerDateTime } from "./types";
@@ -129,55 +126,38 @@ export default class DayPlanner extends Plugin {
   private plannerData!: PlannerData;
   public api!: DayPlannerActivityApi;
 
-  beginFitbitLink = async () => {
-    await startFitbitAuthorization({
-      settings: this.settings(),
-      onSettingsUpdate: (patch) =>
-        this.settingsStore.update((s) => ({ ...s, ...patch })),
-    });
-  };
+  googleHealth?: GoogleHealthIntegration;
 
-  completeFitbitLink = async (code: string) => {
-    const patch = await completeFitbitLinking({
-      settings: this.settings(),
-      code,
-    });
-
-    this.settingsStore.update((previous) => ({ ...previous, ...patch }));
-  };
-
-  unlinkFitbit = () => {
-    this.settingsStore.update((previous) => ({
-      ...previous,
-      fitbitCodeVerifier: "",
-      fitbitAccessToken: "",
-      fitbitRefreshToken: "",
-      fitbitTokenExpiresAt: 0,
-      fitbitUserId: "",
-      fitbitLastSyncAt: 0,
-      fitbitLastDateSynced: "",
-    }));
-  };
-
-  reSyncFitbit = async (force = true) => {
-    const patch = await syncFitbitData({
-      vault: this.app.vault,
-      settings: this.settings(),
-      force,
-    });
-
-    if (!patch) {
-      return;
+  reSyncGoogleHealth = async () => {
+    try {
+      const synced = await this.googleHealth?.sync(true);
+      new Notice(
+        synced
+          ? "Google Health data synced to _Data/GoogleHealth/."
+          : "Connect your Google Health account in Day Planner settings first.",
+      );
+    } catch (error) {
+      new Notice(
+        error instanceof GoogleHealthError
+          ? error.message
+          : "Google Health sync failed.",
+      );
     }
-
-    this.settingsStore.update((previous) => ({ ...previous, ...patch }));
   };
 
   async onload() {
-    const initialPluginData: PluginData = {
-      ...defaultSettings,
-      ...(await this.loadData()),
+    const initialPluginData = loadPluginData(await this.loadData());
+    const { secretStorage } = this.app as typeof this.app & {
+      secretStorage?: GoogleHealthSecretStorage;
     };
+    if (Platform.isDesktopApp && requireApiVersion("1.11.5") && secretStorage) {
+      this.googleHealth = new GoogleHealthIntegration(
+        this.app.vault,
+        secretStorage,
+        `${this.manifest.id}-google-health`,
+      );
+      this.register(() => this.googleHealth?.abort());
+    }
 
     const getTasksApi = createGetTasksApi(this.app);
     const listPropsParser = new ListPropsParser(
@@ -755,11 +735,12 @@ export default class DayPlanner extends Plugin {
       window.setInterval(() => {
         dispatch(icalRefreshRequested());
 
-        if (shouldAutoSyncFitbit(this.settings())) {
-          this.reSyncFitbit(false).catch((error: unknown) => {
-            console.error("Fitbit auto-sync failed", error);
-          });
-        }
+        void this.googleHealth?.sync(false).catch((error: unknown) => {
+          console.error(
+            "Google Health background sync failed",
+            error instanceof GoogleHealthError ? error.message : undefined,
+          );
+        });
       }, icalRefreshIntervalMillis),
     );
 
@@ -868,9 +849,9 @@ export default class DayPlanner extends Plugin {
       showPreview: createShowPreview(this.app),
       isModPressed,
       reSync: () => dispatch(icalRefreshRequested()),
-      reSyncFitbit: () => {
-        void this.reSyncFitbit();
-      },
+      reSyncGoogleHealth: this.googleHealth
+        ? this.reSyncGoogleHealth
+        : undefined,
       isOnline,
       isDarkMode,
       settings,
