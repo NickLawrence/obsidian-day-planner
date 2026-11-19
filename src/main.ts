@@ -65,6 +65,7 @@ import { DataviewFacade } from "./service/dataview-facade";
 import { TransactionWriter } from "./service/diff-writer";
 import {
   completeFitbitLinking,
+  FitbitError,
   shouldAutoSyncFitbit,
   startFitbitAuthorization,
   syncFitbitData,
@@ -127,6 +128,7 @@ export default class DayPlanner extends Plugin {
   private vaultFacade!: VaultFacade;
   private transactionWriter!: TransactionWriter;
   private plannerData!: PlannerData;
+  private fitbitSyncInProgress?: Promise<boolean>;
   public api!: DayPlannerActivityApi;
 
   beginFitbitLink = async () => {
@@ -159,18 +161,59 @@ export default class DayPlanner extends Plugin {
     }));
   };
 
-  reSyncFitbit = async (force = true) => {
+  private reSyncFitbit(force: boolean) {
+    this.fitbitSyncInProgress ??= this.syncFitbit(force).finally(() => {
+      this.fitbitSyncInProgress = undefined;
+    });
+    return this.fitbitSyncInProgress;
+  }
+
+  private async syncFitbit(force: boolean) {
+    const settings = this.settings();
+    let refreshToken = settings.fitbitRefreshToken;
     const patch = await syncFitbitData({
       vault: this.app.vault,
-      settings: this.settings(),
+      settings,
       force,
+      onTokenRefresh: (tokenPatch) => {
+        if (this.settings().fitbitRefreshToken !== refreshToken) {
+          throw new FitbitError(
+            "The linked Fitbit account changed during sync.",
+          );
+        }
+        this.settingsStore.update((previous) => ({
+          ...previous,
+          ...tokenPatch,
+        }));
+        refreshToken = tokenPatch.fitbitRefreshToken;
+      },
     });
 
     if (!patch) {
-      return;
+      return false;
+    }
+    if (this.settings().fitbitRefreshToken !== refreshToken) {
+      throw new FitbitError("The linked Fitbit account changed during sync.");
     }
 
     this.settingsStore.update((previous) => ({ ...previous, ...patch }));
+    return true;
+  }
+
+  reSyncFitbitWithNotice = async () => {
+    try {
+      const synced = await this.reSyncFitbit(true);
+      new Notice(
+        synced
+          ? "Fitbit data synced to _Data/Fitbit/."
+          : "Link a Fitbit account in Day Planner settings first.",
+      );
+    } catch (error) {
+      console.error(error);
+      new Notice(
+        error instanceof FitbitError ? error.message : "Fitbit sync failed.",
+      );
+    }
   };
 
   async onload() {
@@ -868,9 +911,7 @@ export default class DayPlanner extends Plugin {
       showPreview: createShowPreview(this.app),
       isModPressed,
       reSync: () => dispatch(icalRefreshRequested()),
-      reSyncFitbit: () => {
-        void this.reSyncFitbit();
-      },
+      reSyncFitbit: this.reSyncFitbitWithNotice,
       isOnline,
       isDarkMode,
       settings,

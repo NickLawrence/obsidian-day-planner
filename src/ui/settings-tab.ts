@@ -6,6 +6,7 @@ import { isOneOf } from "typed-assert";
 
 import { icons } from "../constants";
 import type DayPlanner from "../main";
+import { FitbitError } from "../service/fitbit";
 import {
   type DayPlannerSettings,
   eventFormats,
@@ -354,7 +355,9 @@ export class DayPlannerSettingsTab extends PluginSettingTab {
           } catch (error) {
             console.error(error);
             new Notice(
-              "Failed to link Fitbit account. Check client ID, client secret, and authorization code.",
+              error instanceof FitbitError
+                ? error.message
+                : "Failed to link Fitbit account. Check client ID, client secret, and authorization code.",
             );
           }
         }),
@@ -373,15 +376,7 @@ export class DayPlannerSettingsTab extends PluginSettingTab {
         button
           .setButtonText("Re-sync Fitbit now")
           .setDisabled(!isLinked)
-          .onClick(async () => {
-            try {
-              await this.plugin.reSyncFitbit();
-              new Notice("Fitbit data synced to _Data/Fitbit/.");
-            } catch (error) {
-              console.error(error);
-              new Notice("Fitbit sync failed.");
-            }
-          }),
+          .onClick(this.plugin.reSyncFitbitWithNotice),
       )
       .addButton((button) =>
         button

@@ -1,4 +1,5 @@
-import { Notice, requestUrl, type Vault } from "obsidian";
+import { Notice, requestUrl, type RequestUrlParam, type Vault } from "obsidian";
+import { z } from "zod";
 
 import type { DayPlannerSettings } from "../settings";
 
@@ -8,6 +9,7 @@ const fitbitApiBaseUrl = "https://api.fitbit.com";
 
 const fitbitScopes = ["activity", "heartrate", "sleep", "profile"];
 const fitbitDataDirectory = "_Data/Fitbit";
+const fitbitIntradayDirectory = `${fitbitDataDirectory}/intraday`;
 const fitbitSyncFrequencyMillis = 60 * 60 * 1000;
 const oauthRedirectUri = "https://localhost";
 
@@ -24,14 +26,36 @@ type FitbitProfileResponse = {
   };
 };
 
-type FitbitIntradayResponse = {
-  [key: string]: unknown;
-};
+const minuteDataset = z.object({
+  dataset: z.array(z.object({ time: z.string(), value: z.number() })),
+  datasetInterval: z.literal(1),
+  datasetType: z.literal("minute"),
+});
+
+const heartRateResponse = z.object({
+  "activities-heart-intraday": minuteDataset,
+});
+const stepsResponse = z.object({ "activities-steps-intraday": minuteDataset });
 
 type TokenRequestHeaders = {
   Accept: string;
   Authorization?: string;
 };
+
+export class FitbitError extends Error {}
+
+async function requestFitbit(options: RequestUrlParam): Promise<unknown> {
+  const response = await requestUrl({ ...options, throw: false });
+  if (response.status === 410) {
+    throw new FitbitError(
+      "Google retired the Fitbit Web API. Linking and sync require migration to the Google Health API.",
+    );
+  }
+  if (response.status >= 400) {
+    throw new FitbitError(`Fitbit request failed (HTTP ${response.status}).`);
+  }
+  return response.json;
+}
 
 export function createTokenHeaders(
   clientId: string,
@@ -167,16 +191,15 @@ async function exchangeCodeForTokens(props: {
     code_verifier: codeVerifier,
   });
 
-  const response = await requestUrl({
+  const response = await requestFitbit({
     url: fitbitTokenUrl,
     method: "POST",
-    throw: true,
     contentType: "application/x-www-form-urlencoded",
     body: body.toString(),
     headers: createTokenHeaders(clientId, clientSecret),
   });
 
-  return response.json as TokenResponse;
+  return response as TokenResponse;
 }
 
 async function refreshTokens(props: {
@@ -190,16 +213,24 @@ async function refreshTokens(props: {
     refresh_token: props.refreshToken,
   });
 
-  const response = await requestUrl({
+  const response = await requestFitbit({
     url: fitbitTokenUrl,
     method: "POST",
-    throw: true,
     contentType: "application/x-www-form-urlencoded",
     body: body.toString(),
     headers: createTokenHeaders(props.clientId, props.clientSecret),
   });
 
-  return response.json as TokenResponse;
+  return response as TokenResponse;
+}
+
+function tokenSettings(token: TokenResponse) {
+  return {
+    fitbitAccessToken: token.access_token,
+    fitbitRefreshToken: token.refresh_token,
+    fitbitTokenExpiresAt: Date.now() + token.expires_in * 1000,
+    fitbitUserId: token.user_id,
+  };
 }
 
 async function ensureDirectory(vault: Vault, path: string) {
@@ -217,22 +248,18 @@ async function ensureDirectory(vault: Vault, path: string) {
 }
 
 async function writeJson(vault: Vault, relativePath: string, data: unknown) {
-  await ensureDirectory(vault, fitbitDataDirectory);
   await vault.adapter.write(relativePath, JSON.stringify(data, null, 2));
 }
 
-async function fetchFitbitJson(accessToken: string, endpoint: string) {
-  const response = await requestUrl({
+function fetchFitbitJson(accessToken: string, endpoint: string) {
+  return requestFitbit({
     url: `${fitbitApiBaseUrl}${endpoint}`,
     method: "GET",
-    throw: true,
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: "application/json",
     },
   });
-
-  return response.json;
 }
 
 async function fetchIntradayForDate(props: {
@@ -252,12 +279,18 @@ async function fetchIntradayForDate(props: {
     ),
   ]);
 
-  return {
-    date,
-    timeStep: "1min",
-    heartRate: heartRate as FitbitIntradayResponse,
-    steps: steps as FitbitIntradayResponse,
-  };
+  if (!heartRateResponse.safeParse(heartRate).success) {
+    throw new FitbitError(
+      `Fitbit did not return one-minute heart rate data for ${date}.`,
+    );
+  }
+  if (!stepsResponse.safeParse(steps).success) {
+    throw new FitbitError(
+      `Fitbit did not return one-minute steps data for ${date}.`,
+    );
+  }
+
+  return { date, timeStep: "1min", heartRate, steps };
 }
 
 export function generateCodeVerifier() {
@@ -295,10 +328,7 @@ export async function completeFitbitLinking(props: {
   });
 
   return {
-    fitbitAccessToken: token.access_token,
-    fitbitRefreshToken: token.refresh_token,
-    fitbitTokenExpiresAt: Date.now() + token.expires_in * 1000,
-    fitbitUserId: token.user_id,
+    ...tokenSettings(token),
     fitbitCodeVerifier: "",
   };
 }
@@ -306,9 +336,10 @@ export async function completeFitbitLinking(props: {
 export async function syncFitbitData(props: {
   vault: Vault;
   settings: DayPlannerSettings;
+  onTokenRefresh: (patch: ReturnType<typeof tokenSettings>) => void;
   force?: boolean;
 }) {
-  const { vault, settings, force = false } = props;
+  const { vault, settings, onTokenRefresh, force = false } = props;
 
   if (!settings.fitbitClientId || !settings.fitbitRefreshToken) {
     return undefined;
@@ -321,24 +352,20 @@ export async function syncFitbitData(props: {
   const hasExpiredToken =
     !settings.fitbitAccessToken ||
     Date.now() >= settings.fitbitTokenExpiresAt - 30_000;
-  const token = hasExpiredToken
-    ? await refreshTokens({
-        clientId: settings.fitbitClientId,
-        clientSecret: settings.fitbitClientSecret,
-        refreshToken: settings.fitbitRefreshToken,
-      })
-    : {
-        access_token: settings.fitbitAccessToken,
-        refresh_token: settings.fitbitRefreshToken,
-        expires_in: Math.floor(
-          (settings.fitbitTokenExpiresAt - Date.now()) / 1000,
-        ),
-        user_id: settings.fitbitUserId,
-      };
+  let accessToken = settings.fitbitAccessToken;
+  if (hasExpiredToken) {
+    const token = await refreshTokens({
+      clientId: settings.fitbitClientId,
+      clientSecret: settings.fitbitClientSecret,
+      refreshToken: settings.fitbitRefreshToken,
+    });
+    onTokenRefresh(tokenSettings(token));
+    accessToken = token.access_token;
+  }
 
   const [profile, sleepToday] = await Promise.all([
-    fetchFitbitJson(token.access_token, "/1/user/-/profile.json"),
-    fetchFitbitJson(token.access_token, "/1.2/user/-/sleep/date/today.json"),
+    fetchFitbitJson(accessToken, "/1/user/-/profile.json"),
+    fetchFitbitJson(accessToken, "/1.2/user/-/sleep/date/today.json"),
   ]);
 
   const profileJson = profile as FitbitProfileResponse;
@@ -348,19 +375,13 @@ export async function syncFitbitData(props: {
     memberSince,
   });
 
+  await ensureDirectory(vault, fitbitIntradayDirectory);
   const syncedDates: string[] = [];
 
   for (const date of datesToSync) {
-    const intraday = await fetchIntradayForDate({
-      accessToken: token.access_token,
-      date,
-    });
+    const intraday = await fetchIntradayForDate({ accessToken, date });
 
-    await writeJson(
-      vault,
-      `${fitbitDataDirectory}/intraday/${date}.json`,
-      intraday,
-    );
+    await writeJson(vault, `${fitbitIntradayDirectory}/${date}.json`, intraday);
     syncedDates.push(date);
   }
 
@@ -380,10 +401,6 @@ export async function syncFitbitData(props: {
   ]);
 
   return {
-    fitbitAccessToken: token.access_token,
-    fitbitRefreshToken: token.refresh_token,
-    fitbitTokenExpiresAt: Date.now() + Math.max(token.expires_in, 60) * 1000,
-    fitbitUserId: token.user_id,
     fitbitLastSyncAt: Date.now(),
     fitbitLastDateSynced: latestSyncedDate,
   };
