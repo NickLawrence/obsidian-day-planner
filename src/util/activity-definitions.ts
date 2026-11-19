@@ -88,7 +88,7 @@ const activityDefinitions: ActivityDefinition[] = [
           key: "start-page",
           label: "Start page",
           type: "number",
-          required: true,
+          required: true
         },
       ],
       end: [
@@ -96,8 +96,7 @@ const activityDefinitions: ActivityDefinition[] = [
           key: "end-page",
           label: "End page",
           type: "number",
-          required: true,
-          min: 1,
+          required: true
         },
       ],
       ranges: [
