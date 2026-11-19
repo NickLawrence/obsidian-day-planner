@@ -41,7 +41,12 @@
       <MonthlyCalendar />
     {:else if activeTab === "weekly"}
       <div class="embedded-dashboard">
-        <ActivityGoals {activityApi} {app} {plannerData} />
+        <ActivityGoals
+          {activityApi}
+          {app}
+          {plannerData}
+          showOtherActivityList={false}
+        />
         <ActivityPlan {plannerData} />
       </div>
     {:else}

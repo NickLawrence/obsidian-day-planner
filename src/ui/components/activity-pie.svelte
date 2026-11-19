@@ -39,11 +39,12 @@
 
   let chart = $state.raw<ChartJS<"pie", unknown, unknown> | null>(null);
   const goalKeys = $derived(new Set(goalActivities.map(normalizeActivityName)));
-  const slices = $derived(
+  const legendSlices = $derived(
     calculateActivityPieForRange(activities, rangeStart, rangeEnd),
   );
+  const slices = $derived(legendSlices.filter(({ value }) => value > 0));
   const total = $derived(slices.reduce((sum, slice) => sum + slice.value, 0));
-  const groups = $derived(groupActivityPieSlices(slices));
+  const groups = $derived(groupActivityPieSlices(legendSlices));
   const data: ChartData<"pie", number[], string> = $derived({
     labels: slices.map((slice) => `${slice.emoji} ${slice.label}`),
     datasets: [

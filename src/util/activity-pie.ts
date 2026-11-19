@@ -64,11 +64,15 @@ export function buildActivityPieSlices(
   unrecordedTime: Duration,
 ): ActivityPieSlice[] {
   const slices = totals
-    .filter(
-      ({ duration }) =>
-        Number.isFinite(duration.asMilliseconds()) &&
-        duration.asMilliseconds() > 0,
-    )
+    .filter(({ duration, totalDuration }) => {
+      const credited = duration.asMilliseconds();
+      const logged = totalDuration?.asMilliseconds() ?? 0;
+      return (
+        Number.isFinite(credited) &&
+        (credited > 0 ||
+          (credited === 0 && Number.isFinite(logged) && logged > 0))
+      );
+    })
     .map((total) => {
       const definition = getActivityDefinition(total.activityKey);
       const group = getActivityGroup(total.activityKey) ?? {

@@ -41,10 +41,12 @@
     app,
     plannerData,
     activityApi,
+    showOtherActivityList = true,
   }: {
     app: App;
     plannerData: PlannerData;
     activityApi: DayPlannerActivityApi;
+    showOtherActivityList?: boolean;
   } = $props();
 
   let rows = $state<GoalProgressRow[]>([]);
@@ -434,30 +436,32 @@
       {/if}
     </div>
 
-    <div class="other-activities" aria-label="Other weekly activities">
-      {#each otherActivityRows as activity (activity.activityKey)}
-        {@const definition = getActivityDefinition(activity.activityKey)}
-        {@const emoji = definition?.emoji ?? "•"}
-        {@const label = definition?.label ?? sanitizeLabel(activity.activity)}
-        <div class="other-activity-card" title={label}>
-          <span class="other-activity-emoji" aria-hidden="true">{emoji}</span>
-          <span class="other-activity-label">{label}</span>
+    {#if showOtherActivityList}
+      <div class="other-activities" aria-label="Other weekly activities">
+        {#each otherActivityRows as activity (activity.activityKey)}
+          {@const definition = getActivityDefinition(activity.activityKey)}
+          {@const emoji = definition?.emoji ?? "•"}
+          {@const label = definition?.label ?? sanitizeLabel(activity.activity)}
+          <div class="other-activity-card" title={label}>
+            <span class="other-activity-emoji" aria-hidden="true">{emoji}</span>
+            <span class="other-activity-label">{label}</span>
+            <span class="other-activity-duration"
+              >{formatActivityDuration(activity)}</span
+            >
+          </div>
+        {/each}
+        <div
+          class="other-activity-card"
+          title="Time in the week not covered by any activity log"
+        >
+          <span class="other-activity-emoji" aria-hidden="true">◷</span>
+          <span class="other-activity-label">Unrecorded time</span>
           <span class="other-activity-duration"
-            >{formatActivityDuration(activity)}</span
+            >{formatDuration(unrecordedTime)}</span
           >
         </div>
-      {/each}
-      <div
-        class="other-activity-card"
-        title="Time in the week not covered by any activity log"
-      >
-        <span class="other-activity-emoji" aria-hidden="true">◷</span>
-        <span class="other-activity-label">Unrecorded time</span>
-        <span class="other-activity-duration"
-          >{formatDuration(unrecordedTime)}</span
-        >
       </div>
-    </div>
+    {/if}
     <ActivityPie
       activities={pieActivities}
       goalActivities={rows.map((row) => row.activityKey)}

@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
-  calculateWeeklyActivityDurations,
-  calculateWeeklyUnrecordedActivityDuration,
-} from "../src/util/activity-log-summary";
-import {
   buildActivityPieSlices,
   calculateActivityPieForRange,
   groupActivityPieSlices,
@@ -103,6 +99,7 @@ describe("activity pie", () => {
     expect(
       groups[0].slices.find(({ key }) => key === "tv")?.durationLabel,
     ).toBe("1h (3h)");
+    expect(groups[0].slices.some(({ key }) => key === "game")).toBe(false);
     expect(groups[1]).toMatchObject({
       label: "Other activities",
       color: "#808080",
@@ -246,7 +243,7 @@ describe("activity pie", () => {
   test("partitions the elapsed week using credited time, including unrecorded time", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2024-09-09T12:00:00Z"));
-    const now = window.moment();
+    const now = window.moment.utc();
     const activities: Activity[] = [
       {
         activity: "tv",
@@ -261,31 +258,34 @@ describe("activity pie", () => {
       {
         activity: "social",
         taskIds: [],
-        log: [{ start: "2024-09-09T10:00:00Z", end: "2024-09-09T11:00:00Z" }],
+        log: [{ start: "2024-09-09T10:00:00Z", end: "2024-09-09T10:30:00Z" }],
       },
     ];
-    const totals = calculateWeeklyActivityDurations(activities, now);
-    const unrecorded = calculateWeeklyUnrecordedActivityDuration(
+    const weekStart = now.clone().startOf("isoWeek");
+    const slices = calculateActivityPieForRange(
       activities,
-      now,
+      weekStart,
+      weekStart.clone().add(1, "week"),
     );
-    const slices = buildActivityPieSlices(totals, unrecorded);
 
     expect(
       slices.map(({ key, value }) => ({ key, hours: value / 3_600_000 })),
     ).toEqual([
       { key: "deep work", hours: 2 },
       { key: "tv", hours: 1 },
+      { key: "social", hours: 0 },
       { key: "__unrecorded__", hours: 9 },
     ]);
     expect(slices.reduce((sum, { value }) => sum + value, 0)).toBe(
-      now.diff(now.clone().startOf("isoWeek")),
+      now.diff(weekStart),
     );
     expect(slices.find(({ key }) => key === "tv")).toMatchObject({
       emoji: "📺",
       durationLabel: "1h (3h)",
     });
-    expect(slices.some(({ key }) => key === "social")).toBe(false);
+    expect(slices.find(({ key }) => key === "social")?.durationLabel).toBe(
+      "0m (30m)",
+    );
   });
 
   test("uses activity group colors and activity-specific variants", () => {
